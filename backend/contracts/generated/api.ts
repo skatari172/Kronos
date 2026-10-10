@@ -1242,8 +1242,33 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read new village events */
+        /**
+         * Read new village events
+         * @description Events with sequence greater than `after`, oldest first, matching every filter.
+         *     Page by passing the last returned sequence as `after`.
+         */
         get: operations["events_after_api_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/events/{event_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Follow an event's cause chain
+         * @description `back`: what caused this event (its causal_refs, recursively). `forward`: what it
+         *     caused (events citing it, recursively). Events from the same action are included.
+         */
+        get: operations["event_trace_api_events__event_id__trace_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1296,8 +1321,53 @@ export interface paths {
         /** List timelines */
         get: operations["branches_api_branches_get"];
         put?: never;
-        /** Fork a saved checkpoint */
+        /**
+         * Fork a saved checkpoint
+         * @description Optional `intervention` text is parsed and queued on the fork's next day.
+         */
         post: operations["fork_api_branches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/branches/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compare timelines' metrics day by day
+         * @description Per-branch series of bread price, wealth gap (Gini), population, total money and top
+         *     influence, including each fork's shared history before it split. Aligned by tick.
+         */
+        get: operations["compare_api_branches_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/branches/divergence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find where two timelines first decided differently
+         * @description After the shared history, the first decision (player or citizen action) that
+         *     differs, with each timeline's forward cause chain from it.
+         */
+        get: operations["divergence_api_branches_divergence_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1333,6 +1403,70 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/branches/{branch_id}/hashes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * World hash at the end of every day
+         * @description Determinism evidence: the same seed and the same actions give the same hashes, so
+         *     two timelines agree up to the first day their hashes differ.
+         */
+        get: operations["branch_hashes_api_branches__branch_id__hashes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/branches/{branch_id}/checkpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Yearly fork points
+         * @description The last snapshot of each simulated year (`KRONOS_TICKS_PER_YEAR` days).
+         */
+        get: operations["branch_checkpoints_api_branches__branch_id__checkpoints_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/branches/{branch_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Progress of a background run */
+        get: operations["run_status_api_branches__branch_id__run_get"];
+        put?: never;
+        /**
+         * Run a timeline in the background
+         * @description Advance a non-active branch `ticks` days at full speed, off screen, while the live
+         *     branch keeps running. Citizens decide with the free utility policy (or not at all).
+         */
+        post: operations["run_branch_api_branches__branch_id__run_post"];
+        /** Stop a background run */
+        delete: operations["stop_branch_api_branches__branch_id__run_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1485,6 +1619,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1501,6 +1640,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1513,6 +1657,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1529,6 +1678,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1669,6 +1823,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1682,6 +1841,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1741,6 +1905,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
         };
+        /** BranchComparison */
+        BranchComparison: {
+            /** Branches */
+            branches: components["schemas"]["BranchSeries"][];
+        };
         /** BranchMetadata */
         BranchMetadata: {
             /** Id */
@@ -1756,6 +1925,16 @@ export interface components {
              * @default 0
              */
             fork_tick: number;
+            /**
+             * Seed
+             * @description The world seed this timeline runs on
+             */
+            seed: number | null;
+            /**
+             * Intervention
+             * @description Player text queued on this branch when it was forked
+             */
+            intervention: string | null;
         };
         /** BranchRequest */
         BranchRequest: {
@@ -1763,6 +1942,20 @@ export interface components {
             snapshot_id: string;
             /** Name */
             name: string;
+            /**
+             * Intervention
+             * @description Optional intervention text, parsed and queued for the fork's next day
+             */
+            intervention?: string | null;
+        };
+        /** BranchSeries */
+        BranchSeries: {
+            /** Branch Id */
+            branch_id: string;
+            /** Name */
+            name: string;
+            /** Points */
+            points: components["schemas"]["MetricPoint"][];
         };
         /** Building */
         Building: {
@@ -1921,6 +2114,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1943,6 +2141,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1967,6 +2170,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1986,6 +2194,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -1997,6 +2210,17 @@ export interface components {
              * @enum {string}
              */
             choice: "yes" | "no";
+        };
+        /**
+         * Checkpoint
+         * @description The last snapshot of a simulated year, for forking from a past year.
+         */
+        Checkpoint: {
+            /** Year */
+            year: number;
+            /** Tick */
+            tick: number;
+            snapshot: components["schemas"]["SnapshotMetadata"];
         };
         /** Citizen */
         Citizen: {
@@ -2205,6 +2429,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2219,6 +2448,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2232,6 +2466,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2249,6 +2488,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2264,6 +2508,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2284,6 +2533,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2303,6 +2557,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2314,6 +2573,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2331,6 +2595,36 @@ export interface components {
              * @enum {string}
              */
             source: "llm" | "mock" | "fallback";
+        };
+        /**
+         * Divergence
+         * @description Where two timelines first decided differently, and what followed.
+         */
+        Divergence: {
+            /** A */
+            a: string;
+            /** B */
+            b: string;
+            /**
+             * Common Sequence
+             * @description Events shared by both histories (ancestry)
+             */
+            common_sequence: number;
+            /** Common Tick */
+            common_tick: number;
+            /**
+             * Tick
+             * @description Day of the first differing decision; null if none
+             */
+            tick: number | null;
+            /** Decision A */
+            decision_a: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"]) | null;
+            /** Decision B */
+            decision_b: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"]) | null;
+            /** Chain A */
+            chain_a: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
+            /** Chain B */
+            chain_b: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
         };
         /** EmployeeRequest */
         EmployeeRequest: {
@@ -2390,12 +2684,39 @@ export interface components {
             /** Level */
             level: number | null;
         };
+        /** EventTrace */
+        EventTrace: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "back" | "forward";
+            /**
+             * Events
+             * @description The start event first, then by depth
+             */
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
+            /** Edges */
+            edges: components["schemas"]["TraceEdge"][];
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
         /** Evict */
         "Evict-Input": {
             /** Actor Id */
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2411,6 +2732,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2424,6 +2750,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2440,6 +2771,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2459,6 +2795,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2483,6 +2824,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2562,6 +2908,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2582,6 +2933,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2769,12 +3125,61 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HeadlessRun */
+        HeadlessRun: {
+            /** Branch Id */
+            branch_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "done" | "failed" | "cancelled";
+            /**
+             * Agents
+             * @enum {string}
+             */
+            agents: "utility" | "none";
+            /** Ticks Requested */
+            ticks_requested: number;
+            /**
+             * Ticks Done
+             * @default 0
+             */
+            ticks_done: number;
+            /**
+             * Tick
+             * @description The branch's current day
+             */
+            tick: number;
+            /** Error */
+            error: string | null;
+        };
+        /** HeadlessRunRequest */
+        HeadlessRunRequest: {
+            /**
+             * Ticks
+             * @description Days to advance in the background
+             */
+            ticks: number;
+            /**
+             * Agents
+             * @description `utility`: citizens decide with the free utility policy; `none`: no decisions, only queued actions and daily rules
+             * @default utility
+             * @enum {string}
+             */
+            agents: "utility" | "none";
+        };
         /** Hire */
         "Hire-Input": {
             /** Actor Id */
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2791,6 +3196,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2853,6 +3263,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -2876,6 +3291,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3269,6 +3689,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -3282,6 +3707,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3299,6 +3729,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3323,6 +3758,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -3343,6 +3783,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -3360,6 +3805,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3905,12 +4355,44 @@ export interface components {
             /** Prices */
             prices: components["schemas"]["MarketPrice"][];
         };
+        /** MetricPoint */
+        MetricPoint: {
+            /** Tick */
+            tick: number;
+            /**
+             * Bread Price
+             * @description Average bread price across bakeries, cents
+             */
+            bread_price: number | null;
+            /**
+             * Gini Bps
+             * @description Wealth gap: Gini of citizen money, basis points
+             */
+            gini_bps: number;
+            /** Population */
+            population: number;
+            /**
+             * Total Money
+             * @description Citizen money plus business cash, cents
+             */
+            total_money: number;
+            /**
+             * Top Influence Bps
+             * @description The most influential citizen's influence
+             */
+            top_influence_bps: number;
+        };
         /** MoveTo */
         "MoveTo-Input": {
             /** Actor Id */
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3925,6 +4407,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3947,6 +4434,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -3960,6 +4452,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4248,6 +4745,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -4261,6 +4763,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4278,6 +4785,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4300,6 +4812,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4340,6 +4857,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -4351,6 +4873,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4385,6 +4912,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -4403,6 +4935,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4665,6 +5202,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -4684,6 +5226,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -4702,6 +5249,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4728,6 +5280,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5018,6 +5575,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5036,6 +5598,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5056,6 +5623,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5075,6 +5647,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5091,6 +5668,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5106,6 +5688,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5166,6 +5753,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5186,6 +5778,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5208,6 +5805,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5228,6 +5830,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5253,6 +5860,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5272,6 +5884,11 @@ export interface components {
             /** Rationale */
             rationale: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5288,6 +5905,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5303,6 +5925,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5487,10 +6114,45 @@ export interface components {
             type: "tick_completed";
             payload: components["schemas"]["TickPayload"];
         };
+        /** TickHash */
+        TickHash: {
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Branch Id
+             * @description The branch (or ancestor) that recorded this day
+             */
+            branch_id: string;
+            /** State Hash */
+            state_hash: string | null;
+        };
         /** TickPayload */
         TickPayload: {
             /** Actions */
             actions: number;
+            /**
+             * State Hash
+             * @description SHA-256 of the world after the day (branch ID and sequence excluded); the same seed and the same actions always give the same hash
+             */
+            state_hash: string | null;
+        };
+        /**
+         * TraceEdge
+         * @description `cites`: from_id lists to_id in its causal_refs. `same_action`: both came from one
+         *     action.
+         */
+        TraceEdge: {
+            /** From Id */
+            from_id: string;
+            /** To Id */
+            to_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "cites" | "same_action";
         };
         /**
          * Trade
@@ -5501,6 +6163,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale?: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5520,6 +6187,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5772,6 +6444,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5787,6 +6464,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -5804,6 +6486,11 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
             /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs?: string[];
+            /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
@@ -5817,6 +6504,11 @@ export interface components {
             actor_id: string;
             /** Rationale */
             rationale: string | null;
+            /**
+             * Causal Refs
+             * @description Event IDs (active branch) this action reacts to; copied onto its events
+             */
+            causal_refs: string[];
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -8303,6 +8995,16 @@ export interface operations {
             query?: {
                 after?: number;
                 limit?: number;
+                /** @description Event types (repeat to allow several) */
+                type?: string[] | null;
+                /** @description Acting citizen ID */
+                actor?: string | null;
+                /** @description Citizen or entity named in the payload */
+                target?: string | null;
+                tick_from?: number | null;
+                tick_to?: number | null;
+                /** @description Defaults to the active branch */
+                branch_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -8317,6 +9019,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    event_trace_api_events__event_id__trace_get: {
+        parameters: {
+            query?: {
+                direction?: "back" | "forward";
+                depth?: number;
+            };
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventTrace"];
                 };
             };
             /** @description Validation Error */
@@ -8445,6 +9181,74 @@ export interface operations {
             };
         };
     };
+    compare_api_branches_compare_get: {
+        parameters: {
+            query: {
+                /** @description Branch IDs */
+                ids: string[];
+                /** @description Days between points */
+                stride?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BranchComparison"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    divergence_api_branches_divergence_get: {
+        parameters: {
+            query: {
+                a: string;
+                b: string;
+                /** @description Forward cause-chain depth */
+                depth?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Divergence"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     activate_api_branches__branch_id__activate_post: {
         parameters: {
             query?: never;
@@ -8494,6 +9298,165 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorldUpdate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    branch_hashes_api_branches__branch_id__hashes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                branch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TickHash"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    branch_checkpoints_api_branches__branch_id__checkpoints_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                branch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Checkpoint"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_status_api_branches__branch_id__run_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                branch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeadlessRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_branch_api_branches__branch_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                branch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeadlessRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeadlessRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_branch_api_branches__branch_id__run_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                branch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeadlessRun"];
                 };
             };
             /** @description Validation Error */

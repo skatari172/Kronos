@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./backend/database/kronos.db"
     seed: int = 42
     tick_seconds: float = 2
+    # Days per simulated year: yearly checkpoints (fork points) fall on these boundaries.
+    ticks_per_year: int = Field(30, ge=1)
     llm_provider: str = "mock"
     llm_model: str = "deterministic-v1"
     llm_timeout: float = 3

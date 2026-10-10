@@ -242,9 +242,9 @@ def test_spawn_adds_citizen_with_stable_id():
         money=500,
     )
     result = Engine(initial_world()).spawn(request)
-    nico = result.state.citizens["citizen-main-1"]
+    nico = result.state.citizens["citizen-000001"]
     assert (nico.name, nico.money, nico.position.x) == ("Nico", 500, 4)
-    assert result.events[0].payload.entity_id == "citizen-main-1"
+    assert result.events[0].payload.entity_id == "citizen-000001"
     with pytest.raises(InvalidAction):
         Engine(initial_world()).spawn(request.model_copy(update={"plot_id": "nowhere"}))
 
@@ -303,7 +303,7 @@ def test_hiring_firing_and_wages():
     )
     assert hired.state.citizens["citizen-5"].employer_id == "market"
     assert [e.type for e in hired.events] == ["job_application_resolved", "employment_changed"]
-    assert hired.state.job_applications["application-main-1"].status == "hired"
+    assert hired.state.job_applications["application-000001"].status == "hired"
     raised = Engine(hired.state).apply(
         SetWage(actor_id="citizen-2", building_id="market", wage=400)
     )
@@ -438,12 +438,12 @@ def apply_job(state, citizen_id, building_id):
 def test_apply_job_records_a_pending_application():
     state = initial_world()
     result = apply_job(state, "citizen-5", "farm")
-    application = result.state.job_applications["application-main-1"]
+    application = result.state.job_applications["application-000001"]
     assert (application.citizen_id, application.building_id) == ("citizen-5", "farm")
     assert (application.tick, application.sequence) == (0, 0)
     assert result.state.citizens["citizen-5"].employer_id is None
     assert [e.type for e in result.events] == ["job_applied"]
-    assert result.events[0].payload.application_id == "application-main-1"
+    assert result.events[0].payload.application_id == "application-000001"
     full = initial_world()
     full.buildings["farm"].job_slots = 2
     for citizen_id, building_id, code, world in [
@@ -636,7 +636,7 @@ def test_owner_rejects_an_application():
     assert error.value.code == "not_owner"
     result = Engine(state).apply(reject)
     assert _pending(result.state) == {}
-    assert result.state.job_applications["application-main-1"].status == "rejected"
+    assert result.state.job_applications["application-000001"].status == "rejected"
     assert result.state.citizens["citizen-5"].employer_id is None
     assert result.events[0].payload.outcome == "rejected"
     assert result.state.citizens["citizen-5"].memories[-1] == (
@@ -713,7 +713,7 @@ def test_applications_to_vanished_businesses_are_withdrawn():
     del state.buildings["market"]  # Gone without _close (e.g. an older saved world).
     result = Engine(state).tick()
     assert _pending(result.state) == {}
-    assert result.state.job_applications["application-main-1"].status == "rejected"
+    assert result.state.job_applications["application-000001"].status == "rejected"
     event = next(e for e in result.events if e.type == "job_application_resolved")
     assert event.payload.outcome == "withdrawn" and event.actor_id is None
 
@@ -756,7 +756,7 @@ def test_trade_offer_is_pending_until_accepted_and_swap_conserves_goods():
 
     state = initial_world()
     offered = Engine(state).apply(_offer())
-    offer_id = "offer-main-1"
+    offer_id = "offer-000001"
     offer = offered.state.trade_offers[offer_id]
     assert (offer.offerer_id, offer.recipient_id, offer.expires_tick) == (
         "citizen-0",
@@ -767,7 +767,7 @@ def test_trade_offer_is_pending_until_accepted_and_swap_conserves_goods():
     assert offer.event_id == offered.events[0].id
     assert holdings(offered.state.citizens) == holdings(state.citizens)  # Nothing moves.
     assert offered.state.citizens["citizen-6"].memories == [
-        "Elena offered me a trade (offer-main-1)"
+        "Elena offered me a trade (offer-000001)"
     ]
     assert [o.id for o in observe(offered.state, "citizen-6").incoming_offers] == [offer_id]
     assert observe(offered.state, "citizen-0").incoming_offers == []
@@ -821,7 +821,7 @@ def test_accepting_rechecks_both_sides():
     from kronos_sim.models import RespondTrade
 
     offered = Engine(initial_world()).apply(_offer()).state
-    respond = RespondTrade(actor_id="citizen-6", offer_id="offer-main-1", accept=True)
+    respond = RespondTrade(actor_id="citizen-6", offer_id="offer-000001", accept=True)
     poor_offerer = offered.model_copy(deep=True)
     poor_offerer.citizens["citizen-0"].money = 100
     no_bread = offered.model_copy(deep=True)
@@ -833,7 +833,7 @@ def test_accepting_rechecks_both_sides():
         assert error.value.code == code
         assert engine.state == state  # Offer stays pending; nothing moved.
     with pytest.raises(InvalidAction) as error:
-        Engine(offered).apply(respond.model_copy(update={"offer_id": "offer-main-99"}))
+        Engine(offered).apply(respond.model_copy(update={"offer_id": "offer-000099"}))
     assert error.value.code == "unknown_entity"
 
 
@@ -842,7 +842,7 @@ def test_declining_removes_offer_without_transfers():
 
     offered = Engine(initial_world()).apply(_offer()).state
     declined = Engine(offered).apply(
-        RespondTrade(actor_id="citizen-6", offer_id="offer-main-1", accept=False)
+        RespondTrade(actor_id="citizen-6", offer_id="offer-000001", accept=False)
     )
     assert [e.type for e in declined.events] == ["trade_declined"]
     assert declined.events[0].payload.sender_id == "citizen-0"
@@ -858,14 +858,14 @@ def test_offers_expire_after_ttl_days():
     state = Engine(initial_world()).apply(_offer()).state
     for _ in range(OFFER_TTL_DAYS):
         state = Engine(state).tick().state
-        assert "offer-main-1" in state.trade_offers
+        assert "offer-000001" in state.trade_offers
     # Still answerable on its last day; gone after the next daily step.
-    Engine(state).apply(RespondTrade(actor_id="citizen-6", offer_id="offer-main-1", accept=False))
+    Engine(state).apply(RespondTrade(actor_id="citizen-6", offer_id="offer-000001", accept=False))
     result = Engine(state).tick()
     assert result.state.trade_offers == {}
     expired = [e for e in result.events if e.type == "trade_expired"]
     assert len(expired) == 1 and expired[0].actor_id is None
-    assert "Trade offer-main-1 with Finn expired" in result.state.citizens["citizen-0"].memories
+    assert "Trade offer-000001 with Finn expired" in result.state.citizens["citizen-0"].memories
 
 
 def test_old_worlds_without_offers_still_load():

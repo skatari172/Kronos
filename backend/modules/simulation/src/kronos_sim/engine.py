@@ -1,5 +1,6 @@
 """Copy-on-write transactions. Only the engine changes live world values."""
 
+import hashlib
 import json
 import random
 import re
@@ -159,6 +160,19 @@ def _lot_payload(plot: m.Plot) -> dict:
     )
 
 
+def state_hash(state: m.WorldState) -> str:
+    """Fingerprint of a world for determinism proofs: canonical JSON without the branch ID
+    and event sequence, so a replay, or sibling forks that took the same path, hash the same.
+
+    New entity IDs (`citizen-000012`) are branch-independent; IDs minted by older versions
+    embedded the branch (`citizen-<branch>-12`), so that part is normalised too."""
+    # Normalise IDs before sorting keys: a branch ID inside a key changes the key order.
+    raw = state.model_dump_json(exclude={"branch_id", "sequence"})
+    canonical = json.loads(raw.replace(f"-{state.branch_id}-", "-@-"))
+    body = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
 def _clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
@@ -262,6 +276,8 @@ class Engine:
         self.rng = random.Random()
         self.rng.setstate(_tuples(state.rng_state))
         self.action_id: str | None = None
+        # Events an action cites (ActionBase.causal_refs); added to every event it emits.
+        self.cites: list[str] = []
 
     def emit(self, kind: str, payload: dict, actor_id=None, rationale=None, causal_refs=None):
         self.state.sequence += 1
@@ -275,7 +291,7 @@ class Engine:
                 payload=payload,
                 actor_id=actor_id,
                 rationale=rationale,
-                causal_refs=causal_refs or [],
+                causal_refs=list(dict.fromkeys([*(causal_refs or []), *self.cites])),
                 action_id=self.action_id,
             )
         )
@@ -464,6 +480,7 @@ class Engine:
     def apply(self, action: m.AgentAction, action_id: str | None = None) -> m.SimulationTickResult:
         transaction = Engine(self.state)
         transaction.action_id = action_id
+        transaction.cites = list(action.causal_refs)
         transaction._execute(ACTION.validate_python(action.model_dump()))
         return transaction.result()
 
@@ -473,6 +490,7 @@ class Engine:
         """Record refusal without changing citizen, economic, or random state."""
         tx = Engine(self.state)
         tx.action_id = action_id
+        tx.cites = list(getattr(action, "causal_refs", []))
         actor = tx.state.citizens.get(action.actor_id)
         # A queued action can outlive its citizen (they left town); the refusal is still
         # logged so the queue resolves, but there is nobody to remember it.
@@ -640,7 +658,7 @@ class Engine:
             if actor.money < 5000:
                 raise InvalidAction("insufficient_funds", "Construction costs 50 coins")
             actor.money -= 5000
-            bid = f"building-{s.branch_id}-{s.sequence + 1}"
+            bid = f"building-{s.sequence + 1:06d}"
             s.buildings[bid] = m.Building(
                 id=bid,
                 name=f"{actor.name}'s {action.kind}",
@@ -667,7 +685,7 @@ class Engine:
             if actor.money < action.capital:
                 raise InvalidAction("insufficient_funds", "Insufficient funds for that capital")
             actor.money -= action.capital
-            bid = f"building-{s.branch_id}-{s.sequence + 1}"
+            bid = f"building-{s.sequence + 1:06d}"
             s.buildings[bid] = m.Building(
                 id=bid,
                 name=f"{actor.name}'s {action.kind}",
@@ -774,7 +792,7 @@ class Engine:
                 raise InvalidAction("bad_params", f"Already applied to {building.name}")
             if self._free_slots(building) < 1:
                 raise InvalidAction("no_free_slot", f"{building.name} has no free job slot")
-            aid = f"application-{s.branch_id}-{s.sequence + 1}"
+            aid = f"application-{s.sequence + 1:06d}"
             s.job_applications[aid] = m.JobApplication(
                 id=aid,
                 citizen_id=actor.id,
@@ -810,7 +828,7 @@ class Engine:
                 raise InvalidAction("bad_params", "Due tick must be in the future")
             if actor.money < action.principal:
                 raise InvalidAction("insufficient_funds", "Insufficient funds for that principal")
-            lid = f"loan-{s.branch_id}-{s.sequence + 1}"
+            lid = f"loan-{s.sequence + 1:06d}"
             s.loans[lid] = m.Loan(
                 id=lid,
                 lender_id=actor.id,
@@ -927,7 +945,7 @@ class Engine:
                 for o in s.license_offers.values()
             ):
                 raise InvalidAction("bad_params", "An offer to this citizen is already pending")
-            oid = f"license-{s.branch_id}-{s.sequence + 1}"
+            oid = f"license-{s.sequence + 1:06d}"
             offer = m.LicenseOffer(
                 id=oid,
                 invention_id=invention.id,
@@ -1006,7 +1024,7 @@ class Engine:
                 raise InvalidAction("bad_params", "Market tax is at most 10000 basis points")
             if action.value == _policy(s.policies, action.kind):
                 raise InvalidAction("bad_params", "That policy is already in force")
-            vid = f"vote-{s.branch_id}-{s.sequence + 1}"
+            vid = f"vote-{s.sequence + 1:06d}"
             s.votes[vid] = m.Vote(
                 id=vid,
                 proposer_id=actor.id,
@@ -1652,7 +1670,7 @@ class Engine:
             )
         self._check_holds(actor, action.give)
         offer = m.TradeOffer(
-            id=f"offer-{s.branch_id}-{s.sequence + 1}",
+            id=f"offer-{s.sequence + 1:06d}",
             offerer_id=actor.id,
             recipient_id=recipient.id,
             give=action.give.model_copy(deep=True),
@@ -1868,7 +1886,7 @@ class Engine:
         plot = self.state.plots.get(request.plot_id)
         if plot is None:
             raise InvalidAction("unknown_entity", "Unknown plot")
-        cid = f"citizen-{self.state.branch_id}-{self.state.sequence + 1}"
+        cid = f"citizen-{self.state.sequence + 1:06d}"
         self._add_citizen(  # emits citizen_spawned
             cid,
             plot,
@@ -2111,7 +2129,9 @@ class Engine:
             )
         tx._automatic_rules()
         tx._growth_rules()
-        tx.emit("tick_completed", {"actions": len(outcomes)})
+        # The hash covers the RNG too, so sync it first (result() would do it after).
+        tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
+        tx.emit("tick_completed", {"actions": len(outcomes), "state_hash": state_hash(tx.state)})
         for outcome in outcomes:
             outcome.sequence = tx.state.sequence
         result = tx.result([r.message for r in outcomes if r.status == "rejected"])
@@ -2234,7 +2254,7 @@ class Engine:
             while (4 * (index % 3) - 4, 6 * (index // 3) - 3) in positions:
                 index += 1
             position = m.Position(x=4 * (index % 3) - 4, z=6 * (index // 3) - 3)
-            pid = f"plot-{s.branch_id}-{s.sequence + 1}"
+            pid = f"plot-{s.sequence + 1:06d}"
             s.plots[pid] = m.Plot(id=pid, position=position)
             positions.add((position.x, position.z))
             self.emit("plot_opened", dict(entity_id=pid, position=position.model_dump()))
@@ -2336,7 +2356,12 @@ class Engine:
                 )
 
     def fork(self, branch_id: str) -> m.WorldState:
+        """A copy of this world for a new timeline.
+
+        The sequence carries on from the parent (it is not reset): new entity IDs are
+        `<kind>-<sequence>` without the branch, so they never collide with inherited ones,
+        and two forks of one snapshot that do the same things mint the same IDs, process
+        citizens in the same order and stay identical (determinism across timelines)."""
         state = self.state.model_copy(deep=True)
         state.branch_id = branch_id
-        state.sequence = 0
         return state

@@ -37,11 +37,11 @@ def _resolutions(events):
 
 def test_applications_start_pending_and_keep_their_record_when_resolved():
     state = _apply(initial_world(), ApplyJob(actor_id="citizen-5", building_id="market")).state
-    assert state.job_applications["application-main-1"].status == "pending"
+    assert state.job_applications["application-000001"].status == "pending"
     rejected = _apply(
         state, RejectApplication(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
     ).state
-    assert _statuses(rejected) == {"application-main-1": ("citizen-5", "market", "rejected")}
+    assert _statuses(rejected) == {"application-000001": ("citizen-5", "market", "rejected")}
     # A rejected record does not block a fresh application, and only pending ones are open.
     again = _apply(rejected, ApplyJob(actor_id="citizen-5", building_id="market")).state
     assert [a.status for a in again.job_applications.values()] == ["rejected", "pending"]
@@ -82,11 +82,11 @@ def test_saved_applications_without_status_load_as_pending():
     data = _apply(
         initial_world(), ApplyJob(actor_id="citizen-5", building_id="market")
     ).state.model_dump()
-    del data["job_applications"]["application-main-1"]["status"]
+    del data["job_applications"]["application-000001"]["status"]
     state = WorldState.model_validate(data)
-    assert state.job_applications["application-main-1"].status == "pending"
+    assert state.job_applications["application-000001"].status == "pending"
     hired = _apply(state, Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-5"))
-    assert hired.state.job_applications["application-main-1"].status == "hired"
+    assert hired.state.job_applications["application-000001"].status == "hired"
 
 
 def test_closing_a_business_rejects_its_pending_applications():
@@ -123,9 +123,7 @@ def test_bankruptcy_rejects_pending_applications():
         r for r in _resolutions(result.events) if r[:3] == ("citizen-5", "market", "rejected")
     ]
     assert len(resolved) == 1 and resolved[0][3] in ("citizen-2", None)
-    assert result.state.job_applications["application-main-" + str(state.sequence)].status == (
-        "rejected"
-    )
+    assert result.state.job_applications[f"application-{state.sequence:06d}"].status == ("rejected")
 
 
 def test_eviction_rejects_pending_applications_at_the_closed_business():

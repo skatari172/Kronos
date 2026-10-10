@@ -45,7 +45,7 @@ def test_loan_offer_moves_no_money_until_the_borrower_accepts():
     state = initial_world()
     offered, loan_id = offer_loan(state)
     loan = offered.state.loans[loan_id]
-    assert loan_id == "loan-main-1"
+    assert loan_id == "loan-000001"
     assert (loan.status, loan.amount_owed, loan.amount_repaid) == ("offered", 6600, 0)
     assert holdings(offered.state.citizens) == holdings(state.citizens)
     assert [e.type for e in offered.events] == ["loan_offered"]
