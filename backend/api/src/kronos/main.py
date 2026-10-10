@@ -15,6 +15,7 @@ from kronos.routes import (
     backend,
     businesses,
     history,
+    inventions,
     loans,
     market,
     resources,
@@ -83,7 +84,18 @@ def create_app(config: Settings | None = None) -> FastAPI:
     async def not_found(request, exc):
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    routers = (user, agents, businesses, loans, market, resources, backend, world, history)
+    routers = (
+        user,
+        agents,
+        businesses,
+        loans,
+        market,
+        resources,
+        inventions,
+        backend,
+        world,
+        history,
+    )
     for module in routers:
         app.include_router(module.router)
     return app

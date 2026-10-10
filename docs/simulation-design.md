@@ -17,3 +17,12 @@ Player price changes occur between ticks and take effect immediately in all exis
 Buy/sell validate cash, stock, quantities, and buyer limits. Owner actions validate ownership. Construction requires a vacant predefined plot and 5,000 cents; upgrades cost 2,500 cents and cap at level three. Costs leave the modeled economy as construction inputs; trades and wages conserve money. Communication stores bounded recent memories and increases familiarity by one, capped at 100; its content is not a proven economic cause. Citizens cannot spend each other's money through agent proposals.
 
 Current omissions: production cooldown on manually submitted `produce`, richer market roles, need-based occupations, survival/death, population mechanics, investments driven by strategy, ownership transfers, and ongoing policies. Daily routines deliberately stay small. Add constraints and test them before exposing new command vocabularies.
+
+## Innovation
+
+`WorldState.inventions` is seeded with `crop_rotation` (1,500 cents; adopting farms make wheat ×1.4) and `water_mill` (2,500 cents; adopting bakeries make bread ×2). Costs are the spec's florins at 10 cents each. Multipliers are integer percentages applied in invention-ID order inside `Produce`, so production stays deterministic and uses no extra RNG.
+
+- `research` money mode spends at most the remaining cost; the money leaves the economy like construction inputs. Time mode needs a job: for the next `ticks` days the employer keeps the wage (`research_invention_id` / `research_until_tick` on the citizen; the wage loop skips them) and each skipped wage counts as progress. At full cost the top contributor owns the invention (ties go to the lowest citizen ID) and other time researchers are released.
+- `license_invention` only creates a `LicenseOffer`; the recipient answers with `respond_license` on the same tick (funds re-checked) or the offer expires at the next tick. The fee moves recipient → owner.
+- `adopt_invention` is for the building owner who owns or licenses an unlocked invention matching the building kind; the business pays `adoption_cost` (a sink).
+- Waiting on richer goods: `printing_press` (books, scribes) and `ledger_banking` (loans). Add them with a matching `InventionEffect` once those goods and actions exist. Closed buildings stay in `adopters`; building IDs are never reused.
