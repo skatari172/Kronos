@@ -100,13 +100,6 @@ def test_long_run_invariants_and_reproducibility():
     [
         {"type": "apply_job", "building_id": "farm"},
         {"type": "quit_job"},
-        {
-            "type": "trade",
-            "recipient_id": "citizen-1",
-            "give": {"money": 100},
-            "get": {"goods": {"bread": 1}},
-        },
-        {"type": "respond_trade", "offer_id": "offer-1", "accept": True},
         {"type": "lease_lot", "plot_id": "plot-3"},
         {"type": "set_rent", "plot_id": "plot-3", "rent": 300},
         {"type": "pay_rent", "plot_id": "plot-3"},
@@ -360,3 +353,190 @@ def test_business_goes_bankrupt_after_three_unpaid_days():
     removed = next(e for e in result.events if e.type == "building_removed")
     assert removed.actor_id is None and removed.rationale.startswith("Bankrupt")
     assert all(b.unpaid_days == 0 for b in result.state.buildings.values())
+
+
+def _offer(**fields):
+    from kronos_sim.models import Trade, TradeBundle
+
+    defaults = dict(
+        actor_id="citizen-0",
+        recipient_id="citizen-6",
+        give=TradeBundle(money=300),
+        get=TradeBundle(goods={"bread": 1}),
+        rationale="Need bread",
+    )
+    return Trade(**{**defaults, **fields})
+
+
+def _totals(state):
+    money = sum(c.money for c in state.citizens.values())
+    bread = sum(c.inventory.bread for c in state.citizens.values())
+    wheat = sum(c.inventory.wheat for c in state.citizens.values())
+    return money, bread, wheat
+
+
+def test_trade_offer_is_pending_until_accepted_and_swap_conserves_goods():
+    from kronos_sim.models import RespondTrade
+    from kronos_sim.queries import observe, offers
+
+    state = initial_world()
+    offered = Engine(state).apply(_offer())
+    offer_id = "offer-main-1"
+    offer = offered.state.trade_offers[offer_id]
+    assert (offer.offerer_id, offer.recipient_id, offer.expires_tick) == (
+        "citizen-0",
+        "citizen-6",
+        2,
+    )
+    assert offered.events[0].type == "trade_offered"
+    assert offer.event_id == offered.events[0].id
+    assert offered.state.citizens == state.citizens  # Nothing moves on offer.
+    assert [o.id for o in observe(offered.state, "citizen-6").incoming_offers] == [offer_id]
+    assert observe(offered.state, "citizen-0").incoming_offers == []
+    assert [o.id for o in offers(offered.state, "citizen-0").outgoing] == [offer_id]
+
+    with pytest.raises(InvalidAction) as error:
+        Engine(offered.state).apply(
+            RespondTrade(actor_id="citizen-0", offer_id=offer_id, accept=True)
+        )
+    assert error.value.code == "insufficient_authority"
+
+    accepted = Engine(offered.state).apply(
+        RespondTrade(actor_id="citizen-6", offer_id=offer_id, accept=True)
+    )
+    after = accepted.state
+    assert after.trade_offers == {}
+    assert after.citizens["citizen-0"].money == state.citizens["citizen-0"].money - 300
+    assert after.citizens["citizen-6"].money == state.citizens["citizen-6"].money + 300
+    assert after.citizens["citizen-0"].inventory.bread == 2
+    assert after.citizens["citizen-6"].inventory.bread == 0
+    assert _totals(after) == _totals(state)
+    types = [e.type for e in accepted.events]
+    assert types == ["trade_accepted", "transaction_completed", "transaction_completed"]
+    assert accepted.events[0].causal_refs == [offer.event_id]
+    assert accepted.events[1].causal_refs == [accepted.events[0].id]
+    assert after.citizens["citizen-0"].memories[-1] == f"Trade {offer_id} with Finn accepted"
+
+
+def test_trade_offer_validation_codes():
+    from kronos_sim.models import TradeBundle
+
+    state = initial_world()
+    for action, code in [
+        (_offer(recipient_id="nobody"), "unknown_entity"),
+        (_offer(recipient_id="citizen-0"), "bad_params"),
+        (_offer(get=TradeBundle()), "bad_params"),
+        (_offer(give=TradeBundle(money=10**9)), "insufficient_funds"),
+        (_offer(give=TradeBundle(goods={"wheat": 1})), "out_of_stock"),
+    ]:
+        with pytest.raises(InvalidAction) as error:
+            Engine(state).apply(action)
+        assert error.value.code == code
+    for _ in range(5):
+        state = Engine(state).apply(_offer()).state
+    with pytest.raises(InvalidAction) as error:
+        Engine(state).apply(_offer())
+    assert error.value.code == "rate_limited"
+
+
+def test_accepting_rechecks_both_sides():
+    from kronos_sim.models import RespondTrade
+
+    offered = Engine(initial_world()).apply(_offer()).state
+    respond = RespondTrade(actor_id="citizen-6", offer_id="offer-main-1", accept=True)
+    poor_offerer = offered.model_copy(deep=True)
+    poor_offerer.citizens["citizen-0"].money = 100
+    no_bread = offered.model_copy(deep=True)
+    no_bread.citizens["citizen-6"].inventory.bread = 0
+    for state, code in [(poor_offerer, "insufficient_funds"), (no_bread, "out_of_stock")]:
+        engine = Engine(state)
+        with pytest.raises(InvalidAction) as error:
+            engine.apply(respond)
+        assert error.value.code == code
+        assert engine.state == state  # Offer stays pending; nothing moved.
+    with pytest.raises(InvalidAction) as error:
+        Engine(offered).apply(respond.model_copy(update={"offer_id": "offer-main-99"}))
+    assert error.value.code == "unknown_entity"
+
+
+def test_declining_removes_offer_without_transfers():
+    from kronos_sim.models import RespondTrade
+
+    offered = Engine(initial_world()).apply(_offer()).state
+    declined = Engine(offered).apply(
+        RespondTrade(actor_id="citizen-6", offer_id="offer-main-1", accept=False)
+    )
+    assert [e.type for e in declined.events] == ["trade_declined"]
+    assert declined.events[0].payload.sender_id == "citizen-0"
+    assert declined.state.trade_offers == {}
+    assert declined.state.citizens["citizen-6"].money == offered.citizens["citizen-6"].money
+    assert _totals(declined.state) == _totals(offered)
+
+
+def test_offers_expire_after_ttl_days():
+    from kronos_sim.engine import OFFER_TTL_DAYS
+    from kronos_sim.models import RespondTrade
+
+    state = Engine(initial_world()).apply(_offer()).state
+    for _ in range(OFFER_TTL_DAYS):
+        state = Engine(state).tick().state
+        assert "offer-main-1" in state.trade_offers
+    # Still answerable on its last day; gone after the next daily step.
+    Engine(state).apply(RespondTrade(actor_id="citizen-6", offer_id="offer-main-1", accept=False))
+    result = Engine(state).tick()
+    assert result.state.trade_offers == {}
+    expired = [e for e in result.events if e.type == "trade_expired"]
+    assert len(expired) == 1 and expired[0].actor_id is None
+    assert result.state.citizens["citizen-0"].memories[-1] == "Trade offer-main-1 with Finn expired"
+
+
+def test_old_worlds_without_offers_still_load():
+    from kronos_sim.models import WorldState
+
+    raw = initial_world().model_dump()
+    del raw["trade_offers"]
+    assert WorldState.model_validate(raw).trade_offers == {}
+
+
+def test_market_prices_average_rounds_half_up():
+    from kronos_sim.queries import market_prices
+
+    def bread(state):
+        return next(p for p in market_prices(state).prices if p.resource == "bread")
+
+    state = initial_world()
+    state.buildings["bakery"].prices["bread"] = 501
+    # (500 + 501 + 500) / 3 = 500.33 -> 500
+    assert bread(state).model_dump() == dict(
+        resource="bread", average=500, min=500, max=501, sellers=3
+    )
+    # Only buildings that list the good count: (501 + 502) / 2 = 501.5 -> 502
+    state.buildings["farm"].prices["bread"] = 502
+    del state.buildings["market"].prices["bread"]
+    assert (bread(state).average, bread(state).sellers) == (502, 2)
+
+
+def test_price_history_replays_changes_and_building_lifecycle():
+    from kronos_sim.models import CloseBusiness, FoundBusiness
+    from kronos_sim.queries import price_history
+
+    start = state = initial_world()
+    events = []
+    for action in [
+        SetPrice(actor_id="citizen-1", building_id="bakery", resource="bread", price=800),
+        FoundBusiness(actor_id="citizen-0", plot_id="plot-3", kind="bakery", capital=6000),
+        CloseBusiness(actor_id="citizen-1", building_id="bakery"),
+    ]:
+        result = Engine(state).apply(action)
+        events += result.events
+        state = result.state
+    history = price_history(start, events, "bread")
+    assert [(p.sequence, p.average, p.min, p.max, p.sellers) for p in history.points] == [
+        (0, 500, 500, 500, 3),
+        (1, 600, 500, 800, 3),
+        (2, 575, 500, 800, 4),
+        (history.points[-1].sequence, 500, 500, 500, 3),
+    ]
+    # Wheat's price never changed; only its seller count did.
+    wheat = price_history(start, events, "wheat").points
+    assert [(p.average, p.sellers) for p in wheat] == [(100, 3), (100, 4), (100, 3)]

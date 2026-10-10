@@ -28,9 +28,13 @@ SUPPORTED_ACTIONS = (
     "set_wage",
     "hire",
     "fire",
+    "trade",
+    "respond_trade",
 )
 MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
 BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
+OFFER_TTL_DAYS = 2  # An offer made on tick t may be accepted through tick t + 2.
+MAX_PENDING_OFFERS = 5  # Outgoing pending offers per citizen.
 
 
 class InvalidAction(ValueError):
@@ -343,6 +347,10 @@ class Engine:
                 "goals_changed",
                 dict(citizen_id=actor.id, old=old.model_dump(), new=new.model_dump()),
             )
+        elif isinstance(action, m.Trade):
+            self._offer_trade(actor, action)
+        elif isinstance(action, m.RespondTrade):
+            self._respond_trade(actor, action)
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
@@ -394,6 +402,135 @@ class Engine:
             actor_id,
             rationale,
         )
+
+    @staticmethod
+    def _check_holds(holder: m.Citizen, bundle: m.TradeBundle):
+        if holder.money < bundle.money:
+            raise InvalidAction(
+                "insufficient_funds", f"{holder.name} lacks the money for this trade"
+            )
+        for resource, quantity in bundle.goods.model_dump().items():
+            if getattr(holder.inventory, resource) < quantity:
+                raise InvalidAction("out_of_stock", f"{holder.name} lacks the {resource}")
+
+    def _offer_trade(self, actor: m.Citizen, action: m.Trade):
+        s = self.state
+        recipient = s.citizens.get(action.recipient_id)
+        if recipient is None:
+            raise InvalidAction("unknown_entity", "Unknown recipient")
+        if recipient.id == actor.id:
+            raise InvalidAction("bad_params", "Cannot trade with yourself")
+        for side in (action.give, action.get):
+            if not side.money and not any(side.goods.model_dump().values()):
+                raise InvalidAction("bad_params", "Both sides of a trade must be non-empty")
+        pending = [o for o in s.trade_offers.values() if o.offerer_id == actor.id]
+        if len(pending) >= MAX_PENDING_OFFERS:
+            raise InvalidAction(
+                "rate_limited", f"At most {MAX_PENDING_OFFERS} pending offers per citizen"
+            )
+        self._check_holds(actor, action.give)
+        offer = m.TradeOffer(
+            id=f"offer-{s.branch_id}-{s.sequence + 1}",
+            offerer_id=actor.id,
+            recipient_id=recipient.id,
+            give=action.give.model_copy(deep=True),
+            get=action.get.model_copy(deep=True),
+            created_tick=s.tick,
+            expires_tick=s.tick + OFFER_TTL_DAYS,
+            rationale=action.rationale,
+        )
+        event = self.emit(
+            "trade_offered",
+            dict(
+                offer_id=offer.id,
+                sender_id=actor.id,
+                recipient_id=recipient.id,
+                give=offer.give.model_dump(),
+                get=offer.get.model_dump(),
+                expires_tick=offer.expires_tick,
+            ),
+            actor.id,
+            action.rationale,
+        )
+        offer.event_id = event.id
+        s.trade_offers[offer.id] = offer
+
+    def _respond_trade(self, actor: m.Citizen, action: m.RespondTrade):
+        s = self.state
+        offer = s.trade_offers.get(action.offer_id)
+        if offer is None:
+            raise InvalidAction("unknown_entity", "No pending offer with that ID")
+        if offer.recipient_id != actor.id:
+            raise InvalidAction("insufficient_authority", "Only the recipient may respond")
+        offerer = s.citizens.get(offer.offerer_id)
+        if offerer is None:
+            raise InvalidAction("unknown_entity", "The offerer no longer exists")
+        refs = [offer.event_id] if offer.event_id else []
+        if not action.accept:
+            self._resolve_offer(offer, "trade_declined", actor.id, action.rationale, refs)
+            return
+        self._check_holds(offerer, offer.give)
+        self._check_holds(actor, offer.get)
+        accepted = self._resolve_offer(offer, "trade_accepted", actor.id, action.rationale, refs)
+        for source, target, bundle in ((offerer, actor, offer.give), (actor, offerer, offer.get)):
+            if bundle.money:
+                source.money -= bundle.money
+                target.money += bundle.money
+                self.emit(
+                    "transaction_completed",
+                    dict(sender_id=source.id, recipient_id=target.id, amount=bundle.money),
+                    actor.id,
+                    action.rationale,
+                    [accepted.id],
+                )
+            for resource, quantity in bundle.goods.model_dump().items():
+                if not quantity:
+                    continue
+                setattr(source.inventory, resource, getattr(source.inventory, resource) - quantity)
+                setattr(target.inventory, resource, getattr(target.inventory, resource) + quantity)
+                self.emit(
+                    "transaction_completed",
+                    dict(
+                        sender_id=source.id,
+                        recipient_id=target.id,
+                        amount=0,
+                        resource=resource,
+                        quantity=quantity,
+                    ),
+                    actor.id,
+                    action.rationale,
+                    [accepted.id],
+                )
+
+    def _resolve_offer(self, offer: m.TradeOffer, kind: str, actor_id, rationale, refs):
+        """Remove a pending offer, tell the offerer, and log the outcome."""
+        s = self.state
+        del s.trade_offers[offer.id]
+        offerer = s.citizens.get(offer.offerer_id)
+        recipient = s.citizens.get(offer.recipient_id)
+        if offerer is not None:
+            verb = kind.removeprefix("trade_")
+            other = recipient.name if recipient else offer.recipient_id
+            offerer.memories = (offerer.memories + [f"Trade {offer.id} with {other} {verb}"])[-8:]
+        return self.emit(
+            kind,
+            dict(offer_id=offer.id, sender_id=offer.offerer_id, recipient_id=offer.recipient_id),
+            actor_id,
+            rationale,
+            refs,
+        )
+
+    def _expire_offers(self):
+        """Daily: drop offers past their last day or whose parties no longer exist."""
+        s = self.state
+        for offer_id in sorted(s.trade_offers):
+            offer = s.trade_offers[offer_id]
+            parties_gone = (
+                offer.offerer_id not in s.citizens or offer.recipient_id not in s.citizens
+            )
+            if parties_gone or s.tick > offer.expires_tick:
+                refs = [offer.event_id] if offer.event_id else []
+                self._resolve_offer(offer, "trade_expired", None, "Offer expired", refs)
 
     def spawn(self, request: m.SpawnCitizenRequest) -> m.SimulationTickResult:
         tx = Engine(self.state)
@@ -505,6 +642,7 @@ class Engine:
             building.unpaid_days = building.unpaid_days + 1 if building.id in missed_payroll else 0
             if building.unpaid_days >= BANKRUPTCY_DAYS:
                 tx._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
+        tx._expire_offers()
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:
