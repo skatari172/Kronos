@@ -22,6 +22,7 @@ from sqlalchemy import (
     create_engine,
     event,
     insert,
+    or_,
     select,
     update,
 )
@@ -207,6 +208,37 @@ class HistoryStore:
             rows = list(db.execute(query.order_by(events.c.sequence.desc()).limit(limit)).scalars())
         adapter = TypeAdapter(SimulationEvent)
         return [adapter.validate_json(raw) for raw in reversed(rows)]
+
+    def list_events_of_types(
+        self, branch_id: str, types: tuple[str, ...], after: int = 0
+    ) -> list[SimulationEvent]:
+        """Every event of the given types after a sequence, oldest first. Unbounded."""
+        if not types:
+            return []
+        query = select(events.c.data).where(
+            events.c.branch_id == branch_id,
+            events.c.sequence > after,
+            # Coarse text prefilter on the compact JSON; the exact type check below decides.
+            or_(*(events.c.data.contains(f'"type":"{t}"', autoescape=True) for t in types)),
+        )
+        adapter = TypeAdapter(SimulationEvent)
+        with self.engine.connect() as db:
+            rows = db.execute(query.order_by(events.c.sequence)).scalars()
+            parsed = [adapter.validate_json(raw) for raw in rows]
+        return [event for event in parsed if event.type in types]
+
+    def first_snapshot(self, branch_id: str) -> WorldState:
+        """The branch's starting world (seed or fork point)."""
+        with self.engine.connect() as db:
+            snapshot_id = db.execute(
+                select(snapshots.c.id)
+                .where(snapshots.c.branch_id == branch_id)
+                .order_by(snapshots.c.sequence)
+                .limit(1)
+            ).scalar()
+        if snapshot_id is None:
+            raise KeyError("Unknown branch")
+        return self.restore(snapshot_id)
 
     def list_events_after(
         self, branch_id: str, after: int, limit: int = 100

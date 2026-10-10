@@ -433,3 +433,48 @@ def test_jobs_listing_and_apply_quit_routes(client):
     again = client.post("/api/agents/citizen-3/quit", json=mutation(4)).json()
     assert (again["status"], again["error"]) == ("rejected", "bad_params")
     assert client.post("/api/agents/missing/quit", json=mutation(5)).status_code == 404
+
+
+def test_market_prices_and_history_routes(client):
+    prices = client.get("/api/market/prices").json()
+    bread = next(p for p in prices["prices"] if p["resource"] == "bread")
+    assert bread == {"resource": "bread", "average": 500, "min": 500, "max": 500, "sellers": 3}
+    body = command("citizen-1", resource="bread", price=800)
+    changed = client.patch("/api/businesses/bakery/price", json=body).json()
+    assert changed["status"] == "applied"
+    assert client.get("/api/market/prices?branch_id=main").json()["prices"][0]["average"] == 600
+    history = client.get("/api/market/prices/history?good=bread").json()
+    assert [(p["sequence"], p["average"], p["max"]) for p in history["points"]] == [
+        (0, 500, 500),
+        (changed["sequence"], 600, 800),
+    ]
+    assert client.get("/api/market/prices/history?good=gold").status_code == 422
+    assert client.get("/api/market/prices/history?good=bread&branch_id=nope").status_code == 404
+
+
+def test_trade_offer_routes_round_trip(client):
+    give, get = {"money": 300}, {"goods": {"bread": 1}}
+    offered = client.post(
+        "/api/market/trade",
+        json=command("citizen-0", recipient_id="citizen-6", give=give, get=get),
+    ).json()
+    assert offered["status"] == "applied"
+    offer_id = client.get("/api/agents/citizen-0/offers").json()["outgoing"][0]["id"]
+    incoming = client.get("/api/agents/citizen-6/offers").json()["incoming"]
+    assert [o["id"] for o in incoming] == [offer_id]
+    observation = client.get("/api/agents/citizen-6/observation").json()
+    assert [o["id"] for o in observation["incoming_offers"]] == [offer_id]
+    assert "trade" in observation["available_actions"]
+
+    seq = offered["sequence"]
+    path = f"/api/market/trade/{offer_id}/respond"
+    denied = client.post(path, json=command("citizen-0", seq, accept=True)).json()
+    assert (denied["status"], denied["error"]) == ("rejected", "insufficient_authority")
+    accepted = client.post(path, json=command("citizen-6", denied["sequence"], accept=True)).json()
+    assert accepted["status"] == "applied"
+    finn = client.get("/api/agents/citizen-6").json()["citizen"]
+    assert (finn["money"], finn["inventory"]["bread"]) == (850, 0)
+    assert client.get("/api/agents/citizen-6/offers").json()["incoming"] == []
+    again = client.post(path, json=command("citizen-6", accepted["sequence"], accept=True)).json()
+    assert again["error"] == "unknown_entity"
+    assert client.get("/api/agents/missing/offers").status_code == 404

@@ -10,7 +10,17 @@ from kronos_agents.provider import ProviderError
 from kronos_sim.engine import InvalidAction
 
 from kronos.config import Settings
-from kronos.routes import agents, backend, businesses, history, loans, resources, user, world
+from kronos.routes import (
+    agents,
+    backend,
+    businesses,
+    history,
+    loans,
+    market,
+    resources,
+    user,
+    world,
+)
 from kronos.service import Service
 
 
@@ -73,7 +83,8 @@ def create_app(config: Settings | None = None) -> FastAPI:
     async def not_found(request, exc):
         return JSONResponse(status_code=404, content={"detail": str(exc)})
 
-    for module in (user, agents, businesses, loans, resources, backend, world, history):
+    routers = (user, agents, businesses, loans, market, resources, backend, world, history)
+    for module in routers:
         app.include_router(module.router)
     return app
 

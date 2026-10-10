@@ -161,6 +161,25 @@ class Loan(Model):
     created_tick: int = Field(default=0, ge=0)
 
 
+class TradeBundle(Model):
+    money: int = Field(default=0, ge=0)
+    goods: ResourceInventory = Field(default_factory=ResourceInventory)
+
+
+class TradeOffer(Model):
+    """A pending citizen-to-citizen offer. Resolved offers leave the world; events keep them."""
+
+    id: str
+    offerer_id: str
+    recipient_id: str
+    give: TradeBundle = Field(description="What the offerer hands over on acceptance")
+    get: TradeBundle = Field(description="What the offerer receives on acceptance")
+    created_tick: int
+    expires_tick: int = Field(description="Last tick on which the recipient may accept")
+    event_id: str | None = Field(default=None, description="The trade_offered event")
+    rationale: str | None = None
+
+
 class WorldState(Model):
     schema_version: Literal[1] = 1
     branch_id: str
@@ -183,6 +202,9 @@ class WorldState(Model):
         return self
 
     loans: dict[str, Loan] = Field(default_factory=dict)
+    trade_offers: dict[str, TradeOffer] = Field(
+        default_factory=dict, description="Pending trade offers by ID"
+    )
 
 
 class ActionBase(Model):
@@ -295,11 +317,6 @@ class ApplyJob(ActionBase):
 
 class QuitJob(ActionBase):
     type: Literal["quit_job"] = "quit_job"
-
-
-class TradeBundle(Model):
-    money: int = Field(default=0, ge=0)
-    goods: ResourceInventory = Field(default_factory=ResourceInventory)
 
 
 class Trade(ActionBase):
@@ -746,6 +763,41 @@ class LoanDefaulted(EventBase):
     payload: LoanDefaultPayload
 
 
+class TradeOfferPayload(Model):
+    offer_id: str
+    sender_id: str = Field(description="The offerer")
+    recipient_id: str
+    give: TradeBundle
+    get: TradeBundle
+    expires_tick: int
+
+
+class TradeOffered(EventBase):
+    type: Literal["trade_offered"] = "trade_offered"
+    payload: TradeOfferPayload
+
+
+class TradeResolutionPayload(Model):
+    offer_id: str
+    sender_id: str = Field(description="The offerer")
+    recipient_id: str
+
+
+class TradeAccepted(EventBase):
+    type: Literal["trade_accepted"] = "trade_accepted"
+    payload: TradeResolutionPayload
+
+
+class TradeDeclined(EventBase):
+    type: Literal["trade_declined"] = "trade_declined"
+    payload: TradeResolutionPayload
+
+
+class TradeExpired(EventBase):
+    type: Literal["trade_expired"] = "trade_expired"
+    payload: TradeResolutionPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -784,7 +836,11 @@ SimulationEvent = Annotated[
     | LoanDeclined
     | LoanRepaid
     | LoanExpired
-    | LoanDefaulted,
+    | LoanDefaulted
+    | TradeOffered
+    | TradeAccepted
+    | TradeDeclined
+    | TradeExpired,
     Field(discriminator="type"),
 ]
 
@@ -890,6 +946,9 @@ class AgentObservation(Model):
     loans: list[Loan] = Field(
         default_factory=list,
         description="Open loans (offered, active, defaulted) where this agent lends or borrows",
+    )
+    incoming_offers: list[TradeOffer] = Field(
+        default_factory=list, description="Pending trade offers this citizen may accept or decline"
     )
 
 
@@ -1044,3 +1103,57 @@ class LoanResponseRequest(LoanCommand):
 
 class LoanRepayRequest(LoanCommand):
     amount: int = Field(gt=0)
+
+
+class MarketPrice(Model):
+    """One good across every building that lists a price for it. Cents; average rounds half up."""
+
+    resource: str
+    average: int
+    min: int
+    max: int
+    sellers: int
+
+
+class MarketPrices(Model):
+    branch_id: str
+    tick: int
+    sequence: int
+    prices: list[MarketPrice] = Field(default_factory=list)
+
+
+class PricePoint(Model):
+    """The market price after the event at this sequence (the branch start for the first)."""
+
+    tick: int
+    sequence: int
+    average: int
+    min: int
+    max: int
+    sellers: int
+
+
+class PriceHistory(Model):
+    branch_id: str
+    resource: str
+    points: list[PricePoint] = Field(default_factory=list)
+
+
+class AgentOffers(Model):
+    citizen_id: str
+    incoming: list[TradeOffer] = Field(default_factory=list)
+    outgoing: list[TradeOffer] = Field(default_factory=list)
+
+
+class TradeRequest(BusinessCommand):
+    """actor_id is the offerer."""
+
+    recipient_id: str
+    give: TradeBundle
+    get: TradeBundle
+
+
+class RespondTradeRequest(BusinessCommand):
+    """actor_id must be the offer's recipient."""
+
+    accept: bool
