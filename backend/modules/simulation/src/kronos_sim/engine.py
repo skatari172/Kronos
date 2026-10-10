@@ -47,6 +47,7 @@ SUPPORTED_ACTIONS = (
     "set_rent",
     "pay_rent",
     "evict",
+    "interact",
 )
 MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
 BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
@@ -54,6 +55,7 @@ BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business clo
 RESOURCE_SOURCES: dict[str, m.BuildingKind] = {"wheat": "farm"}
 DEFAULT_TRUST_PENALTY = 30  # Lender trust lost toward a defaulting borrower (spec grudge +0.3).
 DEFAULT_REPUTATION_PENALTY = 5  # Borrower reputation lost on default (spec -0.05 on 0..1).
+DEFAULT_GRUDGE = 30  # Lender grudge gained toward a defaulting borrower (spec +0.3).
 OFFER_TTL_DAYS = 2  # An offer made on tick t may be accepted through tick t + 2.
 MAX_PENDING_OFFERS = 5  # Outgoing pending offers per citizen.
 VOTE_DAYS = 3  # A town vote closes this many days after it opens.
@@ -63,6 +65,33 @@ MAX_RENT_CHANGE_PERCENT = 20  # Per set_rent while a lot is leased.
 MIN_RENT_STEP = 100  # Cents; lets a leased lot at zero (or tiny) rent still change.
 EVICTION_PERIODS = 3  # Missed rent periods before the owner may evict.
 MAX_PREPAID_PERIODS = 4  # How far ahead a tenant may pay.
+# interact effects (spec section 5.2, 0..1 values scaled by 100): (trust delta, grudge delta).
+# Each applies to the target's feeling toward the actor; MUTUAL_INTERACTIONS also change the
+# actor's feeling toward the target the same way.
+INTERACTIONS: dict[str, tuple[int, int]] = {
+    "befriend": (10, 0),
+    "gift": (15, -5),
+    "ally": (20, 0),
+    "argue": (-10, 10),
+    "insult": (-15, 20),
+    "betray": (-50, 50),
+    "mentor": (10, 0),
+}
+MUTUAL_INTERACTIONS = ("ally", "argue")
+ALLY_MIN_TRUST = 50  # Target's trust toward the actor needed to form an alliance.
+FRIEND_TRUST = 50  # befriend turns an acquaintance into a friend at this trust.
+INSULT_REPUTATION = 2  # Target reputation lost to an insult.
+BETRAY_REPUTATION = 10  # Actor reputation lost by betraying.
+MENTOR_REPUTATION = 2  # Mentee reputation gained (stands in for skill until one exists).
+INTERACTION_VERBS = {
+    "befriend": "befriended",
+    "gift": "gave a gift to",
+    "ally": "allied with",
+    "argue": "argued with",
+    "insult": "insulted",
+    "betray": "betrayed",
+    "mentor": "mentored",
+}
 
 
 class InvalidAction(ValueError):
@@ -90,6 +119,30 @@ def _lot_payload(plot: m.Plot) -> dict:
         arrears=plot.arrears,
         missed_periods=plot.missed_periods,
         prepaid_periods=plot.prepaid_periods,
+    )
+
+
+def _clamp(value: int, low: int, high: int) -> int:
+    return max(low, min(high, value))
+
+
+def _tie(holder: m.Citizen, other_id: str) -> m.Relationship:
+    """holder's relationship entry toward other_id, created neutral on first contact."""
+    relation = next((r for r in holder.relationships if r.citizen_id == other_id), None)
+    if relation is None:
+        relation = m.Relationship(citizen_id=other_id)
+        holder.relationships.append(relation)
+    return relation
+
+
+def _tie_payload(holder: m.Citizen, relation: m.Relationship) -> dict:
+    """relationship_changed payload: holder's feeling toward relation.citizen_id."""
+    return dict(
+        recipient_id=holder.id,
+        trust=relation.trust,
+        grudge=relation.grudge,
+        type=relation.type,
+        citizen_id=relation.citizen_id,
     )
 
 
@@ -306,12 +359,9 @@ class Engine:
             actor.memories = (actor.memories + [f"To {recipient.name}: {action.message}"])[-8:]
             recipient.memories = (recipient.memories + [f"{actor.name}: {action.message}"])[-8:]
             emit("agent_spoke", dict(recipient_id=recipient.id, message=action.message))
-            relation = next((r for r in recipient.relationships if r.citizen_id == actor.id), None)
-            if relation is None:
-                relation = m.Relationship(citizen_id=actor.id)
-                recipient.relationships.append(relation)
+            relation = _tie(recipient, actor.id)
             relation.trust = min(100, relation.trust + 1)
-            emit("relationship_changed", dict(recipient_id=recipient.id, trust=relation.trust))
+            emit("relationship_changed", _tie_payload(recipient, relation))
         elif isinstance(action, m.ConstructBuilding):
             plot = s.plots.get(action.plot_id)
             if plot is None:
@@ -789,9 +839,87 @@ class Engine:
             plot.tenant_id = None
             plot.arrears = plot.missed_periods = plot.prepaid_periods = 0
             emit("tenant_evicted", evicted)
+        elif isinstance(action, m.Interact):
+            self._interact(actor, action)
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
+
+    def _interact(self, actor: m.Citizen, action: m.Interact):
+        """Bounded relationship change (spec section 5.2, scaled by 100).
+
+        The target's feeling toward the actor always changes; ally and argue are mutual and
+        change the actor's feeling toward the target too. One interact per actor and target
+        per tick. Trust is clamped to -100..100, grudge and reputation to 0..100.
+        """
+        s = self.state
+        target = s.citizens.get(action.recipient_id)
+        if target is None:
+            raise InvalidAction("unknown_entity", "Unknown citizen")
+        if target.id == actor.id:
+            raise InvalidAction("bad_params", "A citizen cannot interact with themselves")
+        own = next((r for r in actor.relationships if r.citizen_id == target.id), None)
+        if own is not None and own.last_interaction_tick == s.tick:
+            raise InvalidAction("rate_limited", f"Already interacted with {target.name} today")
+        theirs = next((r for r in target.relationships if r.citizen_id == actor.id), None)
+        if action.kind == "ally" and (theirs.trust if theirs else 0) < ALLY_MIN_TRUST:
+            raise InvalidAction(
+                "trust_too_low", f"{target.name} must trust you at least {ALLY_MIN_TRUST} to ally"
+            )
+        amount = action.amount or 0
+        if actor.money < amount:
+            raise InvalidAction("insufficient_funds", "Insufficient funds")
+
+        def emit(kind, payload, refs=None):
+            return self.emit(kind, payload, actor.id, action.rationale, refs)
+
+        if amount:
+            actor.money -= amount
+            target.money += amount
+            emit(
+                "transaction_completed",
+                dict(sender_id=actor.id, recipient_id=target.id, amount=amount),
+            )
+        if action.kind == "insult":
+            target.reputation = _clamp(target.reputation - INSULT_REPUTATION, 0, 100)
+        elif action.kind == "mentor":
+            target.reputation = _clamp(target.reputation + MENTOR_REPUTATION, 0, 100)
+        elif action.kind == "betray":
+            actor.reputation = _clamp(actor.reputation - BETRAY_REPUTATION, 0, 100)
+        verb = INTERACTION_VERBS[action.kind]
+        actor.memories = (actor.memories + [f"I {verb} {target.name}"])[-8:]
+        target.memories = (target.memories + [f"{actor.name} {verb} me"])[-8:]
+        interaction = emit(
+            "citizen_interacted",
+            dict(
+                recipient_id=target.id,
+                kind=action.kind,
+                amount=amount,
+                actor_reputation=actor.reputation,
+                recipient_reputation=target.reputation,
+            ),
+        )
+
+        trust_delta, grudge_delta = INTERACTIONS[action.kind]
+        own = _tie(actor, target.id)
+        own.last_interaction_tick = s.tick
+        changes = [(target, _tie(target, actor.id))]
+        if action.kind in MUTUAL_INTERACTIONS:
+            changes.append((actor, own))
+        for holder, relation in changes:
+            relation.trust = _clamp(relation.trust + trust_delta, -100, 100)
+            relation.grudge = _clamp(relation.grudge + grudge_delta, 0, 100)
+            if action.kind == "ally":
+                relation.type = "ally"
+            elif action.kind == "betray":
+                relation.type = "rival"
+            elif (
+                action.kind == "befriend"
+                and relation.type == "acquaintance"
+                and relation.trust >= FRIEND_TRUST
+            ):
+                relation.type = "friend"
+            emit("relationship_changed", _tie_payload(holder, relation), [interaction.id])
 
     def _stock(self, kind: str) -> m.ResourceStock:
         """The shared stock for kind; raises out_of_stock when missing or empty."""
@@ -985,13 +1113,27 @@ class Engine:
     def _resolve_job_applications(self):
         """Daily fallback for applications the owner left unanswered since the last tick.
 
-        First come, first served: an applicant who is still unemployed is hired while the
-        business has a free slot and cash for one day's wage; otherwise the application is
-        rejected. Applications whose citizen or business is gone, or whose applicant already
-        found work, are withdrawn.
+        Owners prefer applicants they trust: applications are taken in order of the owner's
+        trust toward the applicant (highest first; no entry counts as 0), then first come,
+        first served. An applicant who is still unemployed is hired while the business has a
+        free slot and cash for one day's wage; otherwise the application is rejected.
+        Applications whose citizen or business is gone, or whose applicant already found work,
+        are withdrawn.
         """
         s = self.state
-        for application in sorted(s.job_applications.values(), key=lambda a: a.sequence):
+
+        def owner_trust(application: m.JobApplication) -> int:
+            building = s.buildings.get(application.building_id)
+            owner = s.citizens.get(building.owner_id) if building is not None else None
+            if owner is None:
+                return 0
+            return next(
+                (r.trust for r in owner.relationships if r.citizen_id == application.citizen_id),
+                0,
+            )
+
+        pending = sorted(s.job_applications.values(), key=lambda a: (-owner_trust(a), a.sequence))
+        for application in pending:
             if application.id not in s.job_applications:
                 continue  # Withdrawn by an earlier hire this tick.
             applicant = s.citizens.get(application.citizen_id)
@@ -1185,14 +1327,9 @@ class Engine:
                 borrower = s.citizens.get(loan.borrower_id)
                 trust = 0
                 if lender is not None:
-                    relation = next(
-                        (r for r in lender.relationships if r.citizen_id == loan.borrower_id),
-                        None,
-                    )
-                    if relation is None:
-                        relation = m.Relationship(citizen_id=loan.borrower_id)
-                        lender.relationships.append(relation)
+                    relation = _tie(lender, loan.borrower_id)
                     relation.trust = max(-100, relation.trust - DEFAULT_TRUST_PENALTY)
+                    relation.grudge = min(100, relation.grudge + DEFAULT_GRUDGE)
                     trust = relation.trust
                 reputation = 0
                 if borrower is not None:
@@ -1211,7 +1348,7 @@ class Engine:
                     # Same convention as communicate: recipient's trust toward the actor.
                     self.emit(
                         "relationship_changed",
-                        dict(recipient_id=lender.id, trust=trust),
+                        _tie_payload(lender, relation),
                         loan.borrower_id,
                         causal_refs=[default.id],
                     )

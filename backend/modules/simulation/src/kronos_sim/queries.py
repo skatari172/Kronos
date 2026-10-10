@@ -52,6 +52,50 @@ def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
             if loan.status in ("offered", "active", "defaulted")
         ],
         incoming_offers=offers(state, citizen_id).incoming,
+        ties=strongest_ties(state, citizen_id),
+    )
+
+
+# Ties shown in an observation; the full list is GET /api/agents/{id}/relationships.
+OBSERVED_TIES = 5
+
+
+def _view(state: m.WorldState, holder: m.Citizen, other_id: str) -> m.RelationshipView:
+    relation = next((r for r in holder.relationships if r.citizen_id == other_id), None)
+    other = state.citizens.get(other_id)
+    name = other.name if other is not None else other_id
+    if relation is None:
+        return m.RelationshipView(citizen_id=other_id, name=name, known=False)
+    return m.RelationshipView(name=name, **relation.model_dump())
+
+
+def relationships(state: m.WorldState, citizen_id: str) -> list[m.RelationshipView]:
+    """Every tie this citizen holds toward a living citizen, by trust (highest first), then ID."""
+    holder = state.citizens.get(citizen_id)
+    if holder is None:
+        raise KeyError("Unknown citizen")
+    views = [
+        _view(state, holder, r.citizen_id)
+        for r in holder.relationships
+        if r.citizen_id in state.citizens
+    ]
+    return sorted(views, key=lambda v: (-v.trust, v.citizen_id))
+
+
+def strongest_ties(state: m.WorldState, citizen_id: str) -> list[m.RelationshipView]:
+    """The few ties that matter most: largest |trust| or grudge, then citizen ID."""
+    ties = [v for v in relationships(state, citizen_id) if v.trust or v.grudge]
+    ties.sort(key=lambda v: (-max(abs(v.trust), v.grudge), v.citizen_id))
+    return ties[:OBSERVED_TIES]
+
+
+def relationship_pair(state: m.WorldState, a_id: str, b_id: str) -> m.RelationshipPair:
+    """Both directions of a tie; a missing entry is reported neutral with known=false."""
+    a, b = state.citizens.get(a_id), state.citizens.get(b_id)
+    if a is None or b is None:
+        raise KeyError("Unknown citizen")
+    return m.RelationshipPair(
+        a_id=a_id, b_id=b_id, a_to_b=_view(state, a, b_id), b_to_a=_view(state, b, a_id)
     )
 
 
