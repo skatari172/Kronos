@@ -1,5 +1,7 @@
 # KRONOS
 
+**Codebase reference:** [docs/codebase.md](docs/codebase.md) is the single source of truth for the current architecture, development workflow and known integration blockers. Every coding agent must read it before making changes and update it before finishing. Other guides and the overview below are supporting material.
+
 **A living world you can rewrite.** A runnable hackathon foundation: a procedural 3D village, a small economy, validated natural-language price changes, and saved alternate timelines.
 
 ## Run locally
