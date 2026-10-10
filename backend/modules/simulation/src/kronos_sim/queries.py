@@ -45,6 +45,11 @@ def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
             if c.id != citizen_id
         },
         available_actions=list(SUPPORTED_ACTIONS),
+        loans=[
+            loan
+            for loan in loans(state, citizen_id)
+            if loan.status in ("offered", "active", "defaulted")
+        ],
     )
 
 
@@ -58,3 +63,15 @@ def business_profile(state: m.WorldState, building_id: str) -> m.BusinessProfile
         employee_ids=staff,
         free_slots=max(0, building.job_slots - len(staff)),
     )
+
+
+def loans(
+    state: m.WorldState, citizen_id: str | None = None, status: m.LoanStatus | None = None
+) -> list[m.Loan]:
+    """Loans in ID order, optionally where citizen_id lends or borrows, and by status."""
+    return [
+        loan.model_copy(deep=True)
+        for _, loan in sorted(state.loans.items())
+        if (citizen_id is None or citizen_id in (loan.lender_id, loan.borrower_id))
+        and (status is None or loan.status == status)
+    ]

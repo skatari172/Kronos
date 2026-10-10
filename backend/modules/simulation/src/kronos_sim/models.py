@@ -76,6 +76,9 @@ class Citizen(Model):
     personality: str = "practical"
     relationships: list[Relationship] = Field(default_factory=list)
     memories: list[str] = Field(default_factory=list)
+    reputation: int = Field(
+        default=50, ge=0, le=100, description="Public standing; feeds influence"
+    )
 
 
 class Plot(Model):
@@ -101,6 +104,31 @@ class Building(Model):
     )
 
 
+LoanStatus = Literal["offered", "active", "repaid", "defaulted", "declined", "expired"]
+
+
+class Loan(Model):
+    """A loan between two citizens. Interest is flat per loan, in integer cents:
+    amount_owed = principal + principal * rate_bps // 10000, fixed when the offer is made.
+
+    Lifecycle: offered -> active (borrower accepts; principal moves lender -> borrower) or
+    declined. Offers still unanswered on due_tick become expired. An active loan not fully
+    repaid once tick > due_tick becomes defaulted (penalties apply once); a defaulted loan can
+    still be repaid and then becomes repaid.
+    """
+
+    id: str
+    lender_id: str
+    borrower_id: str
+    principal: int = Field(gt=0)
+    rate_bps: int = Field(ge=0, le=10000)
+    due_tick: int = Field(gt=0)
+    amount_owed: int = Field(gt=0)
+    amount_repaid: int = Field(default=0, ge=0)
+    status: LoanStatus = "offered"
+    created_tick: int = Field(default=0, ge=0)
+
+
 class WorldState(Model):
     schema_version: Literal[1] = 1
     branch_id: str
@@ -111,6 +139,7 @@ class WorldState(Model):
     citizens: dict[str, Citizen]
     buildings: dict[str, Building]
     plots: dict[str, Plot]
+    loans: dict[str, Loan] = Field(default_factory=dict)
 
 
 class ActionBase(Model):
@@ -325,6 +354,8 @@ class Lend(ActionBase):
 
 
 class Repay(ActionBase):
+    """Borrower only; partial payments allowed, never more than what is still owed."""
+
     type: Literal["repay"] = "repay"
     loan_id: str
     amount: int = Field(gt=0)
@@ -349,6 +380,14 @@ class GatherResource(ActionBase):
     building_id: str
     resource: TradedResource
     quantity: int = Field(gt=0, le=100)
+
+
+class RespondLoan(ActionBase):
+    """Borrower accepts or declines a loan offer; accepting moves the principal to them."""
+
+    type: Literal["respond_loan"] = "respond_loan"
+    loan_id: str
+    accept: bool
 
 
 AgentAction = Annotated[
@@ -384,7 +423,8 @@ AgentAction = Annotated[
     | Repay
     | ProposeVote
     | CastVote
-    | GatherResource,
+    | GatherResource
+    | RespondLoan,
     Field(discriminator="type"),
 ]
 
@@ -558,6 +598,54 @@ class WageChanged(EventBase):
     payload: WagePayload
 
 
+class LoanPayload(Model):
+    loan_id: str
+    lender_id: str
+    borrower_id: str
+    status: LoanStatus
+    principal: int
+    amount_owed: int
+    amount_repaid: int
+    amount: int = Field(default=0, description="Cents moved by this event (accept or repay)")
+
+
+class LoanOffered(EventBase):
+    type: Literal["loan_offered"] = "loan_offered"
+    payload: LoanPayload
+
+
+class LoanAccepted(EventBase):
+    type: Literal["loan_accepted"] = "loan_accepted"
+    payload: LoanPayload
+
+
+class LoanDeclined(EventBase):
+    type: Literal["loan_declined"] = "loan_declined"
+    payload: LoanPayload
+
+
+class LoanRepaid(EventBase):
+    """Any repayment; payload.status is "repaid" once nothing is owed."""
+
+    type: Literal["loan_repaid"] = "loan_repaid"
+    payload: LoanPayload
+
+
+class LoanExpired(EventBase):
+    type: Literal["loan_expired"] = "loan_expired"
+    payload: LoanPayload
+
+
+class LoanDefaultPayload(LoanPayload):
+    borrower_reputation: int
+    lender_trust: int = Field(description="Lender's trust toward the borrower after the penalty")
+
+
+class LoanDefaulted(EventBase):
+    type: Literal["loan_defaulted"] = "loan_defaulted"
+    payload: LoanDefaultPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -586,7 +674,13 @@ SimulationEvent = Annotated[
     | GoalsChanged
     | EmploymentChanged
     | WageChanged
-    | InterventionApplied,
+    | InterventionApplied
+    | LoanOffered
+    | LoanAccepted
+    | LoanDeclined
+    | LoanRepaid
+    | LoanExpired
+    | LoanDefaulted,
     Field(discriminator="type"),
 ]
 
@@ -689,6 +783,10 @@ class AgentObservation(Model):
     bread_prices: dict[str, int]
     neighbors: dict[str, str] = Field(default_factory=dict, description="Citizen ID to name")
     available_actions: list[str] = Field(default_factory=list)
+    loans: list[Loan] = Field(
+        default_factory=list,
+        description="Open loans (offered, active, defaulted) where this agent lends or borrows",
+    )
 
 
 class ActionValidationResult(Model):
@@ -789,3 +887,25 @@ class PurchaseRequest(BusinessCommand):
     resource: TradedResource
     quantity: int = Field(gt=0, le=100)
     max_unit_price: int = Field(gt=0)
+
+
+class LoanCommand(MutationRequest):
+    """Loan route body. actor_id is the citizen acting (lender to offer, borrower otherwise)."""
+
+    actor_id: str
+    rationale: str | None = Field(default=None, max_length=300)
+
+
+class LoanOfferRequest(LoanCommand):
+    borrower_id: str
+    principal: int = Field(gt=0)
+    rate_bps: int = Field(ge=0, le=10000)
+    due_tick: int = Field(gt=0)
+
+
+class LoanResponseRequest(LoanCommand):
+    accept: bool
+
+
+class LoanRepayRequest(LoanCommand):
+    amount: int = Field(gt=0)

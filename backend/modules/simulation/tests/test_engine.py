@@ -120,14 +120,6 @@ def test_long_run_invariants_and_reproducibility():
             "fee": 1000,
         },
         {"type": "adopt_invention", "invention_id": "water_mill", "building_id": "farm"},
-        {
-            "type": "lend",
-            "recipient_id": "citizen-6",
-            "principal": 6000,
-            "rate_bps": 1000,
-            "due_tick": 10,
-        },
-        {"type": "repay", "loan_id": "loan-1", "amount": 1000},
         {"type": "propose_vote", "kind": "min_wage", "value": 200},
         {"type": "vote", "vote_id": "vote-1", "choice": "yes"},
         {"type": "gather_resource", "building_id": "farm", "resource": "wheat", "quantity": 2},
@@ -222,7 +214,7 @@ def test_every_action_type_is_supported_or_explicitly_planned():
     union = get_args(get_args(AgentAction)[0])
     types = {cls.model_fields["type"].default for cls in union}
     assert set(SUPPORTED_ACTIONS) <= types
-    assert len(types) == 33
+    assert len(types) == 34
 
 
 @pytest.mark.parametrize(
