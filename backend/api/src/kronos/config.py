@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="KRONOS_", env_file=".env", extra="ignore")
-    database_url: str = "sqlite:///./kronos.db"
+    database_url: str = "sqlite:///./backend/database/kronos.db"
     seed: int = 42
     tick_seconds: float = 2
     llm_provider: str = "mock"

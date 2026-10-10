@@ -27,6 +27,7 @@ Kronos/
 ├── frontend/                  # React, 3D village, dashboard, transport, tests
 ├── backend/
 │   ├── api/                   # FastAPI orchestration and API tests
+│   ├── database/              # Authoritative SQLite database files
 │   ├── modules/
 │   │   ├── simulation/        # Pure Python world, contracts, action engine
 │   │   ├── agents/            # Provider interface and deterministic mock
@@ -62,8 +63,9 @@ Root configuration files manage the shared toolchain. Each Python module has its
 | `make contracts`                 | Export OpenAPI, fixture, and TypeScript               |
 | `make check`                     | Tests, lint, formatting, production build             |
 | `make reset`                     | Remove default local SQLite data; stop API first      |
+| `make db-init`                   | Initialize or seed local SQLite database              |
 
-Swagger UI: **http://localhost:8000/docs**, grouped into User tools, Agent tools, Backend tools, World, and History. Route ownership and request examples are in [API contracts](docs/api-contracts.md). The default SQLite file is `kronos.db`, ignored by Git. A custom database URL is not touched by `make reset`.
+Swagger UI: **http://localhost:8000/docs**, grouped into User tools, Agent tools, Backend tools, World, and History. Route ownership and request examples are in [API contracts](docs/api-contracts.md). The default SQLite file is `backend/database/kronos.db`, tracked in Git for local persistence. A custom database URL is not touched by `make reset`.
 
 ## Deliberate limits
 
