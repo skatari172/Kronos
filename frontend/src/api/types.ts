@@ -11,3 +11,7 @@ export type Status = components["schemas"]["SimulationStatus"];
 export type InterventionResult = components["schemas"]["InterventionResult"];
 export type ActionResult = components["schemas"]["ActionResult"];
 export type CitizenProfile = components["schemas"]["CitizenProfile"];
+export type UserQueryRequest = components["schemas"]["UserQueryRequest"];
+export type UserQueryResult = components["schemas"]["UserQueryResult"];
+export type DeterminedToolCall = components["schemas"]["DeterminedToolCall"];
+export type ToolParameters = components["schemas"]["ToolParameters"];

@@ -28,14 +28,6 @@ async def events_after(
     service: ServiceDependency,
     after: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-):
-    """Read committed events, oldest first, without a realtime connection.
-
-    The cursor is exclusive and scoped to the active branch. Pass the last returned
-    sequence as `after`; an empty list means the reader has caught up.
-    """
-    return service.store.list_events_after(service.state.branch_id, after, limit)
-
     type: list[str] | None = Query(None, description="Event types (repeat to allow several)"),
     actor: str | None = Query(None, description="Acting citizen ID"),
     target: str | None = Query(None, description="Citizen or entity named in the payload"),

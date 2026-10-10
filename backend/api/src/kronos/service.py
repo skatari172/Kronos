@@ -15,16 +15,39 @@ from kronos_sim.models import (
     ActionRequest,
     ActionResult,
     ActionValidationResult,
+    AgentAction,
     AskResult,
     BranchMetadata,
+    CloseBusiness,
     DecisionResult,
+    DeterminedToolCall,
+    Evict,
+    Fire,
+    FoundBusiness,
+    GatherResource,
+    GrantIntervention,
     HeadlessRun,
     HeadlessRunRequest,
+    Hire,
+    HungerIntervention,
     InterventionResult,
+    LeaseLot,
     MutationRequest,
+    PolicyIntervention,
+    PriceIntervention,
+    ProposeVote,
+    ResourceIntervention,
+    SetPrice,
+    SetRent,
+    SetWage,
     SimulationStatus,
     SpawnCitizenRequest,
     SpawnResult,
+    ToolParameters,
+    UpgradeBuilding,
+    UserQueryRequest,
+    UserQueryResult,
+    WageIntervention,
     WorldState,
     WorldUpdate,
 )
@@ -294,6 +317,318 @@ class Service:
                 raise HTTPException(409, "Active branch changed while reading the command")
             result = self.enqueue(command, "player", body.text)
         return InterventionResult(command=command, result=result)
+
+    def _check_query_concurrency(self, body: UserQueryRequest) -> None:
+        if body.branch_id is not None and body.branch_id != self.state.branch_id:
+            raise HTTPException(409, "World changed. Resynchronize and try again.")
+        if body.expected_sequence is not None and body.expected_sequence != self.state.sequence:
+            raise HTTPException(409, "World changed. Resynchronize and try again.")
+
+    def _build_user_query_context(self) -> dict:
+        state = self.state
+        return {
+            "tick": state.tick,
+            "citizen_names": {cid: c.name for cid, c in sorted(state.citizens.items())},
+            "citizens": {
+                cid: {
+                    "name": c.name,
+                    "occupation": c.occupation,
+                    "money": c.money,
+                    "hunger": c.hunger,
+                }
+                for cid, c in sorted(state.citizens.items())
+            },
+            "buildings": {
+                bid: {
+                    "name": b.name,
+                    "kind": b.kind,
+                    "owner_id": b.owner_id,
+                    "plot_id": b.plot_id,
+                    "wage": b.wage,
+                    "prices": b.prices,
+                }
+                for bid, b in sorted(state.buildings.items())
+            },
+            "plots": {
+                pid: {
+                    "owner_id": p.owner_id,
+                    "tenant_id": p.tenant_id,
+                    "rent": p.rent,
+                }
+                for pid, p in sorted(state.plots.items())
+            },
+            "resources": {r: res.stock for r, res in sorted(state.resources.items())},
+            "policies": {
+                pol: val for pol, val in sorted(state.policies.model_dump().items()) if val
+            },
+        }
+
+    def _build_agent_action_from_params(self, tool: str, params: ToolParameters) -> AgentAction:
+        actor_id = params.actor_id
+        if actor_id is None:
+            if params.building_id and params.building_id in self.state.buildings:
+                actor_id = self.state.buildings[params.building_id].owner_id
+            elif (
+                params.plot_id
+                and params.plot_id in self.state.plots
+                and self.state.plots[params.plot_id].owner_id
+            ):
+                actor_id = self.state.plots[params.plot_id].owner_id
+            elif self.state.citizens:
+                actor_id = next(iter(sorted(self.state.citizens.keys())))
+            else:
+                actor_id = "citizen-1"
+
+        if tool == "found_business":
+            return FoundBusiness(
+                actor_id=actor_id,
+                plot_id=params.plot_id or "plot-1",
+                kind=params.kind or "farm",  # type: ignore[arg-type]
+                capital=params.capital or 5000,
+                rationale="Found business via player query",
+            )
+        if tool == "set_price":
+            return SetPrice(
+                actor_id=actor_id,
+                building_id=params.building_id or "bakery",
+                resource=params.resource or "bread",
+                price=params.price or 500,
+                rationale="Set price via player query",
+            )
+        if tool == "set_wage":
+            return SetWage(
+                actor_id=actor_id,
+                building_id=params.building_id or "farm",
+                wage=params.wage or 150,
+                rationale="Set wage via player query",
+            )
+        if tool == "hire":
+            return Hire(
+                actor_id=actor_id,
+                building_id=params.building_id or "farm",
+                citizen_id=params.citizen_id or actor_id,
+                rationale="Hire citizen via player query",
+            )
+        if tool == "fire":
+            return Fire(
+                actor_id=actor_id,
+                building_id=params.building_id or "farm",
+                citizen_id=params.citizen_id or actor_id,
+                rationale="Fire citizen via player query",
+            )
+        if tool == "close_business":
+            return CloseBusiness(
+                actor_id=actor_id,
+                building_id=params.building_id or "farm",
+                rationale="Close business via player query",
+            )
+        if tool == "upgrade_building":
+            return UpgradeBuilding(
+                actor_id=actor_id,
+                building_id=params.building_id or "bakery",
+                rationale="Upgrade building via player query",
+            )
+        if tool == "gather_resource":
+            return GatherResource(
+                actor_id=actor_id,
+                building_id=params.building_id or "farm",
+                resource=params.resource or "wheat",
+                quantity=params.quantity or 10,
+                rationale="Gather resource via player query",
+            )
+        if tool == "lease_lot":
+            return LeaseLot(
+                actor_id=actor_id,
+                plot_id=params.plot_id or "plot-1",
+                rationale="Lease lot via player query",
+            )
+        if tool == "set_rent":
+            return SetRent(
+                actor_id=actor_id,
+                plot_id=params.plot_id or "plot-1",
+                rent=params.rent or 200,
+                rationale="Set rent via player query",
+            )
+        if tool == "evict":
+            return Evict(
+                actor_id=actor_id,
+                plot_id=params.plot_id or "plot-1",
+                rationale="Evict tenant via player query",
+            )
+        if tool == "propose_vote":
+            return ProposeVote(
+                actor_id=actor_id,
+                kind=params.kind or "min_wage",  # type: ignore[arg-type]
+                value=params.value or 200,
+                rationale="Propose vote via player query",
+            )
+        raise ValueError(f"Unknown action tool: {tool}")
+
+    async def _execute_determined_tool(
+        self, query: str, tool_call: DeterminedToolCall, body: UserQueryRequest
+    ) -> UserQueryResult:
+        params = tool_call.parameters
+        endpoint = tool_call.endpoint
+        tool = tool_call.tool
+
+        # 1. Interventions (/api/interventions)
+        if endpoint == "/api/interventions" or tool in (
+            "modify_price",
+            "set_wage_intervention",
+            "grant_money",
+            "adjust_resource",
+            "adjust_hunger",
+            "set_policy",
+        ):
+            cmd = None
+            if tool == "modify_price":
+                cmd = PriceIntervention(
+                    percent=params.percent if params.percent is not None else 10,
+                )
+            elif tool in ("set_wage", "set_wage_intervention"):
+                if params.wage is not None:
+                    cmd = WageIntervention(wage=params.wage)
+                else:
+                    cmd = WageIntervention(
+                        percent=params.percent if params.percent is not None else 10
+                    )
+            elif tool == "grant_money":
+                amt = params.amount if params.amount not in (None, 0) else 100
+                cmd = GrantIntervention(
+                    amount=amt,
+                    citizen_id=params.citizen_id,
+                )
+            elif tool == "adjust_resource":
+                sc = params.stock_change or 0
+                if sc == 0 and params.regen_per_tick is None:
+                    sc = 50
+                cmd = ResourceIntervention(
+                    resource="wheat",
+                    stock_change=sc,
+                    regen_per_tick=params.regen_per_tick,
+                )
+            elif tool == "adjust_hunger":
+                ch = params.change if params.change not in (None, 0) else -30
+                cmd = HungerIntervention(
+                    change=ch,
+                    citizen_id=params.citizen_id,
+                )
+            elif tool == "set_policy":
+                cmd = PolicyIntervention(
+                    kind=params.kind or "min_wage",  # type: ignore[arg-type]
+                    value=params.value or 0,
+                )
+            if cmd is not None:
+                async with self.lock:
+                    self._check_query_concurrency(body)
+                    action_res = self.enqueue(cmd, "player", query)
+                return UserQueryResult(
+                    query=query,
+                    tool_call=tool_call,
+                    status="queued",
+                    result=action_res.model_dump(mode="json"),
+                    scheduled_tick=action_res.scheduled_tick,
+                    action_id=action_res.action_id,
+                )
+
+        # 2. Spawning Citizens (/api/agents or tool == "spawn_citizen")
+        if endpoint == "/api/agents" or tool == "spawn_citizen":
+            plot_id = params.plot_id
+            if not plot_id:
+                plot_id = next(iter(sorted(self.state.plots.keys())), "plot-0")
+            spawn_req = SpawnCitizenRequest(
+                branch_id=self.state.branch_id,
+                expected_sequence=self.state.sequence,
+                name=params.name or "New Citizen",
+                occupation=params.occupation or "unemployed",
+                money=params.money if params.money is not None else 1000,
+                plot_id=plot_id,
+                personality=params.occupation or "practical",
+            )
+            spawn_res = await self.spawn(spawn_req)
+            return UserQueryResult(
+                query=query,
+                tool_call=tool_call,
+                status="applied",
+                result=spawn_res.model_dump(mode="json"),
+            )
+
+        # 3. Simulation Controls: Tick (/api/simulation/tick or tool == "simulation_tick")
+        if endpoint == "/api/simulation/tick" or tool == "simulation_tick":
+            mut_req = None
+            if body.branch_id is not None and body.expected_sequence is not None:
+                mut_req = MutationRequest(
+                    branch_id=body.branch_id,
+                    expected_sequence=body.expected_sequence,
+                )
+            tick_res = await self.tick(mut_req)
+            return UserQueryResult(
+                query=query,
+                tool_call=tool_call,
+                status="applied",
+                result=tick_res.model_dump(mode="json"),
+            )
+
+        # 4. Simulation Playback (/api/simulation/play or /api/simulation/pause)
+        if (
+            endpoint in ("/api/simulation/play", "/api/simulation/pause")
+            or tool == "simulation_playback"
+        ):
+            is_playing = (
+                params.playing
+                if params.playing is not None
+                else (endpoint == "/api/simulation/play")
+            )
+            async with self.lock:
+                self._check_query_concurrency(body)
+                self.playing = is_playing
+                if is_playing and params.speed:
+                    self.speed = params.speed
+                status_res = self.status()
+            return UserQueryResult(
+                query=query,
+                tool_call=tool_call,
+                status="applied",
+                result=status_res.model_dump(mode="json"),
+            )
+
+        # 5. Citizen / Business Actions (/api/actions)
+        if endpoint == "/api/actions":
+            action_obj = self._build_agent_action_from_params(tool, params)
+            action_req = ActionRequest(
+                branch_id=self.state.branch_id,
+                expected_sequence=self.state.sequence,
+                action=action_obj,
+            )
+            action_res = await self.execute_action(action_req, source="player")
+            return UserQueryResult(
+                query=query,
+                tool_call=tool_call,
+                status="queued",
+                result=action_res.model_dump(mode="json"),
+                scheduled_tick=action_res.scheduled_tick,
+                action_id=action_res.action_id,
+            )
+
+        raise ValueError(f"Unsupported tool or endpoint: {endpoint} {tool}")
+
+    async def handle_user_query(self, body: UserQueryRequest) -> UserQueryResult:
+        self._check_query_concurrency(body)
+        async with self.lock:
+            context = self._build_user_query_context()
+        tool_call = await self.agents.resolve_user_query(body.query, context)
+        try:
+            return await self._execute_determined_tool(body.query, tool_call, body)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning("Failed executing determined tool %s: %s", tool_call.tool, exc)
+            return UserQueryResult(
+                query=body.query,
+                tool_call=tool_call,
+                status="rejected",
+                error=str(exc),
+            )
 
     async def decide(self, citizen_id: str, request: MutationRequest) -> DecisionResult:
         """Ask the provider for one action, then submit it like any other agent action.

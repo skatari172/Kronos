@@ -1,6 +1,6 @@
 """Shared wire contracts. Currency is integer cents; positions are ground-plane x/z."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -1344,6 +1344,89 @@ class InterventionRequest(Model):
 class InterventionResult(Model):
     command: Intervention
     result: "ActionResult"
+
+
+class ToolParameters(Model):
+    """Parameters for any determined toolkit endpoint."""
+
+    percent: int | None = Field(
+        default=None, description="Percent change (-90 to 200) for price or wage"
+    )
+    wage: int | None = Field(default=None, description="Wage in cents")
+    amount: int | None = Field(default=None, description="Money amount in cents to grant or take")
+    stock_change: int | None = Field(default=None, description="Wheat stock change")
+    regen_per_tick: int | None = Field(default=None, description="Wheat regrowth per tick")
+    change: int | None = Field(default=None, description="Hunger change (-100 to 100)")
+    kind: str | None = Field(default=None, description="Policy kind or building kind")
+    value: int | None = Field(default=None, description="Policy value in cents or basis points")
+    citizen_id: str | None = Field(default=None, description="Target citizen ID")
+    actor_id: str | None = Field(default=None, description="Acting citizen ID")
+    building_id: str | None = Field(default=None, description="Target building ID")
+    plot_id: str | None = Field(default=None, description="Target plot ID")
+    target_id: str | None = Field(default=None, description="Target entity or citizen ID")
+    name: str | None = Field(default=None, description="Name for citizen or business")
+    occupation: str | None = Field(default=None, description="Occupation for citizen")
+    money: int | None = Field(default=None, description="Starting money in cents")
+    capital: int | None = Field(default=None, description="Capital in cents for founding business")
+    resource: TradedResource | None = Field(
+        default=None, description="Resource type (bread or wheat)"
+    )
+    price: int | None = Field(default=None, description="Price in cents")
+    quantity: int | None = Field(default=None, description="Quantity of resource")
+    rent: int | None = Field(default=None, description="Rent in cents")
+    periods: int | None = Field(default=None, description="Prepaid rent periods")
+    choice: str | None = Field(default=None, description="Vote choice: yes or no")
+    playing: bool | None = Field(default=None, description="Simulation play/pause state")
+    speed: int | None = Field(default=None, description="Simulation playback speed (1, 2, or 4)")
+    scope: str | None = Field(
+        default=None, description="Scope for interventions, e.g. all_bakeries or all_businesses"
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {k: v for k, v in self.model_dump().items() if v is not None}
+
+
+class DeterminedToolCall(Model):
+    """The toolkit endpoint determined by the LLM to implement the user query."""
+
+    endpoint: str = Field(
+        description="The API endpoint to call, e.g. /api/interventions, /api/actions, /api/agents"
+    )
+    method: Literal["POST", "PATCH", "GET", "DELETE"] = Field(
+        default="POST", description="HTTP method"
+    )
+    tool: str = Field(description="Name of the specific toolkit tool or operation")
+    parameters: ToolParameters = Field(
+        default_factory=ToolParameters, description="Payload/arguments for the toolkit endpoint"
+    )
+    rationale: str = Field(default="", description="Reasoning for selecting this toolkit endpoint")
+
+
+class UserQueryRequest(Model):
+    """Prompt entered by the player in the user query bar."""
+
+    query: str = Field(
+        min_length=1, max_length=1000, description="Natural language prompt to affect the game"
+    )
+    branch_id: str | None = Field(default=None, description="Target timeline branch")
+    expected_sequence: int | None = Field(default=None, description="Optimistic concurrency guard")
+
+
+class UserQueryResult(Model):
+    """Outcome of processing the user query and executing the determined toolkit endpoint."""
+
+    query: str
+    tool_call: DeterminedToolCall
+    status: Literal["applied", "queued", "executed", "rejected", "error"] = Field(
+        description="Execution status"
+    )
+    result: Any = Field(
+        default=None,
+        description="Result returned by executing the determined toolkit endpoint",
+    )
+    scheduled_tick: int | None = Field(default=None, description="Scheduled tick if queued")
+    action_id: str | None = Field(default=None, description="Associated action or intervention ID")
+    error: str | None = Field(default=None, description="Error code or description if rejected")
 
 
 class SnapshotMetadata(Model):

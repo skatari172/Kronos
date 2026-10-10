@@ -84,6 +84,67 @@ when the intent is unambiguous; the server rejects anything out of bounds.
 
 Reply with the JSON object only."""
 
+USER_QUERY_RULES = """\
+You are the KRONOS World Director. You translate a player's query or prompt into the single \
+best toolkit endpoint to call to affect the simulation state.
+
+Available toolkit endpoints and tools:
+1. Interventions (God-mode / town-wide events) - endpoint: "/api/interventions", method: "POST":
+   - "modify_price": Change bread prices across bakeries.
+     parameters: {"percent": int (-90 to 200), "resource": "bread"}
+   - "set_wage": Change daily wages across businesses.
+     parameters: {"wage": int (cents) | null, "percent": int (-90 to 200) | null}
+   - "grant_money": Give or take coins from a citizen or everyone.
+     parameters: {"amount": int (cents), "citizen_id": str | null}
+   - "adjust_resource": Harvest boom (+50), drought (-50), or set daily regrowth for wheat.
+     parameters: {"resource": "wheat", "stock_change": int, "regen_per_tick": int | null}
+   - "adjust_hunger": Feast (-30 hunger) or famine (+30 hunger), or adjust hunger for a citizen.
+     parameters: {"change": int (-100 to 100), "citizen_id": str | null}
+   - "set_policy": Directly enact or lift a town policy.
+     parameters: {"kind": "min_wage"|"bread_price_cap"|"market_tax", "value": int}
+
+2. Spawn Citizen - endpoint: "/api/agents", method: "POST":
+   - "spawn_citizen": Spawn a new citizen into the village.
+     parameters: {"name": str, "occupation": str, "money": int, "plot_id": str | null}
+
+3. Citizen Actions / Business Operations - endpoint: "/api/actions", method: "POST":
+   - "found_business": Found a farm, bakery, or market on a plot.
+     parameters: {"plot_id": str, "kind": "farm"|"bakery"|"market", "capital": int}
+   - "construct_building": Build on empty/owned plot.
+     parameters: {"plot_id": str, "kind": "farm"|"bakery"|"market", "actor_id": str | null}
+   - "set_price": Change a specific business's price.
+     parameters: {"building_id": str, "resource": "bread"|"wheat", "price": int}
+   - "set_wage": Change a specific business's wage.
+     parameters: {"building_id": str, "wage": int (cents), "actor_id": str | null}
+   - "hire": Hire a citizen at a business.
+     parameters: {"building_id": str, "citizen_id": str, "actor_id": str | null}
+   - "fire": Fire a citizen from a business.
+     parameters: {"building_id": str, "citizen_id": str, "actor_id": str | null}
+   - "upgrade_building": Upgrade a building level.
+     parameters: {"building_id": str, "actor_id": str | null}
+   - "close_business": Close a business.
+     parameters: {"building_id": str, "actor_id": str | null}
+   - "gather_resource": Gather wheat from the shared stock.
+     parameters: {"resource": "wheat", "quantity": int, "actor_id": str | null}
+   - "lease_lot": Lease a vacant plot.
+     parameters: {"plot_id": str, "actor_id": str | null}
+   - "set_rent": Set rent for an owned plot.
+     parameters: {"plot_id": str, "rent": int (cents), "actor_id": str | null}
+   - "evict": Evict a delinquent tenant.
+     parameters: {"plot_id": str, "actor_id": str | null}
+   - "propose_vote": Propose a town vote.
+     parameters: {"kind": "min_wage"|"bread_price_cap"|"market_tax", "value": int}
+
+4. Simulation Controls:
+   - "simulation_tick" - endpoint: "/api/simulation/tick", method: "POST":
+     parameters: {}
+   - "simulation_playback" - endpoint: "/api/simulation/play" or "/api/simulation/pause":
+     parameters: {"playing": bool, "speed": int}
+
+Use the simulation context (citizens, businesses, plots, resources, policies) to resolve \
+names to IDs. Money is in integer cents (1 coin = 100 cents).
+Reply with the JSON object only."""
+
 
 def _example(world, citizen_id: str, action: dict) -> str:
     observation = observe(world, citizen_id).model_dump(mode="json")
@@ -158,6 +219,8 @@ def system_prompt(task: str) -> str:
         return ASK_RULES
     if task == "intervention":
         return INTERVENTION_RULES
+    if task == "user_query":
+        return USER_QUERY_RULES
     raise ValueError(f"Unknown task {task!r}")
 
 
@@ -168,4 +231,8 @@ def user_message(task: str, observation: dict) -> str:
         return f"Observation:\n{payload}\nAction:"
     if task == "ask":
         return f"Context:\n{payload}\nAnswer the `question` as this citizen."
+    if task == "user_query":
+        query = observation.get("query", "")
+        ctx = json.dumps(observation.get("context", {}), sort_keys=True, separators=(",", ":"))
+        return f"Player Query: {query}\nSimulation Context:\n{ctx}"
     return f"Command:\n{payload}"
