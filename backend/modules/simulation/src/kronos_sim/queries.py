@@ -1,7 +1,7 @@
 """Read-only views derived from a world. Used by API routes and the agent layer alike."""
 
 from kronos_sim import models as m
-from kronos_sim.engine import SUPPORTED_ACTIONS
+from kronos_sim.engine import MIN_CAPITAL, RESOURCE_SOURCES, SUPPORTED_ACTIONS
 
 # Wealth tiers in cents, tuned for the current seed (spec: rich >= 1,000 florins, middle >= 300).
 RICH_CENTS = 10000
@@ -27,11 +27,29 @@ def profile(state: m.WorldState, citizen_id: str) -> m.CitizenProfile:
     )
 
 
+# Observation caps keep a prompt near 800 tokens however large the town grows (A5).
+OBSERVED_NEIGHBORS = 8
+OBSERVED_JOBS = 3
+OBSERVED_BUSINESSES = 3
+CONSTRUCTION_COST = 5000  # engine: construct_building costs 50 coins
+
+
 def observe(
     state: m.WorldState, citizen_id: str, events: list[m.SimulationEvent] | None = None
 ) -> m.AgentObservation:
     """The single observation builder for routes, /decide, and the tick loop."""
     view = profile(state, citizen_id)
+    # The full relationship list and the raw memory counts stay out of the prompt: `ties`
+    # carries the strongest feelings and `memory_summary` already renders the counts.
+    citizen = view.citizen.model_copy(update={"relationships": [], "memory_tally": {}})
+    ties = strongest_ties(state, citizen_id)
+    actions = available_actions(state, citizen_id)
+    # Openings only matter to someone who can apply; best-paid first.
+    jobs = (
+        sorted(job_openings(state), key=lambda j: (-j.wage, j.building_id))
+        if "apply_job" in actions
+        else []
+    )
     bakeries = sorted(
         (b for b in state.buildings.values() if b.kind == "bakery"),
         key=lambda b: (b.prices["bread"], b.id),
@@ -40,18 +58,13 @@ def observe(
         branch_id=state.branch_id,
         tick=state.tick,
         sequence=state.sequence,
-        citizen=view.citizen,
+        citizen=citizen,
         role=view.role,
         wealth_tier=view.wealth_tier,
         bread_prices={b.id: b.prices["bread"] for b in bakeries},
         bread_stock={b.id: b.inventory.bread for b in bakeries},
-        neighbors={
-            c.id: c.name
-            for c in sorted(
-                (c for c in state.citizens.values() if c.id != citizen_id), key=lambda c: c.id
-            )[:12]
-        },
-        available_actions=list(SUPPORTED_ACTIONS),
+        neighbors=neighbors(state, citizen_id, [t.citizen_id for t in ties]),
+        available_actions=actions,
         recent_events=[
             event.model_copy(deep=True)
             for event in (events or [])
@@ -70,14 +83,101 @@ def observe(
             if loan.status in ("offered", "active", "defaulted")
         ][:8],
         incoming_offers=offers(state, citizen_id).incoming[:8],
-        ties=strongest_ties(state, citizen_id),
-        open_jobs=job_openings(state),
+        ties=ties,
+        open_jobs=jobs[:OBSERVED_JOBS],
         businesses=[
             business_profile(state, b.id)
             for b in sorted(state.buildings.values(), key=lambda b: b.id)
             if b.owner_id == citizen_id
-        ],
+        ][:OBSERVED_BUSINESSES],
     )
+
+
+def neighbors(state: m.WorldState, citizen_id: str, first: list[str]) -> dict[str, str]:
+    """Up to OBSERVED_NEIGHBORS names: the citizen's strongest ties first, then by ID."""
+    others = [c for c in first if c in state.citizens and c != citizen_id]
+    others += [c for c in sorted(state.citizens) if c != citizen_id and c not in others]
+    return {c: state.citizens[c].name for c in others[:OBSERVED_NEIGHBORS]}
+
+
+def available_actions(state: m.WorldState, citizen_id: str) -> list[str]:
+    """Engine-supported actions this citizen could plausibly take now, in SUPPORTED_ACTIONS order.
+
+    Drops only actions the engine would certainly reject from the citizen's role and state
+    (not an owner, nothing to answer, nothing to sell). It narrows the model's menu and its
+    output schema; the engine still validates everything that remains.
+    """
+    me = state.citizens[citizen_id]
+    others = len(state.citizens) > 1
+    owned = [b for b in state.buildings.values() if b.owner_id == citizen_id]
+    owned_ids = {b.id for b in owned}
+    employer = state.buildings.get(me.employer_id or "")
+    pending = [
+        a
+        for a in state.job_applications.values()
+        if a.status == "pending" and a.building_id in owned_ids
+    ]
+    staffed = any(c.employer_id in owned_ids for c in state.citizens.values())
+    built = {b.plot_id for b in state.buildings.values()}
+    buildable = [
+        p
+        for p in state.plots.values()
+        if p.id not in built and (p.owner_id in (None, citizen_id) or p.tenant_id == citizen_id)
+    ]
+    leasable = [
+        p
+        for p in state.plots.values()
+        if p.owner_id not in (None, citizen_id)
+        and p.tenant_id is None
+        and p.id not in built
+        and me.money >= p.rent
+    ]
+    my_lots = [p for p in state.plots.values() if p.owner_id == citizen_id]
+    loans = state.loans.values()
+    inventions = state.inventions.values()
+    open_votes = [v for v in state.votes.values() if v.status == "open"]
+    rules = {
+        "sell": me.inventory.wheat > 0 or me.inventory.bread > 0,
+        "transfer_money": me.money > 0 and others,
+        "consume": me.inventory.bread > 0,
+        "communicate": others,
+        "interact": others,
+        "trade": others,
+        "lend": me.money > 0 and others,
+        "construct_building": me.money >= CONSTRUCTION_COST and bool(buildable),
+        "found_business": me.money >= MIN_CAPITAL and bool(buildable),
+        "set_price": bool(owned),
+        "produce": any(b.kind != "market" for b in owned),
+        "upgrade_building": any(b.level < 3 for b in owned),
+        "close_business": bool(owned),
+        "set_wage": bool(owned),
+        "hire": bool(pending),
+        "reject_application": bool(pending),
+        "fire": staffed,
+        "apply_job": employer is None
+        and any(business_profile(state, b).free_slots > 0 for b in state.buildings),
+        "quit_job": employer is not None,
+        "gather_resource": employer is not None and employer.kind in RESOURCE_SOURCES.values(),
+        "respond_loan": any(
+            loan.borrower_id == citizen_id and loan.status == "offered" for loan in loans
+        ),
+        "repay": any(
+            loan.borrower_id == citizen_id and loan.status in ("active", "defaulted")
+            for loan in loans
+        ),
+        "respond_trade": any(o.recipient_id == citizen_id for o in state.trade_offers.values()),
+        "research": any(not i.unlocked for i in inventions),
+        "license_invention": any(i.unlocked and i.owner_id == citizen_id for i in inventions),
+        "respond_license": any(o.recipient_id == citizen_id for o in state.license_offers.values()),
+        "adopt_invention": bool(owned) and any(i.unlocked for i in inventions),
+        "propose_vote": not open_votes,
+        "vote": any(citizen_id not in v.ballots for v in open_votes),
+        "lease_lot": bool(leasable),
+        "set_rent": bool(my_lots),
+        "pay_rent": any(p.tenant_id == citizen_id for p in state.plots.values()),
+        "evict": any(p.tenant_id and p.missed_periods >= 3 for p in my_lots),
+    }
+    return [action for action in SUPPORTED_ACTIONS if rules.get(action, True)]
 
 
 # Ties shown in an observation; the full list is GET /api/agents/{id}/relationships.

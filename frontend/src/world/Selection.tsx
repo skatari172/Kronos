@@ -1,6 +1,3 @@
-/** Portal element that scene labels render into, above the canvas. */
-export type LabelPortal = { current: HTMLDivElement };
-
 /** Gold ring on the ground under the selected building or villager. */
 export function Selection({ radius }: { radius: number }) {
   return (

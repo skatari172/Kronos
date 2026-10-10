@@ -8,14 +8,14 @@ A tick represents one day. Gameplay proposals enter the same runtime action queu
 4. Resolve due applications after owner commands, then run deterministic daily mechanics: farm/bakery production and input purchases, wages, hunger and consumption of already-owned food, seeded movement, bankruptcy, regrowth, existing deadlines/research/votes and rent. Run v1 growth separately afterward: land, newcomers, saver founding, busy upgrades and worker housing.
 5. Emit `tick_completed`, even in an empty world. Save world, events and immutable checkpoint in the existing SQLite transaction; resolve runtime attempts after success, then install the live world and broadcast only after success.
 6. Build copied, bounded citizen observations after commit. Up to eight citizens deliberate when they lack bread, have an incoming trade offer, or on every third day. One bounded background decision task runs outside the world lock, so the single automatic clock keeps advancing during model latency. Late proposals target the next available day. Their proposals enter the next available tick's queue and are revalidated there. A branch activation invalidates in-flight deliberation; pending records stay with their original branch. Forks copy committed world state and never copy pending proposals.
-1. If a bakery lacks wheat, buy two wheat from the first farm if cash/stock permit.
-2. Farms produce a seeded 3–6 wheat per level. Bakeries consume two wheat for three bread per level.
-3. Employers with available cash pay each employed citizen 150 cents.
-4. Each citizen gains 20 hunger, capped at 100. If they have no bread, purchase one loaf from the cheapest stocked bakery they can afford. Consume one bread for 30 hunger relief.
-5. Citizens choose a seeded plot waypoint and walk via the central lane in presentation time.
-6. Run the daily bookkeeping steps (resources, applications, loans, offers, research, votes, rent), then the **growth step** (see below).
-7. Apply optional strategic proposals in order, each in an isolated validation transaction.
-8. Return the new world, ordered events, final RNG state, and rejected proposal reasons.
+7. If a bakery lacks wheat, buy two wheat from the first farm if cash/stock permit.
+8. Farms produce a seeded 3–6 wheat per level. Bakeries consume two wheat for three bread per level.
+9. Employers with available cash pay each employed citizen 150 cents.
+10. Each citizen gains 20 hunger, capped at 100. If they have no bread, purchase one loaf from the cheapest stocked bakery they can afford. Consume one bread for 30 hunger relief.
+11. Citizens choose a seeded plot waypoint and walk via the central lane in presentation time.
+12. Run the daily bookkeeping steps (resources, applications, loans, offers, research, votes, rent), then the **growth step** (see below).
+13. Apply optional strategic proposals in order, each in an isolated validation transaction.
+14. Return the new world, ordered events, final RNG state, and rejected proposal reasons.
 
 The mock chooses food purchases or conversations. Daily mechanics do not choose citizen purchases. `decide` uses the same proposal path, including after a slow provider returns; a branch switch returns 409 instead of queuing into another timeline. A provider timeout or invalid response cannot prevent daily mechanics or discard other citizens' valid proposals.
 

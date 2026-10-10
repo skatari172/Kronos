@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { connect, context, request } from "../api/client";
-import type { Status, WorldUpdate } from "../api/types";
+import type { InterventionResult, Status, WorldUpdate } from "../api/types";
 import { useWorld } from "../stores/world";
 
 export type Mode = "loading" | "live" | "offline";
@@ -133,6 +133,23 @@ export function useSimulation() {
       setPlaying(status.playing);
     });
 
+  /**
+   * Change the world in plain language. Any text is sent as-is: the backend's
+   * provider (an AI model when configured) turns it into a validated command,
+   * the engine applies it, and the new world is ingested like any other
+   * update. Throws with the backend's reason when nothing applies.
+   */
+  const intervene = async (text: string) => {
+    // The backend may hand the text to an AI model (up to ~20 s); wait longer.
+    const result = await request<InterventionResult>(
+      "/api/interventions",
+      { ...context(), text },
+      45_000,
+    );
+    useWorld.getState().ingest(result.update);
+    return result;
+  };
+
   /** Start the clock at a speed (used by time-lapse). */
   const setPlayback = (play: boolean, value: number) =>
     run(async () => {
@@ -161,6 +178,7 @@ export function useSimulation() {
     speed,
     step,
     preview,
+    intervene,
     togglePlay,
     setPlayback,
     changeSpeed,

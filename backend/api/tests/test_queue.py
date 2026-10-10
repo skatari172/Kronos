@@ -417,7 +417,8 @@ def test_existing_jobs_inventions_loans_votes_and_rent_work_through_ticks(tmp_pa
         )
         submit({"type": "vote", "actor_id": "citizen-1", "vote_id": vote_id, "choice": "yes"})
         second = advance()["state"]
-        assert second["job_applications"] == {}
+        # Resolved applications stay with their status; none is left pending.
+        assert all(a["status"] != "pending" for a in second["job_applications"].values())
         assert second["citizens"]["citizen-5"]["employer_id"] is None
         assert second["loans"][loan_id]["status"] == "active"
         offer_id = next(iter(second["license_offers"]))

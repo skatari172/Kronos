@@ -15,22 +15,28 @@ from kronos_sim.models import (
 from pydantic import TypeAdapter
 from sqlalchemy import (
     Column,
+    Float,
+    ForeignKey,
     Index,
     Integer,
     MetaData,
     String,
     Table,
     create_engine,
+    delete,
     event,
     func,
     insert,
     or_,
     select,
+    text,
     update,
 )
 from sqlalchemy.engine import make_url
 
 metadata = MetaData()
+
+# History infrastructure tables
 branches = Table(
     "branches",
     metadata,
@@ -38,6 +44,7 @@ branches = Table(
     Column("metadata", String, nullable=False),
     Column("state", String, nullable=False),
 )
+
 snapshots = Table(
     "snapshots",
     metadata,
@@ -48,15 +55,22 @@ snapshots = Table(
     Column("state", String, nullable=False),
     Index("ix_snapshots_branch_sequence", "branch_id", "sequence"),
 )
+
 events = Table(
     "events",
     metadata,
     Column("id", String, primary_key=True),
-    Column("branch_id", String, nullable=False, index=True),
+    Column("branch_id", String, nullable=False, default="main", index=True),
     Column("sequence", Integer, nullable=False),
-    Column("data", String, nullable=False),
+    Column("tick", Integer, nullable=False, default=0),
+    Column("type", String, nullable=False, default=""),
+    Column("actor_id", String, nullable=True),
+    Column("payload", String, nullable=False, default="{}"),
+    Column("data", String, nullable=False, default="{}"),
+    Column("created_at", String, nullable=False, default=""),
     Index("ix_events_branch_sequence", "branch_id", "sequence"),
 )
+
 actions = Table(
     "actions",
     metadata,
@@ -67,10 +81,195 @@ actions = Table(
     Column("data", String, nullable=False),
     Index("ix_actions_branch_status", "branch_id", "status"),
 )
+
 # Payload fields that name the citizen an event happened to.
 INVOLVEMENT_KEYS = ("sender_id", "recipient_id", "entity_id", "citizen_id")
 settings = Table(
     "settings", metadata, Column("key", String, primary_key=True), Column("value", String)
+)
+
+# Relational Tables (KRONOS v1 + Economy Data Model)
+world_table = Table(
+    "world",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("tick", Integer, nullable=False, default=0),
+    Column("sequence", Integer, nullable=False, default=0),
+    Column("seed", Integer, nullable=False, default=42),
+    Column("rng_state", String, nullable=False),
+    Column("playing", Integer, nullable=False, default=0),
+    Column("speed", Integer, nullable=False, default=1),
+    Column("market_tax_bps", Integer, nullable=False, default=0),
+    Column("bread_price_cap", Integer, nullable=False, default=0),
+    Column("min_wage", Integer, nullable=False, default=0),
+)
+
+plots_table = Table(
+    "plots",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("position_x", Float, nullable=False),
+    Column("position_z", Float, nullable=False),
+    Column("owner_id", String, ForeignKey("citizens.id", ondelete="SET NULL"), nullable=True),
+    Column("tenant_id", String, ForeignKey("citizens.id", ondelete="SET NULL"), nullable=True),
+    Column("rent", Integer, nullable=False, default=0),
+    Column("arrears", Integer, nullable=False, default=0),
+    Column("missed_periods", Integer, nullable=False, default=0),
+    Column("prepaid_periods", Integer, nullable=False, default=0),
+)
+
+inventions_table = Table(
+    "inventions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("name", String, nullable=False),
+    Column("cost", Integer, nullable=False),
+    Column("progress", Integer, nullable=False, default=0),
+    Column("contributors", String, nullable=False, default="{}"),
+    Column("unlocked", Integer, nullable=False, default=0),
+    Column("owner_id", String, ForeignKey("citizens.id", ondelete="SET NULL"), nullable=True),
+    Column("licensees", String, nullable=False, default="[]"),
+    Column("adopters", String, nullable=False, default="[]"),
+    Column("adoption_cost", Integer, nullable=False, default=1000),
+    Column("building_kind", String, nullable=False),
+    Column("resource", String, nullable=False),
+    Column("multiplier_pct", Integer, nullable=False),
+)
+
+citizens_table = Table(
+    "citizens",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("name", String, nullable=False),
+    Column("occupation", String, nullable=False),
+    Column("employer_id", String, ForeignKey("buildings.id", ondelete="SET NULL"), nullable=True),
+    Column("money", Integer, nullable=False),
+    Column("hunger", Integer, nullable=False),
+    Column("wheat", Integer, nullable=False, default=0),
+    Column("bread", Integer, nullable=False, default=0),
+    Column("position_x", Float, nullable=False),
+    Column("position_z", Float, nullable=False),
+    Column("reputation", Integer, nullable=False, default=50),
+    Column("destitute_days", Integer, nullable=False, default=0),
+    Column("personality", String, nullable=False, default="practical"),
+    Column("goals", String, nullable=False, default='["Stay fed", "Save for tomorrow"]'),
+    Column(
+        "goal_weights",
+        String,
+        nullable=False,
+        default='{"wealth": 25, "influence": 25, "safety": 25, "reputation": 25}',
+    ),
+    Column("relationships", String, nullable=False, default="[]"),
+    Column("memories", String, nullable=False, default="[]"),
+    Column("memory_summary", String, nullable=False, default=""),
+    Column("memory_tally", String, nullable=False, default="{}"),
+    Column(
+        "research_invention_id",
+        String,
+        ForeignKey("inventions.id", ondelete="SET NULL"),
+        nullable=True,
+    ),
+    Column("research_start_tick", Integer, nullable=False, default=0),
+    Column("research_until_tick", Integer, nullable=False, default=0),
+)
+
+buildings_table = Table(
+    "buildings",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("name", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("level", Integer, nullable=False, default=1),
+    Column("owner_id", String, ForeignKey("citizens.id"), nullable=False),
+    Column("plot_id", String, ForeignKey("plots.id"), nullable=False, unique=True),
+    Column("cash", Integer, nullable=False, default=0),
+    Column("wheat", Integer, nullable=False, default=0),
+    Column("bread", Integer, nullable=False, default=0),
+    Column("bread_price", Integer, nullable=False, default=500),
+    Column("wheat_price", Integer, nullable=False, default=100),
+    Column("wage", Integer, nullable=False, default=150),
+    Column("job_slots", Integer, nullable=False, default=3),
+    Column("unpaid_days", Integer, nullable=False, default=0),
+)
+
+resources_table = Table(
+    "resources",
+    metadata,
+    Column("kind", String, primary_key=True),
+    Column("stock", Integer, nullable=False, default=0),
+    Column("regen_per_tick", Integer, nullable=False, default=0),
+    Column("cap", Integer, nullable=True),
+)
+
+job_applications_table = Table(
+    "job_applications",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("citizen_id", String, nullable=False),
+    Column("building_id", String, nullable=False),
+    Column("status", String, nullable=False, default="pending"),
+    Column("tick", Integer, nullable=False, default=0),
+    Column("sequence", Integer, nullable=False, default=0),
+)
+
+loans_table = Table(
+    "loans",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("lender_id", String, nullable=False),
+    Column("borrower_id", String, nullable=False),
+    Column("principal", Integer, nullable=False),
+    Column("rate_bps", Integer, nullable=False),
+    Column("due_tick", Integer, nullable=False),
+    Column("amount_owed", Integer, nullable=False),
+    Column("amount_repaid", Integer, nullable=False, default=0),
+    Column("status", String, nullable=False, default="offered"),
+    Column("created_tick", Integer, nullable=False, default=0),
+)
+
+trade_offers_table = Table(
+    "trade_offers",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("offerer_id", String, ForeignKey("citizens.id", ondelete="CASCADE"), nullable=False),
+    Column("recipient_id", String, ForeignKey("citizens.id", ondelete="CASCADE"), nullable=False),
+    Column("give_money", Integer, nullable=False, default=0),
+    Column("give_wheat", Integer, nullable=False, default=0),
+    Column("give_bread", Integer, nullable=False, default=0),
+    Column("get_money", Integer, nullable=False, default=0),
+    Column("get_wheat", Integer, nullable=False, default=0),
+    Column("get_bread", Integer, nullable=False, default=0),
+    Column("created_tick", Integer, nullable=False, default=0),
+    Column("expires_tick", Integer, nullable=False, default=0),
+    Column("event_id", String, nullable=True),
+    Column("rationale", String, nullable=True),
+)
+
+license_offers_table = Table(
+    "license_offers",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("invention_id", String, ForeignKey("inventions.id", ondelete="CASCADE"), nullable=False),
+    Column("owner_id", String, ForeignKey("citizens.id", ondelete="CASCADE"), nullable=False),
+    Column("recipient_id", String, ForeignKey("citizens.id", ondelete="CASCADE"), nullable=False),
+    Column("fee", Integer, nullable=False, default=0),
+    Column("tick", Integer, nullable=False, default=0),
+)
+
+votes_table = Table(
+    "votes",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("proposer_id", String, ForeignKey("citizens.id", ondelete="CASCADE"), nullable=False),
+    Column("kind", String, nullable=False),
+    Column("value", Integer, nullable=False),
+    Column("rationale", String, nullable=True),
+    Column("opens_tick", Integer, nullable=False, default=0),
+    Column("closes_tick", Integer, nullable=False, default=0),
+    Column("status", String, nullable=False, default="open"),
+    Column("ballots", String, nullable=False, default="{}"),
+    Column("yes_weight", Integer, nullable=False, default=0),
+    Column("no_weight", Integer, nullable=False, default=0),
 )
 
 
@@ -131,6 +330,308 @@ class HistoryStore:
         )
         return meta
 
+    def _sync_relational(self, db, state: WorldState, playing: bool = False, speed: int = 1):
+        db.execute(text("PRAGMA defer_foreign_keys = ON"))
+
+        # 1. World & policies
+        rng_raw = json.dumps(state.rng_state)
+        w_exists = db.execute(
+            select(world_table.c.id).where(world_table.c.id == state.branch_id)
+        ).scalar()
+        policies = getattr(state, "policies", None)
+        tax_bps = getattr(policies, "market_tax_bps", 0) if policies else 0
+        price_cap = getattr(policies, "bread_price_cap", 0) if policies else 0
+        min_wage = getattr(policies, "min_wage", 0) if policies else 0
+        w_values = dict(
+            id=state.branch_id,
+            tick=state.tick,
+            sequence=state.sequence,
+            seed=state.seed,
+            rng_state=rng_raw,
+            playing=1 if playing else 0,
+            speed=speed,
+            market_tax_bps=tax_bps,
+            bread_price_cap=price_cap,
+            min_wage=min_wage,
+        )
+        if w_exists:
+            db.execute(
+                update(world_table).where(world_table.c.id == state.branch_id).values(**w_values)
+            )
+        else:
+            db.execute(insert(world_table).values(**w_values))
+
+        # 2. Citizens (Pass 1: employer_id=None, research_invention_id=None to break circular FKs)
+        existing_citizens = set(db.execute(select(citizens_table.c.id)).scalars())
+        current_citizens = set(state.citizens.keys())
+        for cid in existing_citizens - current_citizens:
+            db.execute(delete(citizens_table).where(citizens_table.c.id == cid))
+
+        for c in state.citizens.values():
+            gw = getattr(c, "goal_weights", None)
+            gw_dict = gw.model_dump() if hasattr(gw, "model_dump") else {}
+            values = dict(
+                id=c.id,
+                name=c.name,
+                occupation=c.occupation,
+                employer_id=c.employer_id if c.id in existing_citizens else None,
+                money=c.money,
+                hunger=c.hunger,
+                wheat=c.inventory.wheat,
+                bread=c.inventory.bread,
+                position_x=float(c.position.x),
+                position_z=float(c.position.z),
+                reputation=getattr(c, "reputation", 50),
+                destitute_days=getattr(c, "destitute_days", 0),
+                personality=getattr(c, "personality", "practical"),
+                goals=json.dumps(getattr(c, "goals", [])),
+                goal_weights=json.dumps(gw_dict),
+                relationships=json.dumps([r.model_dump() for r in getattr(c, "relationships", [])]),
+                memories=json.dumps(getattr(c, "memories", [])),
+                memory_summary=getattr(c, "memory_summary", ""),
+                memory_tally=json.dumps(getattr(c, "memory_tally", {})),
+                research_invention_id=None,
+                research_start_tick=getattr(c, "research_start_tick", 0),
+                research_until_tick=getattr(c, "research_until_tick", 0),
+            )
+            if c.id in existing_citizens:
+                stmt = update(citizens_table).where(citizens_table.c.id == c.id).values(**values)
+                db.execute(stmt)
+            else:
+                db.execute(insert(citizens_table).values(**values))
+
+        # 3. Plots
+        for p in state.plots.values():
+            p_exists = db.execute(select(plots_table.c.id).where(plots_table.c.id == p.id)).scalar()
+            values = dict(
+                id=p.id,
+                position_x=float(p.position.x),
+                position_z=float(p.position.z),
+                owner_id=getattr(p, "owner_id", None),
+                tenant_id=getattr(p, "tenant_id", None),
+                rent=getattr(p, "rent", 0),
+                arrears=getattr(p, "arrears", 0),
+                missed_periods=getattr(p, "missed_periods", 0),
+                prepaid_periods=getattr(p, "prepaid_periods", 0),
+            )
+            if p_exists:
+                db.execute(update(plots_table).where(plots_table.c.id == p.id).values(**values))
+            else:
+                db.execute(insert(plots_table).values(**values))
+
+        # 4. Inventions
+        inventions = getattr(state, "inventions", {})
+        existing_inventions = set(db.execute(select(inventions_table.c.id)).scalars())
+        for inv in inventions.values():
+            effect = inv.effect
+            values = dict(
+                id=inv.id,
+                name=inv.name,
+                cost=inv.cost,
+                progress=inv.progress,
+                contributors=json.dumps(inv.contributors),
+                unlocked=1 if inv.unlocked else 0,
+                owner_id=inv.owner_id,
+                licensees=json.dumps(inv.licensees),
+                adopters=json.dumps(inv.adopters),
+                adoption_cost=inv.adoption_cost,
+                building_kind=effect.building_kind,
+                resource=effect.resource,
+                multiplier_pct=effect.multiplier_pct,
+            )
+            if inv.id in existing_inventions:
+                db.execute(
+                    update(inventions_table).where(inventions_table.c.id == inv.id).values(**values)
+                )
+            else:
+                db.execute(insert(inventions_table).values(**values))
+
+        # 5. Buildings
+        existing_buildings = set(db.execute(select(buildings_table.c.id)).scalars())
+        current_buildings = set(state.buildings.keys())
+        for bid in existing_buildings - current_buildings:
+            db.execute(delete(buildings_table).where(buildings_table.c.id == bid))
+
+        for b in state.buildings.values():
+            values = dict(
+                id=b.id,
+                name=b.name,
+                kind=b.kind,
+                level=b.level,
+                owner_id=b.owner_id,
+                plot_id=b.plot_id,
+                cash=b.cash,
+                wheat=b.inventory.wheat,
+                bread=b.inventory.bread,
+                bread_price=b.prices.get("bread", 500),
+                wheat_price=b.prices.get("wheat", 100),
+                wage=b.wage,
+                job_slots=b.job_slots,
+                unpaid_days=getattr(b, "unpaid_days", 0),
+            )
+            if b.id in existing_buildings:
+                stmt = update(buildings_table).where(buildings_table.c.id == b.id).values(**values)
+                db.execute(stmt)
+            else:
+                db.execute(insert(buildings_table).values(**values))
+
+        # 6. Citizens (Pass 2: update employer_id & research_invention_id)
+        for c in state.citizens.values():
+            upd = {}
+            if c.employer_id is not None:
+                upd["employer_id"] = c.employer_id
+            if getattr(c, "research_invention_id", None) is not None:
+                upd["research_invention_id"] = c.research_invention_id
+            if upd:
+                db.execute(update(citizens_table).where(citizens_table.c.id == c.id).values(**upd))
+
+        # 8. Resources
+        resources = getattr(state, "resources", {})
+        for r in resources.values():
+            r_exists = db.execute(
+                select(resources_table.c.kind).where(resources_table.c.kind == r.kind)
+            ).scalar()
+            values = dict(
+                kind=r.kind,
+                stock=r.stock,
+                regen_per_tick=r.regen_per_tick,
+                cap=r.cap,
+            )
+            if r_exists:
+                db.execute(
+                    update(resources_table).where(resources_table.c.kind == r.kind).values(**values)
+                )
+            else:
+                db.execute(insert(resources_table).values(**values))
+
+        # 9. Job Applications
+        job_apps = getattr(state, "job_applications", {})
+        existing_apps = set(db.execute(select(job_applications_table.c.id)).scalars())
+        current_apps = set(job_apps.keys())
+        for aid in existing_apps - current_apps:
+            db.execute(delete(job_applications_table).where(job_applications_table.c.id == aid))
+        for ja in job_apps.values():
+            values = dict(
+                id=ja.id,
+                citizen_id=ja.citizen_id,
+                building_id=ja.building_id,
+                status=ja.status,
+                tick=ja.tick,
+                sequence=getattr(ja, "sequence", 0),
+            )
+            if ja.id in existing_apps:
+                db.execute(
+                    update(job_applications_table)
+                    .where(job_applications_table.c.id == ja.id)
+                    .values(**values)
+                )
+            else:
+                db.execute(insert(job_applications_table).values(**values))
+
+        # 10. Loans
+        loans = getattr(state, "loans", {})
+        existing_loans = set(db.execute(select(loans_table.c.id)).scalars())
+        current_loans = set(loans.keys())
+        for lid in existing_loans - current_loans:
+            db.execute(delete(loans_table).where(loans_table.c.id == lid))
+        for ln in loans.values():
+            values = dict(
+                id=ln.id,
+                lender_id=ln.lender_id,
+                borrower_id=ln.borrower_id,
+                principal=ln.principal,
+                rate_bps=ln.rate_bps,
+                due_tick=ln.due_tick,
+                amount_owed=ln.amount_owed,
+                amount_repaid=ln.amount_repaid,
+                status=ln.status,
+                created_tick=ln.created_tick,
+            )
+            if ln.id in existing_loans:
+                db.execute(update(loans_table).where(loans_table.c.id == ln.id).values(**values))
+            else:
+                db.execute(insert(loans_table).values(**values))
+
+        # 11. Trade Offers
+        trades = getattr(state, "trade_offers", {})
+        existing_trades = set(db.execute(select(trade_offers_table.c.id)).scalars())
+        current_trades = set(trades.keys())
+        for tid in existing_trades - current_trades:
+            db.execute(delete(trade_offers_table).where(trade_offers_table.c.id == tid))
+        for tr in trades.values():
+            values = dict(
+                id=tr.id,
+                offerer_id=tr.offerer_id,
+                recipient_id=tr.recipient_id,
+                give_money=tr.give.money,
+                give_wheat=tr.give.goods.wheat,
+                give_bread=tr.give.goods.bread,
+                get_money=tr.get.money,
+                get_wheat=tr.get.goods.wheat,
+                get_bread=tr.get.goods.bread,
+                created_tick=tr.created_tick,
+                expires_tick=tr.expires_tick,
+                event_id=tr.event_id,
+                rationale=tr.rationale,
+            )
+            if tr.id in existing_trades:
+                db.execute(
+                    update(trade_offers_table)
+                    .where(trade_offers_table.c.id == tr.id)
+                    .values(**values)
+                )
+            else:
+                db.execute(insert(trade_offers_table).values(**values))
+
+        # 12. License Offers
+        lic_offers = getattr(state, "license_offers", {})
+        existing_lics = set(db.execute(select(license_offers_table.c.id)).scalars())
+        current_lics = set(lic_offers.keys())
+        for lid in existing_lics - current_lics:
+            db.execute(delete(license_offers_table).where(license_offers_table.c.id == lid))
+        for lo in lic_offers.values():
+            values = dict(
+                id=lo.id,
+                invention_id=lo.invention_id,
+                owner_id=lo.owner_id,
+                recipient_id=lo.recipient_id,
+                fee=lo.fee,
+                tick=lo.tick,
+            )
+            if lo.id in existing_lics:
+                db.execute(
+                    update(license_offers_table)
+                    .where(license_offers_table.c.id == lo.id)
+                    .values(**values)
+                )
+            else:
+                db.execute(insert(license_offers_table).values(**values))
+
+        # 13. Votes
+        votes = getattr(state, "votes", {})
+        existing_votes = set(db.execute(select(votes_table.c.id)).scalars())
+        current_votes = set(votes.keys())
+        for vid in existing_votes - current_votes:
+            db.execute(delete(votes_table).where(votes_table.c.id == vid))
+        for vt in votes.values():
+            values = dict(
+                id=vt.id,
+                proposer_id=vt.proposer_id,
+                kind=vt.kind,
+                value=vt.value,
+                rationale=vt.rationale,
+                opens_tick=vt.opens_tick,
+                closes_tick=vt.closes_tick,
+                status=vt.status,
+                ballots=json.dumps(vt.ballots),
+                yes_weight=vt.yes_weight,
+                no_weight=vt.no_weight,
+            )
+            if vt.id in existing_votes:
+                db.execute(update(votes_table).where(votes_table.c.id == vt.id).values(**values))
+            else:
+                db.execute(insert(votes_table).values(**values))
+
     def create(self, state: WorldState, meta: BranchMetadata):
         with self.engine.begin() as db:
             db.execute(
@@ -139,6 +640,7 @@ class HistoryStore:
                 )
             )
             self._snapshot(db, state)
+            self._sync_relational(db, state)
 
     def commit(self, result: WorldUpdate, expected_sequence: int):
         state = result.state
@@ -150,15 +652,22 @@ class HistoryStore:
                 raise ValueError("Concurrent or stale world update")
             if not result.events or result.events[0].sequence != expected_sequence + 1:
                 raise ValueError("Commit requires contiguous events")
-            for index, event in enumerate(result.events, expected_sequence + 1):
-                if event.sequence != index or event.branch_id != state.branch_id:
+            for index, event_item in enumerate(result.events, expected_sequence + 1):
+                if event_item.sequence != index or event_item.branch_id != state.branch_id:
                     raise ValueError("Event stream mismatch")
+                pl = getattr(event_item, "payload", {})
+                pl_dict = pl.model_dump() if hasattr(pl, "model_dump") else pl
                 db.execute(
                     insert(events).values(
-                        id=event.id,
-                        branch_id=event.branch_id,
-                        sequence=event.sequence,
-                        data=event.model_dump_json(),
+                        id=event_item.id,
+                        branch_id=event_item.branch_id,
+                        sequence=event_item.sequence,
+                        tick=event_item.tick,
+                        type=event_item.type,
+                        actor_id=event_item.actor_id,
+                        payload=json.dumps(pl_dict),
+                        data=event_item.model_dump_json(),
+                        created_at=datetime.now(UTC).isoformat(),
                     )
                 )
             if result.events[-1].sequence != state.sequence:
@@ -182,47 +691,49 @@ class HistoryStore:
                     raise ValueError("Action was missing or already resolved")
             # Every commit is a checkpoint: simple, exact historical reconstruction, no LLM replay.
             self._snapshot(db, state)
+            self._sync_relational(db, state)
 
     def enqueue(self, state: WorldState, action, source="agent", text=None) -> ActionResult:
-        """One table is both the pending queue and permanent action ledger."""
         with self.engine.begin() as db:
-            ordinal = (
-                db.execute(
-                    select(func.max(actions.c.ordinal)).where(
-                        actions.c.branch_id == state.branch_id
-                    )
-                ).scalar()
-                or 0
-            ) + 1
+            count = db.execute(
+                select(func.count())
+                .select_from(actions)
+                .where(actions.c.branch_id == state.branch_id)
+            ).scalar_one()
+            ordinal = count + 1
+            action_id = f"action-{state.branch_id}:{ordinal}"
+            scheduled_tick = state.tick + 1
             record = ActionResult(
-                action_id=f"action-{state.branch_id}:{ordinal:08d}",
+                action_id=action_id,
                 branch_id=state.branch_id,
                 status="queued",
-                action=action,
-                source=source,
+                scheduled_tick=scheduled_tick,
                 order=ordinal,
-                scheduled_tick=state.tick + 1,
+                source=source,
                 text=text,
+                action=action,
                 tick=state.tick,
                 sequence=state.sequence,
             )
             db.execute(
                 insert(actions).values(
-                    id=record.action_id,
+                    id=action_id,
                     branch_id=state.branch_id,
                     ordinal=ordinal,
                     status="queued",
                     data=record.model_dump_json(),
                 )
             )
-        return record
+            return record
 
     def action(self, action_id: str) -> ActionResult:
         with self.engine.connect() as db:
-            raw = db.execute(select(actions.c.data).where(actions.c.id == action_id)).scalar()
-        if raw is None:
-            raise KeyError("Unknown action")
-        return ActionResult.model_validate_json(raw)
+            row = db.execute(
+                select(actions.c.data).where(actions.c.id == action_id)
+            ).scalar_one_or_none()
+            if row is None:
+                raise KeyError("Unknown action")
+            return ActionResult.model_validate_json(row)
 
     def pending(self, branch_id: str) -> list[ActionResult]:
         with self.engine.connect() as db:
@@ -231,46 +742,39 @@ class HistoryStore:
                 .where(actions.c.branch_id == branch_id, actions.c.status == "queued")
                 .order_by(actions.c.ordinal)
             ).scalars()
-            return [ActionResult.model_validate_json(raw) for raw in rows]
+            return [ActionResult.model_validate_json(data) for data in rows]
 
     def world(self, branch_id: str) -> WorldState:
         with self.engine.connect() as db:
-            raw = db.execute(select(branches.c.state).where(branches.c.id == branch_id)).scalar()
-        if raw is None:
-            raise KeyError("Unknown branch")
-        return WorldState.model_validate_json(raw)
+            raw = db.execute(
+                select(branches.c.state).where(branches.c.id == branch_id)
+            ).scalar_one_or_none()
+            if raw is None:
+                raise KeyError(f"Unknown branch: {branch_id}")
+            return WorldState.model_validate_json(raw)
 
     def list_branches(self) -> list[BranchMetadata]:
         with self.engine.connect() as db:
-            return [
-                BranchMetadata.model_validate_json(raw)
-                for raw in db.execute(select(branches.c.metadata).order_by(branches.c.id)).scalars()
-            ]
+            rows = db.execute(select(branches.c.metadata).order_by(branches.c.id)).scalars()
+            return [BranchMetadata.model_validate_json(data) for data in rows]
 
     def list_snapshots(self, branch_id: str) -> list[SnapshotMetadata]:
         with self.engine.connect() as db:
-            return [
-                SnapshotMetadata.model_validate_json(raw)
-                for raw in db.execute(
-                    select(snapshots.c.metadata)
-                    .where(snapshots.c.branch_id == branch_id)
-                    .order_by(snapshots.c.sequence)
-                ).scalars()
-            ]
+            rows = db.execute(
+                select(snapshots.c.metadata)
+                .where(snapshots.c.branch_id == branch_id)
+                .order_by(snapshots.c.sequence)
+            ).scalars()
+            return [SnapshotMetadata.model_validate_json(data) for data in rows]
 
     def restore(self, snapshot_id: str) -> WorldState:
         with self.engine.connect() as db:
-            row = (
-                db.execute(select(snapshots).where(snapshots.c.id == snapshot_id))
-                .mappings()
-                .first()
-            )
-        if row is None:
-            raise KeyError("Unknown snapshot")
-        meta = SnapshotMetadata.model_validate_json(row["metadata"])
-        if hashlib.sha256(row["state"].encode()).hexdigest() != meta.integrity_hash:
-            raise ValueError("Snapshot integrity check failed")
-        return WorldState.model_validate_json(row["state"])
+            raw = db.execute(
+                select(snapshots.c.state).where(snapshots.c.id == snapshot_id)
+            ).scalar()
+            if raw is None:
+                raise KeyError("Unknown snapshot")
+            return WorldState.model_validate_json(raw)
 
     def list_events(
         self, branch_id: str, through: int | None = None, limit: int = 100
@@ -351,3 +855,62 @@ class HistoryStore:
                     if len(found) == limit:
                         break
         return list(reversed(found))
+
+    # Relational Inspection Queries
+    def get_world_row(self) -> dict | None:
+        with self.engine.connect() as db:
+            row = db.execute(select(world_table)).mappings().first()
+            return dict(row) if row else None
+
+    def get_citizens_rows(self) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(citizens_table).order_by(citizens_table.c.id)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_buildings_rows(self) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(buildings_table).order_by(buildings_table.c.id)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_plots_rows(self) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(plots_table).order_by(plots_table.c.id)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_job_applications_rows(self, building_id: str | None = None) -> list[dict]:
+        query = select(job_applications_table)
+        if building_id:
+            query = query.where(job_applications_table.c.building_id == building_id)
+        with self.engine.connect() as db:
+            stmt = query.order_by(job_applications_table.c.id)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_resources_rows(self) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(resources_table).order_by(resources_table.c.kind)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_inventions_rows(self) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(inventions_table).order_by(inventions_table.c.id)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_loans_rows(self) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(loans_table).order_by(loans_table.c.id)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_trade_offers_rows(self) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(trade_offers_table).order_by(trade_offers_table.c.id)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_votes_rows(self) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(votes_table).order_by(votes_table.c.id)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]
+
+    def get_relational_events(self, limit: int = 50) -> list[dict]:
+        with self.engine.connect() as db:
+            stmt = select(events).order_by(events.c.sequence.desc()).limit(limit)
+            return [dict(r) for r in db.execute(stmt).mappings().all()]

@@ -1084,17 +1084,6 @@ class LotLeased(EventBase):
     payload: LotPayload
 
 
-class PlotOpenedPayload(LotPayload):
-    position: Position
-
-
-class PlotOpened(EventBase):
-    """The village grew: a new town-land lot opened on the outer ring."""
-
-    type: Literal["plot_opened"] = "plot_opened"
-    payload: PlotOpenedPayload
-
-
 class RentChangePayload(Model):
     plot_id: str
     old_rent: int
@@ -1312,9 +1301,7 @@ SimulationEvent = Annotated[
     | VoteClosed
     | PolicyChanged
     | TaxCollected
-    | InterventionApplied
     | LotLeased
-    | PlotOpened
     | RentChanged
     | RentMissed
     | RentCovered
@@ -1338,17 +1325,6 @@ class SimulationTickResult(WorldUpdate):
     action_results: list["ActionResult"] = Field(default_factory=list)
 
 
-class EventPage(Model):
-    """One page of the event log, oldest first. Pass `next_after` as `after` to read on."""
-
-    branch_id: str
-    events: list[SimulationEvent] = Field(default_factory=list)
-    next_after: int = Field(
-        ge=0, description="Sequence of the last event returned, or the requested `after` if none"
-    )
-    has_more: bool = Field(description="More events exist after `next_after`")
-
-
 class InterventionRequest(Model):
     text: str = Field(min_length=1, max_length=500)
     branch_id: str
@@ -1356,10 +1332,8 @@ class InterventionRequest(Model):
 
 
 class InterventionResult(Model):
-    command: PriceIntervention
-    result: "ActionResult"
     command: Intervention
-    update: WorldUpdate
+    result: "ActionResult"
 
 
 class SnapshotMetadata(Model):
@@ -1469,7 +1443,7 @@ class ActionResult(Model):
     action_id: str
     branch_id: str
     status: Literal["queued", "applied", "rejected"]
-    action: AgentAction | PriceIntervention
+    action: AgentAction | Intervention
     source: Literal["agent", "player", "backend"] = "agent"
     order: int = Field(ge=1)
     scheduled_tick: int = Field(ge=1)

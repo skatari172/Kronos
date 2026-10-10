@@ -117,7 +117,12 @@ def test_bankruptcy_rejects_pending_applications():
     state = _apply(state, ApplyJob(actor_id="citizen-5", building_id="market")).state
     result = Engine(state).tick()
     assert "market" not in result.state.buildings
-    assert ("citizen-5", "market", "rejected", None) in _resolutions(result.events)
+    # Applications resolve before the bankruptcy check, so the owner (who cannot cover the
+    # wage) or the closure rejects it; either way it never stays pending.
+    resolved = [
+        r for r in _resolutions(result.events) if r[:3] == ("citizen-5", "market", "rejected")
+    ]
+    assert len(resolved) == 1 and resolved[0][3] in ("citizen-2", None)
     assert result.state.job_applications["application-main-" + str(state.sequence)].status == (
         "rejected"
     )
