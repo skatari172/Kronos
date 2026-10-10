@@ -98,8 +98,6 @@ def test_long_run_invariants_and_reproducibility():
 @pytest.mark.parametrize(
     "payload",
     [
-        {"type": "apply_job", "building_id": "farm"},
-        {"type": "quit_job"},
         {
             "type": "trade",
             "recipient_id": "citizen-1",
@@ -222,7 +220,7 @@ def test_every_action_type_is_supported_or_explicitly_planned():
     union = get_args(get_args(AgentAction)[0])
     types = {cls.model_fields["type"].default for cls in union}
     assert set(SUPPORTED_ACTIONS) <= types
-    assert len(types) == 33
+    assert len(types) == 34
 
 
 @pytest.mark.parametrize(
@@ -308,14 +306,21 @@ def test_closing_returns_assets_and_releases_staff():
 
 
 def test_hiring_firing_and_wages():
-    from kronos_sim.models import Fire, Hire, SetWage
+    from kronos_sim.models import ApplyJob, Fire, Hire, SetWage
 
     state = initial_world()
+    with pytest.raises(InvalidAction) as error:
+        Engine(state).apply(
+            Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
+        )
+    assert error.value.code == "bad_params"  # No application: hiring needs consent.
+    state = Engine(state).apply(ApplyJob(actor_id="citizen-5", building_id="market")).state
     hired = Engine(state).apply(
         Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
     )
     assert hired.state.citizens["citizen-5"].employer_id == "market"
-    assert hired.events[0].type == "employment_changed"
+    assert [e.type for e in hired.events] == ["job_application_resolved", "employment_changed"]
+    assert hired.state.job_applications == {}
     raised = Engine(hired.state).apply(
         SetWage(actor_id="citizen-2", building_id="market", wage=400)
     )
@@ -337,7 +342,7 @@ def test_hiring_firing_and_wages():
         with pytest.raises(InvalidAction) as error:
             Engine(hired.state).apply(action)
         assert error.value.code == code
-    full = hired.state.model_copy(deep=True)
+    full = Engine(hired.state).apply(ApplyJob(actor_id="citizen-6", building_id="market")).state
     full.buildings["market"].job_slots = 2
     with pytest.raises(InvalidAction) as error:
         Engine(full).apply(Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-6"))
@@ -360,3 +365,127 @@ def test_business_goes_bankrupt_after_three_unpaid_days():
     removed = next(e for e in result.events if e.type == "building_removed")
     assert removed.actor_id is None and removed.rationale.startswith("Bankrupt")
     assert all(b.unpaid_days == 0 for b in result.state.buildings.values())
+
+
+def apply_job(state, citizen_id, building_id):
+    from kronos_sim.models import ApplyJob
+
+    return Engine(state).apply(ApplyJob(actor_id=citizen_id, building_id=building_id))
+
+
+def test_apply_job_records_a_pending_application():
+    state = initial_world()
+    result = apply_job(state, "citizen-5", "farm")
+    application = result.state.job_applications["application-main-1"]
+    assert (application.citizen_id, application.building_id) == ("citizen-5", "farm")
+    assert (application.tick, application.sequence) == (0, 0)
+    assert result.state.citizens["citizen-5"].employer_id is None
+    assert [e.type for e in result.events] == ["job_applied"]
+    assert result.events[0].payload.application_id == "application-main-1"
+    full = initial_world()
+    full.buildings["farm"].job_slots = 2
+    for citizen_id, building_id, code, world in [
+        ("citizen-3", "market", "already_employed", state),
+        ("citizen-5", "farm", "bad_params", result.state),  # Duplicate.
+        ("citizen-5", "nowhere", "unknown_entity", state),
+        ("citizen-5", "farm", "no_free_slot", full),
+    ]:
+        with pytest.raises(InvalidAction) as error:
+            apply_job(world, citizen_id, building_id)
+        assert error.value.code == code
+    # Applying to several businesses at once is allowed.
+    assert len(apply_job(result.state, "citizen-5", "market").state.job_applications) == 2
+
+
+def test_quit_job_releases_the_employee():
+    from kronos_sim.models import QuitJob
+
+    result = Engine(initial_world()).apply(QuitJob(actor_id="citizen-3", rationale="Too tired"))
+    assert result.state.citizens["citizen-3"].employer_id is None
+    event = result.events[0]
+    assert event.type == "employment_changed" and event.rationale == "Too tired"
+    assert (event.payload.building_id, event.payload.previous_building_id) == (None, "farm")
+    with pytest.raises(InvalidAction) as error:
+        Engine(result.state).apply(QuitJob(actor_id="citizen-3"))
+    assert error.value.code == "bad_params"
+
+
+def test_owner_rejects_an_application():
+    from kronos_sim.models import RejectApplication
+
+    state = apply_job(initial_world(), "citizen-5", "market").state
+    reject = RejectApplication(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
+    with pytest.raises(InvalidAction) as error:
+        Engine(state).apply(reject.model_copy(update={"actor_id": "citizen-0"}))
+    assert error.value.code == "not_owner"
+    result = Engine(state).apply(reject)
+    assert result.state.job_applications == {}
+    assert result.state.citizens["citizen-5"].employer_id is None
+    assert result.events[0].payload.outcome == "rejected"
+    assert result.state.citizens["citizen-5"].memories[-1] == (
+        "Market Square rejected my application"
+    )
+    with pytest.raises(InvalidAction) as error:
+        Engine(result.state).apply(reject)
+    assert error.value.code == "bad_params"
+
+
+def test_hire_withdraws_the_applicants_other_applications():
+    from kronos_sim.models import Hire
+
+    state = apply_job(initial_world(), "citizen-5", "farm").state
+    state = apply_job(state, "citizen-5", "market").state
+    result = Engine(state).apply(
+        Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
+    )
+    assert result.state.job_applications == {}
+    assert [(e.type, getattr(e.payload, "outcome", None)) for e in result.events] == [
+        ("job_application_resolved", "accepted"),
+        ("employment_changed", None),
+        ("job_application_resolved", "withdrawn"),
+    ]
+    assert result.state.citizens["citizen-5"].memories[-1] == "Hired by Market Square"
+
+
+def test_unanswered_applications_resolve_on_the_next_tick():
+    state = initial_world()
+    state.buildings["market"].job_slots = 2  # One free slot for two applicants.
+    state.buildings["bakery"].cash = 0  # Cannot cover a wage.
+    state = apply_job(state, "citizen-6", "market").state
+    state = apply_job(state, "citizen-5", "market").state
+    state = apply_job(state, "citizen-5", "bakery").state
+    first, second = Engine(state).tick(), Engine(state).tick()
+    assert first == second
+    after = first.state
+    assert after.job_applications == {}
+    assert after.citizens["citizen-6"].employer_id == "market"  # First come, first served.
+    assert after.citizens["citizen-5"].employer_id is None
+    resolved = [
+        (e.payload.citizen_id, e.payload.building_id, e.payload.outcome, e.actor_id)
+        for e in first.events
+        if e.type == "job_application_resolved"
+    ]
+    assert resolved == [
+        ("citizen-6", "market", "accepted", "citizen-2"),
+        ("citizen-5", "market", "rejected", "citizen-2"),
+        ("citizen-5", "bakery", "rejected", "citizen-1"),
+    ]
+
+
+def test_applications_to_vanished_businesses_are_withdrawn():
+    from kronos_sim.models import CloseBusiness
+
+    state = apply_job(initial_world(), "citizen-5", "market").state
+    state = Engine(state).apply(CloseBusiness(actor_id="citizen-2", building_id="market")).state
+    result = Engine(state).tick()
+    assert result.state.job_applications == {}
+    event = next(e for e in result.events if e.type == "job_application_resolved")
+    assert event.payload.outcome == "withdrawn" and event.actor_id is None
+
+
+def test_worlds_saved_before_job_applications_still_load():
+    from kronos_sim.models import WorldState
+
+    saved = initial_world().model_dump()
+    del saved["job_applications"]
+    assert WorldState.model_validate(saved).job_applications == {}

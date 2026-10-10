@@ -336,6 +336,14 @@ def test_business_lifecycle_through_convenience_routes(client):
         seq = result["sequence"]
         return result
 
+    unasked = step("POST", "/hire", command("citizen-0", seq, citizen_id="citizen-5"))
+    assert (unasked["status"], unasked["error"]) == ("rejected", "bad_params")
+    seq = unasked["sequence"]
+    applied = client.post(
+        "/api/agents/citizen-5/apply", json={**mutation(seq), "business_id": new_id}
+    ).json()
+    assert applied["status"] == "applied"
+    seq = applied["sequence"]
     assert step("POST", "/hire", command("citizen-0", seq, citizen_id="citizen-5"))["status"] == (
         "applied"
     )
@@ -371,3 +379,36 @@ def test_buy_route_maps_to_buy_action(client):
     assert (
         client.post("/api/businesses/bakery/buy", json={**body, "quantity": 0}).status_code == 422
     )
+
+
+def test_jobs_listing_and_apply_quit_routes(client):
+    jobs = client.get("/api/jobs").json()
+    assert [j["building_id"] for j in jobs] == ["bakery", "farm", "market"]
+    market = jobs[2]
+    assert (market["free_slots"], market["wage"], market["plot_id"]) == (2, 150, "plot-2")
+    assert market["position"] == {"x": 4.0, "z": -3.0} and market["applicant_ids"] == []
+    assert client.get("/api/jobs?kind=farm").json()[0]["building_id"] == "farm"
+    assert client.get("/api/jobs?min_wage=151").json() == []
+
+    body = {**mutation(), "business_id": "market", "rationale": "I need work"}
+    applied = client.post("/api/agents/citizen-5/apply", json=body).json()
+    assert applied["status"] == "applied"
+    event = client.get("/api/agents/citizen-5/history").json()[-1]
+    assert event["type"] == "job_applied" and event["rationale"] == "I need work"
+    assert client.get("/api/jobs?kind=market").json()[0]["applicant_ids"] == ["citizen-5"]
+    employed = client.post("/api/agents/citizen-3/apply", json={**body, "expected_sequence": 1})
+    assert employed.json()["error"] == "already_employed"
+
+    rejected = client.post(
+        "/api/businesses/market/reject", json=command("citizen-2", 2, citizen_id="citizen-5")
+    ).json()
+    assert rejected["status"] == "applied"
+    assert client.get("/api/jobs?kind=market").json()[0]["applicant_ids"] == []
+
+    quit_ = client.post("/api/agents/citizen-3/quit", json={**mutation(3), "rationale": "Bored"})
+    assert quit_.json()["status"] == "applied"
+    assert client.get("/api/agents/citizen-3").json()["employed"] is False
+    assert client.get("/api/jobs?kind=farm").json()[0]["free_slots"] == 2
+    again = client.post("/api/agents/citizen-3/quit", json=mutation(4)).json()
+    assert (again["status"], again["error"]) == ("rejected", "bad_params")
+    assert client.post("/api/agents/missing/quit", json=mutation(5)).status_code == 404

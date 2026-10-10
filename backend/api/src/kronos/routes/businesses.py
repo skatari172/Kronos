@@ -99,10 +99,24 @@ async def wage(building_id: str, body: m.WageRequest, service: ServiceDependency
     "/{building_id}/hire",
     response_model=m.ActionResult,
     tags=["Agent tools"],
-    summary="Hire an unemployed citizen (owner only)",
+    summary="Accept a citizen's job application (owner only)",
 )
 async def hire(building_id: str, body: m.EmployeeRequest, service: ServiceDependency):
+    """The citizen must have a pending application here (POST /api/agents/{id}/apply)."""
     action = m.Hire(**common(body), building_id=building_id, citizen_id=body.citizen_id)
+    return await submit(service, body, action)
+
+
+@router.post(
+    "/{building_id}/reject",
+    response_model=m.ActionResult,
+    tags=["Agent tools"],
+    summary="Reject a citizen's job application (owner only)",
+)
+async def reject(building_id: str, body: m.EmployeeRequest, service: ServiceDependency):
+    action = m.RejectApplication(
+        **common(body), building_id=building_id, citizen_id=body.citizen_id
+    )
     return await submit(service, body, action)
 
 

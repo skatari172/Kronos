@@ -87,3 +87,31 @@ async def goals(citizen_id: str, body: m.GoalsUpdateRequest, service: ServiceDep
         branch_id=body.branch_id, expected_sequence=body.expected_sequence, action=action
     )
     return await service.submit_agent_action(request, citizen_id)
+
+
+@router.post(
+    "/{citizen_id}/apply",
+    response_model=m.ActionResult,
+    summary="Apply for a job at a business",
+)
+async def apply(citizen_id: str, body: m.ApplyJobRequest, service: ServiceDependency):
+    """Submitted as an apply_job action. Requires being unemployed and a free slot.
+
+    The owner accepts (hire) or rejects (reject_application); unanswered applications are
+    resolved on the next tick: hired if a slot is free and the wage is covered, else rejected.
+    """
+    action = m.ApplyJob(actor_id=citizen_id, building_id=body.business_id, rationale=body.rationale)
+    request = m.ActionRequest(
+        branch_id=body.branch_id, expected_sequence=body.expected_sequence, action=action
+    )
+    return await service.submit_agent_action(request, citizen_id)
+
+
+@router.post("/{citizen_id}/quit", response_model=m.ActionResult, summary="Quit the current job")
+async def quit_job(citizen_id: str, body: m.QuitJobRequest, service: ServiceDependency):
+    """Submitted as a quit_job action; emits employment_changed."""
+    action = m.QuitJob(actor_id=citizen_id, rationale=body.rationale)
+    request = m.ActionRequest(
+        branch_id=body.branch_id, expected_sequence=body.expected_sequence, action=action
+    )
+    return await service.submit_agent_action(request, citizen_id)

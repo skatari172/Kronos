@@ -101,6 +101,16 @@ class Building(Model):
     )
 
 
+class JobApplication(Model):
+    """A pending request to work at a business. Resolved by the owner or the next daily tick."""
+
+    id: str
+    citizen_id: str
+    building_id: str
+    tick: int = Field(ge=0, description="Tick when the citizen applied")
+    sequence: int = Field(ge=0, description="World sequence when applied; orders first-come")
+
+
 class WorldState(Model):
     schema_version: Literal[1] = 1
     branch_id: str
@@ -111,6 +121,9 @@ class WorldState(Model):
     citizens: dict[str, Citizen]
     buildings: dict[str, Building]
     plots: dict[str, Plot]
+    job_applications: dict[str, JobApplication] = Field(
+        default_factory=dict, description="Pending job applications by ID"
+    )
 
 
 class ActionBase(Model):
@@ -351,6 +364,14 @@ class GatherResource(ActionBase):
     quantity: int = Field(gt=0, le=100)
 
 
+class RejectApplication(ActionBase):
+    """Owner declines a pending job application; hire accepts one."""
+
+    type: Literal["reject_application"] = "reject_application"
+    building_id: str
+    citizen_id: str
+
+
 AgentAction = Annotated[
     Buy
     | Sell
@@ -384,7 +405,8 @@ AgentAction = Annotated[
     | Repay
     | ProposeVote
     | CastVote
-    | GatherResource,
+    | GatherResource
+    | RejectApplication,
     Field(discriminator="type"),
 ]
 
@@ -558,6 +580,26 @@ class WageChanged(EventBase):
     payload: WagePayload
 
 
+class JobApplicationPayload(Model):
+    application_id: str
+    citizen_id: str
+    building_id: str
+
+
+class JobApplied(EventBase):
+    type: Literal["job_applied"] = "job_applied"
+    payload: JobApplicationPayload
+
+
+class JobApplicationResolvedPayload(JobApplicationPayload):
+    outcome: Literal["accepted", "rejected", "withdrawn"]
+
+
+class JobApplicationResolved(EventBase):
+    type: Literal["job_application_resolved"] = "job_application_resolved"
+    payload: JobApplicationResolvedPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -586,7 +628,9 @@ SimulationEvent = Annotated[
     | GoalsChanged
     | EmploymentChanged
     | WageChanged
-    | InterventionApplied,
+    | InterventionApplied
+    | JobApplied
+    | JobApplicationResolved,
     Field(discriminator="type"),
 ]
 
@@ -789,3 +833,26 @@ class PurchaseRequest(BusinessCommand):
     resource: TradedResource
     quantity: int = Field(gt=0, le=100)
     max_unit_price: int = Field(gt=0)
+
+
+class JobOpening(Model):
+    """A business with at least one free job slot."""
+
+    building_id: str
+    name: str
+    kind: BuildingKind
+    owner_id: str
+    plot_id: str
+    position: Position
+    wage: int
+    free_slots: int
+    applicant_ids: list[str] = Field(default_factory=list, description="Pending applicants")
+
+
+class ApplyJobRequest(MutationRequest):
+    business_id: str
+    rationale: str | None = Field(default=None, max_length=300)
+
+
+class QuitJobRequest(MutationRequest):
+    rationale: str | None = Field(default=None, max_length=300)
