@@ -32,11 +32,16 @@ SUPPORTED_ACTIONS = (
     "apply_job",
     "quit_job",
     "reject_application",
+    "lend",
+    "respond_loan",
+    "repay",
 )
 MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
 BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
 # Which business kind may draw on each natural stock (farm harvests and worker gathering).
 RESOURCE_SOURCES: dict[str, m.BuildingKind] = {"wheat": "farm"}
+DEFAULT_TRUST_PENALTY = 30  # Lender trust lost toward a defaulting borrower (spec grudge +0.3).
+DEFAULT_REPUTATION_PENALTY = 5  # Borrower reputation lost on default (spec -0.05 on 0..1).
 
 
 class InvalidAction(ValueError):
@@ -415,6 +420,81 @@ class Engine:
             if application is None:
                 raise InvalidAction("bad_params", "No pending application from that citizen")
             self._resolve(application, "rejected", actor.id, action.rationale)
+        elif isinstance(action, m.Lend):
+            borrower = s.citizens.get(action.recipient_id)
+            if borrower is None:
+                raise InvalidAction("unknown_entity", "Unknown borrower")
+            if borrower.id == actor.id:
+                raise InvalidAction("bad_params", "Cannot lend to yourself")
+            if action.due_tick <= s.tick:
+                raise InvalidAction("bad_params", "Due tick must be in the future")
+            if actor.money < action.principal:
+                raise InvalidAction("insufficient_funds", "Insufficient funds for that principal")
+            lid = f"loan-{s.branch_id}-{s.sequence + 1}"
+            s.loans[lid] = m.Loan(
+                id=lid,
+                lender_id=actor.id,
+                borrower_id=borrower.id,
+                principal=action.principal,
+                rate_bps=action.rate_bps,
+                due_tick=action.due_tick,
+                amount_owed=action.principal + action.principal * action.rate_bps // 10000,
+                created_tick=s.tick,
+            )
+            emit("loan_offered", self._loan_payload(s.loans[lid]))
+        elif isinstance(action, m.RespondLoan):
+            loan = s.loans.get(action.loan_id)
+            if loan is None:
+                raise InvalidAction("unknown_entity", "Unknown loan")
+            if loan.borrower_id != actor.id:
+                raise InvalidAction("insufficient_authority", "Only the borrower may respond")
+            if loan.status != "offered":
+                raise InvalidAction("bad_params", f"Loan is {loan.status}, not offered")
+            if not action.accept:
+                loan.status = "declined"
+                emit("loan_declined", self._loan_payload(loan))
+            else:
+                lender = s.citizens.get(loan.lender_id)
+                if lender is None:
+                    raise InvalidAction("unknown_entity", "Unknown lender")
+                if loan.due_tick <= s.tick:
+                    raise InvalidAction("bad_params", "Loan offer is past its due tick")
+                if lender.money < loan.principal:
+                    raise InvalidAction("insufficient_funds", "Lender can no longer fund the loan")
+                lender.money -= loan.principal
+                actor.money += loan.principal
+                loan.status = "active"
+                emit("loan_accepted", self._loan_payload(loan, loan.principal))
+                emit(
+                    "transaction_completed",
+                    dict(sender_id=lender.id, recipient_id=actor.id, amount=loan.principal),
+                )
+        elif isinstance(action, m.Repay):
+            loan = s.loans.get(action.loan_id)
+            if loan is None:
+                raise InvalidAction("unknown_entity", "Unknown loan")
+            if loan.borrower_id != actor.id:
+                raise InvalidAction("insufficient_authority", "Only the borrower may repay")
+            if loan.status not in ("active", "defaulted"):
+                raise InvalidAction("bad_params", f"Loan is {loan.status}; nothing to repay")
+            remaining = loan.amount_owed - loan.amount_repaid
+            if action.amount > remaining:
+                raise InvalidAction("bad_params", f"Only {remaining} cents are still owed")
+            if actor.money < action.amount:
+                raise InvalidAction("insufficient_funds", "Insufficient funds")
+            lender = s.citizens.get(loan.lender_id)
+            if lender is None:
+                raise InvalidAction("unknown_entity", "Unknown lender")
+            actor.money -= action.amount
+            lender.money += action.amount
+            loan.amount_repaid += action.amount
+            if loan.amount_repaid == loan.amount_owed:
+                loan.status = "repaid"
+            emit("loan_repaid", self._loan_payload(loan, action.amount))
+            emit(
+                "transaction_completed",
+                dict(sender_id=actor.id, recipient_id=lender.id, amount=action.amount),
+            )
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
@@ -562,6 +642,68 @@ class Engine:
             rationale,
         )
 
+    @staticmethod
+    def _loan_payload(loan: m.Loan, amount: int = 0) -> dict:
+        return dict(
+            loan_id=loan.id,
+            lender_id=loan.lender_id,
+            borrower_id=loan.borrower_id,
+            status=loan.status,
+            principal=loan.principal,
+            amount_owed=loan.amount_owed,
+            amount_repaid=loan.amount_repaid,
+            amount=amount,
+        )
+
+    def _settle_loans(self):
+        """Daily: expire unanswered offers on their due tick; default active loans past it.
+
+        A default applies its penalties exactly once (the status leaves "active"): the lender's
+        trust toward the borrower drops and the borrower's reputation falls.
+        """
+        s = self.state
+        for lid in sorted(s.loans):
+            loan = s.loans[lid]
+            if loan.status == "offered" and s.tick >= loan.due_tick:
+                loan.status = "expired"
+                self.emit("loan_expired", self._loan_payload(loan), loan.lender_id)
+            elif loan.status == "active" and s.tick > loan.due_tick:
+                loan.status = "defaulted"
+                lender = s.citizens.get(loan.lender_id)
+                borrower = s.citizens.get(loan.borrower_id)
+                trust = 0
+                if lender is not None:
+                    relation = next(
+                        (r for r in lender.relationships if r.citizen_id == loan.borrower_id),
+                        None,
+                    )
+                    if relation is None:
+                        relation = m.Relationship(citizen_id=loan.borrower_id)
+                        lender.relationships.append(relation)
+                    relation.trust = max(-100, relation.trust - DEFAULT_TRUST_PENALTY)
+                    trust = relation.trust
+                reputation = 0
+                if borrower is not None:
+                    borrower.reputation = max(0, borrower.reputation - DEFAULT_REPUTATION_PENALTY)
+                    reputation = borrower.reputation
+                default = self.emit(
+                    "loan_defaulted",
+                    dict(
+                        **self._loan_payload(loan),
+                        borrower_reputation=reputation,
+                        lender_trust=trust,
+                    ),
+                    loan.borrower_id,
+                )
+                if lender is not None:
+                    # Same convention as communicate: recipient's trust toward the actor.
+                    self.emit(
+                        "relationship_changed",
+                        dict(recipient_id=lender.id, trust=trust),
+                        loan.borrower_id,
+                        causal_refs=[default.id],
+                    )
+
     def spawn(self, request: m.SpawnCitizenRequest) -> m.SimulationTickResult:
         tx = Engine(self.state)
         plot = tx.state.plots.get(request.plot_id)
@@ -674,6 +816,7 @@ class Engine:
                 tx._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
         tx._regenerate_resources()
         tx._resolve_job_applications()
+        tx._settle_loans()
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:
