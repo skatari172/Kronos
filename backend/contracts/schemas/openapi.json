@@ -192,7 +192,7 @@
           "Agent tools"
         ],
         "summary": "Submit an agent action for engine execution",
-        "description": "Require actor_id to match citizen_id, then validate, persist, and broadcast.\n\nThis route submits a proposal to the engine; agents never mutate live state themselves.",
+        "description": "Require actor_id to match citizen_id, then validate, persist, and broadcast.\n\nA rule rejection returns status \"rejected\" with an error code, and is saved as an\naction_rejected event plus a memory for the agent. Stale versions still return 409.\nAgents never mutate live state themselves; the full world arrives on WS /ws/world.",
         "operationId": "execute_api_agents__citizen_id__actions_post",
         "parameters": [
           {
@@ -221,7 +221,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorldUpdate"
+                  "$ref": "#/components/schemas/ActionResult"
                 }
               }
             }
@@ -565,6 +565,9 @@
                         "$ref": "#/components/schemas/RelationshipChanged"
                       },
                       {
+                        "$ref": "#/components/schemas/ActionRejected"
+                      },
+                      {
                         "$ref": "#/components/schemas/InterventionApplied"
                       }
                     ],
@@ -583,6 +586,7 @@
                         "building_removed": "#/components/schemas/BuildingRemoved",
                         "agent_spoke": "#/components/schemas/AgentSpoke",
                         "relationship_changed": "#/components/schemas/RelationshipChanged",
+                        "action_rejected": "#/components/schemas/ActionRejected",
                         "intervention_applied": "#/components/schemas/InterventionApplied"
                       }
                     }
@@ -844,6 +848,78 @@
   },
   "components": {
     "schemas": {
+      "ActionRejected": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "action_rejected",
+            "title": "Type",
+            "default": "action_rejected"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/RejectionPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "ActionRejected"
+      },
       "ActionRequest": {
         "properties": {
           "branch_id": {
@@ -1002,6 +1078,92 @@
           "action"
         ],
         "title": "ActionRequest"
+      },
+      "ActionResult": {
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "title": "Action Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "rejected"
+            ],
+            "title": "Status"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Event Ids"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "insufficient_authority",
+                  "insufficient_funds",
+                  "not_owner",
+                  "no_free_slot",
+                  "already_employed",
+                  "lot_occupied",
+                  "invention_locked",
+                  "out_of_stock",
+                  "trust_too_low",
+                  "bad_params",
+                  "rate_limited",
+                  "unknown_entity",
+                  "not_supported"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action_id",
+          "branch_id",
+          "status",
+          "tick",
+          "sequence",
+          "event_ids",
+          "error",
+          "message"
+        ],
+        "title": "ActionResult",
+        "description": "Outcome of an agent action. Rule rejections are logged events, not HTTP errors.\n\nRequest problems (stale sequence, unknown citizen, malformed body) still fail with HTTP codes.\nsequence is the world version after this result; send it as the next expected_sequence."
       },
       "ActionValidationResult": {
         "properties": {
@@ -4340,6 +4502,45 @@
         ],
         "title": "QuitJob"
       },
+      "RejectionPayload": {
+        "properties": {
+          "action_type": {
+            "type": "string",
+            "title": "Action Type"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "insufficient_authority",
+              "insufficient_funds",
+              "not_owner",
+              "no_free_slot",
+              "already_employed",
+              "lot_occupied",
+              "invention_locked",
+              "out_of_stock",
+              "trust_too_low",
+              "bad_params",
+              "rate_limited",
+              "unknown_entity",
+              "not_supported"
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action_type",
+          "code",
+          "message"
+        ],
+        "title": "RejectionPayload"
+      },
       "Relationship": {
         "properties": {
           "citizen_id": {
@@ -5476,12 +5677,16 @@
                   "$ref": "#/components/schemas/RelationshipChanged"
                 },
                 {
+                  "$ref": "#/components/schemas/ActionRejected"
+                },
+                {
                   "$ref": "#/components/schemas/InterventionApplied"
                 }
               ],
               "discriminator": {
                 "propertyName": "type",
                 "mapping": {
+                  "action_rejected": "#/components/schemas/ActionRejected",
                   "agent_spoke": "#/components/schemas/AgentSpoke",
                   "building_constructed": "#/components/schemas/BuildingConstructed",
                   "building_removed": "#/components/schemas/BuildingRemoved",
@@ -6152,12 +6357,16 @@
                   "$ref": "#/components/schemas/RelationshipChanged"
                 },
                 {
+                  "$ref": "#/components/schemas/ActionRejected"
+                },
+                {
                   "$ref": "#/components/schemas/InterventionApplied"
                 }
               ],
               "discriminator": {
                 "propertyName": "type",
                 "mapping": {
+                  "action_rejected": "#/components/schemas/ActionRejected",
                   "agent_spoke": "#/components/schemas/AgentSpoke",
                   "building_constructed": "#/components/schemas/BuildingConstructed",
                   "building_removed": "#/components/schemas/BuildingRemoved",

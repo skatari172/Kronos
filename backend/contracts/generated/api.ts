@@ -101,7 +101,9 @@ export interface paths {
          * Submit an agent action for engine execution
          * @description Require actor_id to match citizen_id, then validate, persist, and broadcast.
          *
-         *     This route submits a proposal to the engine; agents never mutate live state themselves.
+         *     A rule rejection returns status "rejected" with an error code, and is saved as an
+         *     action_rejected event plus a memory for the agent. Stale versions still return 409.
+         *     Agents never mutate live state themselves; the full world arrives on WS /ws/world.
          */
         post: operations["execute_api_agents__citizen_id__actions_post"];
         delete?: never;
@@ -362,6 +364,29 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActionRejected */
+        ActionRejected: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "action_rejected";
+            payload: components["schemas"]["RejectionPayload"];
+        };
         /** ActionRequest */
         ActionRequest: {
             /** Branch Id */
@@ -370,6 +395,34 @@ export interface components {
             expected_sequence: number;
             /** Action */
             action: components["schemas"]["Buy-Input"] | components["schemas"]["Sell-Input"] | components["schemas"]["TransferMoney-Input"] | components["schemas"]["SetPrice-Input"] | components["schemas"]["Produce-Input"] | components["schemas"]["Consume-Input"] | components["schemas"]["Communicate-Input"] | components["schemas"]["ConstructBuilding-Input"] | components["schemas"]["UpgradeBuilding-Input"] | components["schemas"]["MoveTo-Input"] | components["schemas"]["FoundBusiness-Input"] | components["schemas"]["CloseBusiness-Input"] | components["schemas"]["SetWage-Input"] | components["schemas"]["Hire-Input"] | components["schemas"]["Fire-Input"] | components["schemas"]["ApplyJob-Input"] | components["schemas"]["QuitJob-Input"] | components["schemas"]["Trade-Input"] | components["schemas"]["RespondTrade-Input"] | components["schemas"]["LeaseLot-Input"] | components["schemas"]["SetRent-Input"] | components["schemas"]["PayRent-Input"] | components["schemas"]["Evict-Input"] | components["schemas"]["Interact-Input"] | components["schemas"]["Research-Input"] | components["schemas"]["LicenseInvention-Input"] | components["schemas"]["AdoptInvention-Input"] | components["schemas"]["Lend-Input"] | components["schemas"]["Repay-Input"] | components["schemas"]["ProposeVote-Input"] | components["schemas"]["CastVote-Input"] | components["schemas"]["GatherResource-Input"];
+        };
+        /**
+         * ActionResult
+         * @description Outcome of an agent action. Rule rejections are logged events, not HTTP errors.
+         *
+         *     Request problems (stale sequence, unknown citizen, malformed body) still fail with HTTP codes.
+         *     sequence is the world version after this result; send it as the next expected_sequence.
+         */
+        ActionResult: {
+            /** Action Id */
+            action_id: string;
+            /** Branch Id */
+            branch_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "applied" | "rejected";
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Event Ids */
+            event_ids: string[];
+            /** Error */
+            error: ("insufficient_authority" | "insufficient_funds" | "not_owner" | "no_free_slot" | "already_employed" | "lot_occupied" | "invention_locked" | "out_of_stock" | "trust_too_low" | "bad_params" | "rate_limited" | "unknown_entity" | "not_supported") | null;
+            /** Message */
+            message: string | null;
         };
         /** ActionValidationResult */
         ActionValidationResult: {
@@ -1558,6 +1611,18 @@ export interface components {
              */
             type: "quit_job";
         };
+        /** RejectionPayload */
+        RejectionPayload: {
+            /** Action Type */
+            action_type: string;
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "insufficient_authority" | "insufficient_funds" | "not_owner" | "no_free_slot" | "already_employed" | "lot_occupied" | "invention_locked" | "out_of_stock" | "trust_too_low" | "bad_params" | "rate_limited" | "unknown_entity" | "not_supported";
+            /** Message */
+            message: string;
+        };
         /** Relationship */
         Relationship: {
             /** Citizen Id */
@@ -1970,7 +2035,7 @@ export interface components {
             sequence: number;
             state: components["schemas"]["WorldState"];
             /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["InterventionApplied"])[];
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["InterventionApplied"])[];
             /** Rejected Actions */
             rejected_actions: string[];
         };
@@ -2211,7 +2276,7 @@ export interface components {
             sequence: number;
             state: components["schemas"]["WorldState"];
             /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["InterventionApplied"])[];
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["InterventionApplied"])[];
         };
     };
     responses: never;
@@ -2375,7 +2440,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WorldUpdate"];
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
             /** @description Validation Error */
@@ -2609,7 +2674,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["InterventionApplied"])[];
+                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["InterventionApplied"])[];
                 };
             };
             /** @description Validation Error */
