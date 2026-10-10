@@ -1,0 +1,569 @@
+{
+  "city": "Veloria",
+  "start_year": 1480,
+  "seed": 42,
+  "wealth_tiers": {
+    "rich": 1000,
+    "middle": 300
+  },
+  "agents": [
+    {
+      "id": "alessandro",
+      "name": "Alessandro",
+      "role": "business_owner",
+      "money": 2000,
+      "home_lot": "lot_01",
+      "job": "farm",
+      "goals": {
+        "influence": 0.5,
+        "wealth": 0.3,
+        "safety": 0.2
+      },
+      "inventory": {
+        "bread": 10,
+        "books": 2
+      },
+      "personality": "Proud, cautious landlord. Uses his wealth to sway the town vote and dislikes being challenged."
+    },
+    {
+      "id": "beatrice",
+      "name": "Beatrice",
+      "role": "business_owner",
+      "money": 1200,
+      "home_lot": "lot_02",
+      "job": "mill",
+      "goals": {
+        "wealth": 0.5,
+        "influence": 0.4,
+        "safety": 0.1
+      },
+      "inventory": {
+        "flour": 30,
+        "bread": 6
+      },
+      "personality": "Shrewd businesswoman. Will squeeze workers' wages if it protects her margin."
+    },
+    {
+      "id": "cosimo",
+      "name": "Cosimo",
+      "role": "business_owner",
+      "money": 600,
+      "home_lot": "lot_03",
+      "job": "scriptorium",
+      "goals": {
+        "influence": 0.4,
+        "reputation": 0.4,
+        "wealth": 0.2
+      },
+      "inventory": {
+        "books": 8,
+        "bread": 4
+      },
+      "personality": "Traditionalist master scribe. Proud of handcraft, suspicious of machines."
+    },
+    {
+      "id": "marco",
+      "name": "Marco",
+      "role": "business_owner",
+      "money": 800,
+      "home_lot": "lot_04",
+      "job": "trading_house",
+      "goals": {
+        "wealth": 0.6,
+        "influence": 0.3,
+        "safety": 0.1
+      },
+      "inventory": {
+        "cloth": 20,
+        "books": 3,
+        "bread": 4
+      },
+      "personality": "Ambitious and opportunistic. Sees every crisis as a market."
+    },
+    {
+      "id": "giulia",
+      "name": "Giulia",
+      "role": "business_owner",
+      "money": 450,
+      "home_lot": "lot_05",
+      "job": "bakery",
+      "goals": {
+        "wealth": 0.4,
+        "safety": 0.4,
+        "reputation": 0.2
+      },
+      "inventory": {
+        "flour": 10,
+        "bread": 20
+      },
+      "personality": "Warm and fair. Loyal to her workers and regulars, but anxious about debt."
+    },
+    {
+      "id": "enzo",
+      "name": "Enzo",
+      "role": "business_owner",
+      "money": 350,
+      "home_lot": "lot_06",
+      "job": "smithy",
+      "goals": {
+        "wealth": 0.4,
+        "reputation": 0.3,
+        "safety": 0.3
+      },
+      "inventory": {
+        "tools": 6,
+        "iron": 10,
+        "bread": 3
+      },
+      "personality": "Curious tinkerer. Loves building new machines more than selling them."
+    },
+    {
+      "id": "lucia",
+      "name": "Lucia",
+      "role": "commoner",
+      "money": 40,
+      "home_lot": "lot_07",
+      "job": "mill",
+      "goals": {
+        "safety": 0.5,
+        "wealth": 0.4,
+        "reputation": 0.1
+      },
+      "inventory": {
+        "bread": 2
+      },
+      "personality": "Hard-working and practical. Quietly resentful of low pay."
+    },
+    {
+      "id": "sofia",
+      "name": "Sofia",
+      "role": "commoner",
+      "money": 60,
+      "home_lot": "lot_07",
+      "job": "scriptorium",
+      "goals": {
+        "reputation": 0.4,
+        "wealth": 0.4,
+        "safety": 0.2
+      },
+      "inventory": {
+        "bread": 2
+      },
+      "personality": "Brilliant, literate and restless. Wants recognition, not just wages."
+    },
+    {
+      "id": "pietro",
+      "name": "Pietro",
+      "role": "commoner",
+      "money": 25,
+      "home_lot": "lot_08",
+      "job": "farm",
+      "goals": {
+        "safety": 0.6,
+        "wealth": 0.4
+      },
+      "inventory": {
+        "grain": 15,
+        "bread": 1
+      },
+      "personality": "Stubborn farmer. Distrusts nobles, trusts the land."
+    },
+    {
+      "id": "teo",
+      "name": "Teo",
+      "role": "commoner",
+      "money": 15,
+      "home_lot": "lot_08",
+      "job": null,
+      "goals": {
+        "safety": 0.5,
+        "wealth": 0.5
+      },
+      "inventory": {
+        "bread": 1
+      },
+      "personality": "Desperate and impulsive. Will take risky deals to get out of debt."
+    }
+  ],
+  "optional_agents": [
+    {
+      "id": "renata",
+      "name": "Renata",
+      "role": "business_owner",
+      "money": 500,
+      "goals": {
+        "wealth": 0.6,
+        "reputation": 0.4
+      },
+      "personality": "Sharp rival trader to Marco."
+    },
+    {
+      "id": "nico",
+      "name": "Nico",
+      "role": "commoner",
+      "money": 20,
+      "goals": {
+        "safety": 0.5,
+        "reputation": 0.5
+      },
+      "personality": "Eager apprentice to Enzo."
+    }
+  ],
+  "businesses": [
+    {
+      "id": "mill",
+      "owner": "beatrice",
+      "type": "mill",
+      "lot": "lot_10",
+      "cash": 400,
+      "inputs": {
+        "grain": 2
+      },
+      "outputs": {
+        "flour": 1
+      },
+      "price": {
+        "flour": 3
+      },
+      "wage": 6,
+      "job_slots": 2,
+      "employees": [
+        "lucia"
+      ]
+    },
+    {
+      "id": "bakery",
+      "owner": "giulia",
+      "type": "bakery",
+      "lot": "lot_11",
+      "cash": 150,
+      "inputs": {
+        "flour": 1
+      },
+      "outputs": {
+        "bread": 4
+      },
+      "price": {
+        "bread": 2
+      },
+      "wage": 8,
+      "job_slots": 2,
+      "employees": []
+    },
+    {
+      "id": "scriptorium",
+      "owner": "cosimo",
+      "type": "scriptorium",
+      "lot": "lot_12",
+      "cash": 250,
+      "inputs": {
+        "paper": 1
+      },
+      "outputs": {
+        "books": 1
+      },
+      "price": {
+        "books": 20
+      },
+      "wage": 7,
+      "job_slots": 2,
+      "employees": [
+        "sofia"
+      ]
+    },
+    {
+      "id": "smithy",
+      "owner": "enzo",
+      "type": "smithy",
+      "lot": "lot_13",
+      "cash": 120,
+      "inputs": {
+        "iron": 2
+      },
+      "outputs": {
+        "tools": 1
+      },
+      "price": {
+        "tools": 12
+      },
+      "wage": 7,
+      "job_slots": 1,
+      "employees": []
+    },
+    {
+      "id": "trading_house",
+      "owner": "marco",
+      "type": "trading_house",
+      "lot": "lot_14",
+      "cash": 300,
+      "inputs": {},
+      "outputs": {},
+      "price": {
+        "cloth": 5,
+        "books": 28
+      },
+      "wage": 6,
+      "job_slots": 1,
+      "employees": []
+    },
+    {
+      "id": "farm",
+      "owner": "alessandro",
+      "type": "farm",
+      "lot": "lot_15",
+      "cash": 100,
+      "inputs": {},
+      "outputs": {
+        "grain": 3
+      },
+      "price": {
+        "grain": 1
+      },
+      "wage": 0,
+      "crop_share": 0.5,
+      "job_slots": 2,
+      "employees": [
+        "pietro"
+      ]
+    }
+  ],
+  "lots": [
+    {
+      "id": "lot_01",
+      "owner": "alessandro",
+      "use": "home"
+    },
+    {
+      "id": "lot_02",
+      "owner": "beatrice",
+      "use": "home"
+    },
+    {
+      "id": "lot_03",
+      "owner": "cosimo",
+      "use": "home"
+    },
+    {
+      "id": "lot_04",
+      "owner": "marco",
+      "use": "home"
+    },
+    {
+      "id": "lot_05",
+      "owner": "alessandro",
+      "tenant": "giulia",
+      "rent": 10,
+      "use": "home"
+    },
+    {
+      "id": "lot_06",
+      "owner": "enzo",
+      "use": "home"
+    },
+    {
+      "id": "lot_07",
+      "owner": "alessandro",
+      "tenant": "lucia",
+      "rent": 4,
+      "use": "home"
+    },
+    {
+      "id": "lot_08",
+      "owner": "alessandro",
+      "tenant": "pietro",
+      "rent": 5,
+      "use": "home"
+    },
+    {
+      "id": "lot_10",
+      "owner": "beatrice",
+      "use": "business"
+    },
+    {
+      "id": "lot_11",
+      "owner": "alessandro",
+      "tenant": "giulia",
+      "rent": 8,
+      "use": "business"
+    },
+    {
+      "id": "lot_12",
+      "owner": "cosimo",
+      "use": "business"
+    },
+    {
+      "id": "lot_13",
+      "owner": "enzo",
+      "use": "business"
+    },
+    {
+      "id": "lot_14",
+      "owner": "marco",
+      "use": "business"
+    },
+    {
+      "id": "lot_15",
+      "owner": "alessandro",
+      "use": "business"
+    },
+    {
+      "id": "lot_16",
+      "owner": "alessandro",
+      "use": "empty"
+    },
+    {
+      "id": "lot_17",
+      "owner": null,
+      "use": "empty"
+    }
+  ],
+  "relationships": [
+    {
+      "a": "alessandro",
+      "b": "beatrice",
+      "trust": 0.7,
+      "grudge": 0.1,
+      "type": "ally"
+    },
+    {
+      "a": "alessandro",
+      "b": "cosimo",
+      "trust": 0.6,
+      "grudge": 0.0,
+      "type": "ally"
+    },
+    {
+      "a": "cosimo",
+      "b": "marco",
+      "trust": 0.2,
+      "grudge": 0.5,
+      "type": "rival"
+    },
+    {
+      "a": "beatrice",
+      "b": "giulia",
+      "trust": 0.5,
+      "grudge": 0.2,
+      "type": "trade"
+    },
+    {
+      "a": "giulia",
+      "b": "lucia",
+      "trust": 0.7,
+      "grudge": 0.0,
+      "type": "friend"
+    },
+    {
+      "a": "enzo",
+      "b": "sofia",
+      "trust": 0.7,
+      "grudge": 0.0,
+      "type": "friend"
+    },
+    {
+      "a": "marco",
+      "b": "teo",
+      "trust": 0.3,
+      "grudge": 0.6,
+      "type": "creditor"
+    },
+    {
+      "a": "alessandro",
+      "b": "pietro",
+      "trust": 0.3,
+      "grudge": 0.5,
+      "type": "landlord"
+    },
+    {
+      "a": "cosimo",
+      "b": "sofia",
+      "trust": 0.5,
+      "grudge": 0.2,
+      "type": "employer"
+    }
+  ],
+  "default_relationship": {
+    "trust": 0.3,
+    "grudge": 0.0,
+    "type": "acquaintance"
+  },
+  "loans": [
+    {
+      "id": "loan_1",
+      "lender": "marco",
+      "borrower": "teo",
+      "principal": 60,
+      "rate": 0.1,
+      "due_tick": 30,
+      "status": "open"
+    }
+  ],
+  "resources": [
+    {
+      "kind": "grain",
+      "stock": 60,
+      "regen_per_tick": 6
+    },
+    {
+      "kind": "iron",
+      "stock": 40,
+      "regen_per_tick": 2
+    },
+    {
+      "kind": "paper",
+      "stock": 20,
+      "regen_per_tick": 1
+    }
+  ],
+  "inventions": [
+    {
+      "id": "printing_press",
+      "cost": 300,
+      "effect": {
+        "scriptorium.output_mult": 5,
+        "scriptorium.job_slots_mult": 0.5
+      }
+    },
+    {
+      "id": "water_mill",
+      "cost": 250,
+      "effect": {
+        "mill.output_mult": 2
+      }
+    },
+    {
+      "id": "crop_rotation",
+      "cost": 150,
+      "effect": {
+        "farm.output_mult": 1.4
+      }
+    },
+    {
+      "id": "ledger_banking",
+      "cost": 200,
+      "effect": {
+        "loans.rate_mult": 0.7,
+        "unlocks": "interest_income"
+      }
+    }
+  ],
+  "needs": {
+    "bread_per_day": 1,
+    "hunger_per_missed_meal": 0.2,
+    "hunger_productivity_penalty": 0.5
+  },
+  "town_vote": {
+    "every_ticks": 10,
+    "open_ticks": 3,
+    "kinds": [
+      "market_tax",
+      "bread_price_cap",
+      "min_wage"
+    ],
+    "influence_formula": {
+      "wealth_share": 0.5,
+      "reputation": 0.3,
+      "avg_trust_from_others": 0.2
+    }
+  }
+}

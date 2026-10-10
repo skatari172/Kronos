@@ -201,6 +201,9 @@ class Engine:
             actor.money -= 2500
             building.level += 1
             emit("building_upgraded", dict(entity_id=building.id, level=building.level))
+        else:
+            # Schemas are published ahead of their rules; never accept an action as a no-op.
+            raise InvalidAction(f"Action '{action.type}' is not supported yet")
 
     def intervene(self, command: m.PriceIntervention, text: str) -> m.SimulationTickResult:
         tx = Engine(self.state)

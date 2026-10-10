@@ -1,7 +1,8 @@
 import pytest
-from kronos_sim.engine import Engine, InvalidAction
+from kronos_sim.engine import ACTION, Engine, InvalidAction
 from kronos_sim.models import Buy, ConstructBuilding, PriceIntervention, SetPrice, TransferMoney
 from kronos_sim.seed import initial_world
+from pydantic import ValidationError
 
 
 def test_tick_is_seeded_ordered_and_does_not_mutate_input():
@@ -92,3 +93,69 @@ def test_long_run_invariants_and_reproducibility():
         b.inventory.bread >= 0 and b.inventory.wheat >= 0 and b.cash >= 0
         for b in state.buildings.values()
     )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "found_business", "plot_id": "plot-3", "kind": "bakery", "capital": 5000},
+        {"type": "close_business", "building_id": "farm"},
+        {"type": "set_wage", "building_id": "farm", "wage": 200},
+        {"type": "hire", "building_id": "farm", "citizen_id": "citizen-5"},
+        {"type": "fire", "building_id": "farm", "citizen_id": "citizen-3"},
+        {"type": "apply_job", "building_id": "farm"},
+        {"type": "quit_job"},
+        {
+            "type": "trade",
+            "recipient_id": "citizen-1",
+            "give": {"money": 100},
+            "get": {"goods": {"bread": 1}},
+        },
+        {"type": "respond_trade", "offer_id": "offer-1", "accept": True},
+        {"type": "lease_lot", "plot_id": "plot-3"},
+        {"type": "set_rent", "plot_id": "plot-3", "rent": 300},
+        {"type": "pay_rent", "plot_id": "plot-3"},
+        {"type": "evict", "plot_id": "plot-3"},
+        {"type": "interact", "recipient_id": "citizen-1", "kind": "befriend"},
+        {"type": "research", "invention_id": "water_mill", "mode": "time", "ticks": 3},
+        {
+            "type": "license_invention",
+            "invention_id": "water_mill",
+            "recipient_id": "citizen-1",
+            "fee": 1000,
+        },
+        {"type": "adopt_invention", "invention_id": "water_mill", "building_id": "farm"},
+        {
+            "type": "lend",
+            "recipient_id": "citizen-6",
+            "principal": 6000,
+            "rate_bps": 1000,
+            "due_tick": 10,
+        },
+        {"type": "repay", "loan_id": "loan-1", "amount": 1000},
+        {"type": "propose_vote", "kind": "min_wage", "value": 200},
+        {"type": "vote", "vote_id": "vote-1", "choice": "yes"},
+        {"type": "gather_resource", "building_id": "farm", "resource": "wheat", "quantity": 2},
+    ],
+)
+def test_planned_actions_parse_but_are_rejected_until_implemented(payload):
+    action = ACTION.validate_python({"actor_id": "citizen-0", **payload})
+    state = initial_world()
+    with pytest.raises(InvalidAction, match="not supported yet"):
+        Engine(state).apply(action)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "interact", "recipient_id": "citizen-1", "kind": "gift"},
+        {"type": "interact", "recipient_id": "citizen-1", "kind": "argue", "amount": 100},
+        {"type": "research", "invention_id": "water_mill", "mode": "money", "ticks": 3},
+        {"type": "research", "invention_id": "water_mill", "mode": "time"},
+        {"type": "lend", "recipient_id": "citizen-6", "principal": 0, "rate_bps": 0, "due_tick": 1},
+        {"type": "trade", "recipient_id": "citizen-1", "give": {"money": -1}, "get": {}},
+    ],
+)
+def test_planned_action_schemas_reject_bad_params(payload):
+    with pytest.raises(ValidationError):
+        ACTION.validate_python({"actor_id": "citizen-0", **payload})

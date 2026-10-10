@@ -2,11 +2,16 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_serialization_defaults_required=True)
+
+
+# Widen these together with ResourceInventory when new goods arrive.
+TradedResource = Literal["bread", "wheat"]
+BuildingKind = Literal["farm", "bakery", "market"]
 
 
 class Position(Model):
@@ -47,7 +52,7 @@ class Plot(Model):
 class Building(Model):
     id: str
     name: str
-    kind: Literal["farm", "bakery", "market"]
+    kind: BuildingKind
     plot_id: str
     position: Position
     owner_id: str
@@ -77,7 +82,7 @@ class ActionBase(Model):
 class Buy(ActionBase):
     type: Literal["buy"] = "buy"
     building_id: str
-    resource: Literal["bread", "wheat"]
+    resource: TradedResource
     quantity: int = Field(gt=0, le=100)
     max_unit_price: int = Field(gt=0)
 
@@ -85,7 +90,7 @@ class Buy(ActionBase):
 class Sell(ActionBase):
     type: Literal["sell"] = "sell"
     building_id: str
-    resource: Literal["bread", "wheat"]
+    resource: TradedResource
     quantity: int = Field(gt=0, le=100)
 
 
@@ -98,7 +103,7 @@ class TransferMoney(ActionBase):
 class SetPrice(ActionBase):
     type: Literal["set_price"] = "set_price"
     building_id: str
-    resource: Literal["bread", "wheat"]
+    resource: TradedResource
     price: int = Field(gt=0, le=1000000)
 
 
@@ -120,7 +125,7 @@ class Communicate(ActionBase):
 class ConstructBuilding(ActionBase):
     type: Literal["construct_building"] = "construct_building"
     plot_id: str
-    kind: Literal["farm", "bakery", "market"]
+    kind: BuildingKind
 
 
 class UpgradeBuilding(ActionBase):
@@ -133,6 +138,173 @@ class MoveTo(ActionBase):
     plot_id: str
 
 
+class FoundBusiness(ActionBase):
+    """Fund a new business from the founder's money; capital becomes business cash."""
+
+    type: Literal["found_business"] = "found_business"
+    plot_id: str
+    kind: BuildingKind
+    capital: int = Field(gt=0)
+
+
+class CloseBusiness(ActionBase):
+    type: Literal["close_business"] = "close_business"
+    building_id: str
+
+
+class SetWage(ActionBase):
+    type: Literal["set_wage"] = "set_wage"
+    building_id: str
+    wage: int = Field(gt=0, le=1000000)
+
+
+class Hire(ActionBase):
+    type: Literal["hire"] = "hire"
+    building_id: str
+    citizen_id: str
+
+
+class Fire(ActionBase):
+    type: Literal["fire"] = "fire"
+    building_id: str
+    citizen_id: str
+
+
+class ApplyJob(ActionBase):
+    type: Literal["apply_job"] = "apply_job"
+    building_id: str
+
+
+class QuitJob(ActionBase):
+    type: Literal["quit_job"] = "quit_job"
+
+
+class TradeBundle(Model):
+    money: int = Field(default=0, ge=0)
+    goods: ResourceInventory = Field(default_factory=ResourceInventory)
+
+
+class Trade(ActionBase):
+    """Offer goods or money to another citizen; the recipient answers with respond_trade."""
+
+    type: Literal["trade"] = "trade"
+    recipient_id: str
+    give: TradeBundle
+    get: TradeBundle
+
+
+class RespondTrade(ActionBase):
+    type: Literal["respond_trade"] = "respond_trade"
+    offer_id: str
+    accept: bool
+
+
+class LeaseLot(ActionBase):
+    type: Literal["lease_lot"] = "lease_lot"
+    plot_id: str
+
+
+class SetRent(ActionBase):
+    """Owner only; the engine limits each change to 20% of the current rent."""
+
+    type: Literal["set_rent"] = "set_rent"
+    plot_id: str
+    rent: int = Field(ge=0, le=1000000)
+
+
+class PayRent(ActionBase):
+    type: Literal["pay_rent"] = "pay_rent"
+    plot_id: str
+
+
+class Evict(ActionBase):
+    type: Literal["evict"] = "evict"
+    plot_id: str
+
+
+class Interact(ActionBase):
+    """Bounded relationship change; amount is only used by gift."""
+
+    type: Literal["interact"] = "interact"
+    recipient_id: str
+    kind: Literal["befriend", "gift", "ally", "argue", "insult", "betray", "mentor"]
+    amount: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _gift_amount(self):
+        if (self.kind == "gift") != (self.amount is not None):
+            raise ValueError("amount is required for gift and not allowed otherwise")
+        return self
+
+
+class Research(ActionBase):
+    """Money mode spends amount; time mode forfeits wages for ticks."""
+
+    type: Literal["research"] = "research"
+    invention_id: str
+    mode: Literal["money", "time"]
+    amount: int | None = Field(default=None, gt=0)
+    ticks: int | None = Field(default=None, gt=0, le=30)
+
+    @model_validator(mode="after")
+    def _mode_fields(self):
+        if (self.mode == "money") != (self.amount is not None) or (self.mode == "time") != (
+            self.ticks is not None
+        ):
+            raise ValueError("money mode needs amount only; time mode needs ticks only")
+        return self
+
+
+class LicenseInvention(ActionBase):
+    type: Literal["license_invention"] = "license_invention"
+    invention_id: str
+    recipient_id: str
+    fee: int = Field(ge=0)
+
+
+class AdoptInvention(ActionBase):
+    type: Literal["adopt_invention"] = "adopt_invention"
+    invention_id: str
+    building_id: str
+
+
+class Lend(ActionBase):
+    """Loan offer; rate is basis points per term so money stays integral."""
+
+    type: Literal["lend"] = "lend"
+    recipient_id: str
+    principal: int = Field(gt=0)
+    rate_bps: int = Field(ge=0, le=10000)
+    due_tick: int = Field(gt=0)
+
+
+class Repay(ActionBase):
+    type: Literal["repay"] = "repay"
+    loan_id: str
+    amount: int = Field(gt=0)
+
+
+class ProposeVote(ActionBase):
+    """value is basis points for market_tax and cents for price caps and minimum wage."""
+
+    type: Literal["propose_vote"] = "propose_vote"
+    kind: Literal["market_tax", "bread_price_cap", "min_wage"]
+    value: int = Field(ge=0, le=1000000)
+
+
+class CastVote(ActionBase):
+    type: Literal["vote"] = "vote"
+    vote_id: str
+    choice: Literal["yes", "no"]
+
+
+class GatherResource(ActionBase):
+    type: Literal["gather_resource"] = "gather_resource"
+    building_id: str
+    resource: TradedResource
+    quantity: int = Field(gt=0, le=100)
+
+
 AgentAction = Annotated[
     Buy
     | Sell
@@ -143,7 +315,29 @@ AgentAction = Annotated[
     | Communicate
     | ConstructBuilding
     | UpgradeBuilding
-    | MoveTo,
+    | MoveTo
+    | FoundBusiness
+    | CloseBusiness
+    | SetWage
+    | Hire
+    | Fire
+    | ApplyJob
+    | QuitJob
+    | Trade
+    | RespondTrade
+    | LeaseLot
+    | SetRent
+    | PayRent
+    | Evict
+    | Interact
+    | Research
+    | LicenseInvention
+    | AdoptInvention
+    | Lend
+    | Repay
+    | ProposeVote
+    | CastVote
+    | GatherResource,
     Field(discriminator="type"),
 ]
 
