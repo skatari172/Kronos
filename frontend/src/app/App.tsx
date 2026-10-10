@@ -9,6 +9,10 @@ import {
 import { useWorld } from "../stores/world";
 import { growthOf, TIERS } from "../world/progress";
 import { Village } from "../world/Village";
+import { EntityPanel } from "./EntityPanel";
+import { useSampleClock } from "./feed";
+import { GodBar } from "./GodBar";
+import { Header } from "./Header";
 import { useSimulation } from "./useSimulation";
 
 /** Full-screen village. Interface panels float over it as HUDs. */
@@ -16,6 +20,7 @@ export function App() {
   const update = useWorld((s) => s.update);
   const epoch = useWorld((s) => s.epoch);
   const sim = useSimulation();
+  useSampleClock();
   const [timelapse, setTimelapse] = useState(false);
   const growth = update ? growthOf(update.state, epoch) : null;
   const banner = useTierBanner(growth?.tier, epoch);
@@ -54,14 +59,9 @@ export function App() {
   return (
     <div className="stage">
       <Village autoRotate={timelapse} />
-      <div className="growth" aria-label="Settlement growth">
-        <span>OAKHAVEN</span>
-        <strong>{growth.name}</strong>
-        <div className="growth-bar">
-          <i style={{ width: `${Math.round(growth.toNext * 100)}%` }} />
-        </div>
-        <small>{growth.next ? `Next: ${growth.next}` : "Fully grown"}</small>
-      </div>
+      <Header tier={growth.name} />
+      <GodBar live={live} onDecree={sim.intervene} />
+      <EntityPanel />
       {banner && (
         <div className="tier-banner" role="status" key={banner}>
           <small>OAKHAVEN IS NOW A</small>
@@ -86,7 +86,7 @@ export function App() {
             void sim.togglePlay();
           }}
         >
-          {sim.playing ? <Pause size={17} /> : <Play size={17} />}
+          {sim.playing ? <Pause size={22} /> : <Play size={22} />}
         </button>
         <button
           className="hud-button"
@@ -94,7 +94,7 @@ export function App() {
           disabled={sim.busy || (live && sim.playing)}
           onClick={() => void sim.step()}
         >
-          <SkipForward size={17} />
+          <SkipForward size={22} />
         </button>
         <select
           aria-label="Simulation speed"
@@ -114,7 +114,7 @@ export function App() {
           disabled={!live || sim.busy}
           onClick={() => void toggleTimelapse()}
         >
-          <Clapperboard size={17} />
+          <Clapperboard size={22} />
         </button>
       </div>
       {sim.error && (
