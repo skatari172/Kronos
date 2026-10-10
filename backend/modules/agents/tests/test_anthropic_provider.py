@@ -131,7 +131,12 @@ def test_schema_is_supported_by_structured_outputs():
             for value in node:
                 walk(value)
 
-    for task, obs in [("decision", observation), ("ask", observation), ("intervention", {})]:
+    for task, obs in [
+        ("decision", observation),
+        ("ask", observation),
+        ("intervention", {}),
+        ("user_query", {"query": "Next day", "context": {}}),
+    ]:
         schema, _ = output_schema(task, obs)
         assert schema["type"] == "object"
         walk(schema)
@@ -215,6 +220,32 @@ def test_intervention_parses():
     price = schema["$defs"]["PriceIntervention"]
     assert {"$ref": "#/$defs/PriceIntervention"} in schema["properties"]["result"]["anyOf"]
     assert "percent" in price["required"] and price["additionalProperties"] is False
+
+
+def test_user_query_parses():
+    tool_json = {
+        "endpoint": "/api/simulation/tick",
+        "method": "POST",
+        "tool": "simulation_tick",
+        "parameters": {},
+        "rationale": "Advance simulation by 1 day",
+    }
+    fake_response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text=json.dumps(tool_json))],
+        stop_reason="end_turn",
+    )
+    client = FakeClient(fake_response)
+    tool_call = asyncio.run(
+        AgentService(AnthropicProvider(client=client)).resolve_user_query("Next day")
+    )
+    assert tool_call.endpoint == "/api/simulation/tick"
+    assert tool_call.tool == "simulation_tick"
+    request = client.requests[0]
+    assert request["system"][0]["text"] == system_prompt("user_query")
+    schema = request["output_config"]["format"]["schema"]
+    assert schema["type"] == "object"
+    assert schema["additionalProperties"] is False
+    assert "endpoint" in schema["properties"]
 
 
 @pytest.mark.parametrize(

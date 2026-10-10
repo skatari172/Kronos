@@ -67,6 +67,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/user/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Process player prompt and execute determined toolkit endpoint
+         * @description Translates player natural language prompt via LLM into the best toolkit endpoint,
+         *     then executes it against the simulation.
+         */
+        post: operations["user_query_api_user_query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents/{citizen_id}/observation": {
         parameters: {
             query?: never;
@@ -2331,6 +2352,37 @@ export interface components {
              * @enum {string}
              */
             source: "llm" | "mock" | "fallback";
+        };
+        /**
+         * DeterminedToolCall
+         * @description The toolkit endpoint determined by the LLM to implement the user query.
+         */
+        DeterminedToolCall: {
+            /**
+             * Endpoint
+             * @description The API endpoint to call, e.g. /api/interventions, /api/actions, /api/agents
+             */
+            endpoint: string;
+            /**
+             * Method
+             * @description HTTP method
+             * @default POST
+             * @enum {string}
+             */
+            method: "POST" | "PATCH" | "GET" | "DELETE";
+            /**
+             * Tool
+             * @description Name of the specific toolkit tool or operation
+             */
+            tool: string;
+            /** @description Payload/arguments for the toolkit endpoint */
+            parameters: components["schemas"]["ToolParameters"];
+            /**
+             * Rationale
+             * @description Reasoning for selecting this toolkit endpoint
+             * @default
+             */
+            rationale: string;
         };
         /** EmployeeRequest */
         EmployeeRequest: {
@@ -5493,6 +5545,142 @@ export interface components {
             actions: number;
         };
         /**
+         * ToolParameters
+         * @description Parameters for any determined toolkit endpoint.
+         */
+        ToolParameters: {
+            /**
+             * Percent
+             * @description Percent change (-90 to 200) for price or wage
+             */
+            percent: number | null;
+            /**
+             * Wage
+             * @description Wage in cents
+             */
+            wage: number | null;
+            /**
+             * Amount
+             * @description Money amount in cents to grant or take
+             */
+            amount: number | null;
+            /**
+             * Stock Change
+             * @description Wheat stock change
+             */
+            stock_change: number | null;
+            /**
+             * Regen Per Tick
+             * @description Wheat regrowth per tick
+             */
+            regen_per_tick: number | null;
+            /**
+             * Change
+             * @description Hunger change (-100 to 100)
+             */
+            change: number | null;
+            /**
+             * Kind
+             * @description Policy kind or building kind
+             */
+            kind: string | null;
+            /**
+             * Value
+             * @description Policy value in cents or basis points
+             */
+            value: number | null;
+            /**
+             * Citizen Id
+             * @description Target citizen ID
+             */
+            citizen_id: string | null;
+            /**
+             * Actor Id
+             * @description Acting citizen ID
+             */
+            actor_id: string | null;
+            /**
+             * Building Id
+             * @description Target building ID
+             */
+            building_id: string | null;
+            /**
+             * Plot Id
+             * @description Target plot ID
+             */
+            plot_id: string | null;
+            /**
+             * Target Id
+             * @description Target entity or citizen ID
+             */
+            target_id: string | null;
+            /**
+             * Name
+             * @description Name for citizen or business
+             */
+            name: string | null;
+            /**
+             * Occupation
+             * @description Occupation for citizen
+             */
+            occupation: string | null;
+            /**
+             * Money
+             * @description Starting money in cents
+             */
+            money: number | null;
+            /**
+             * Capital
+             * @description Capital in cents for founding business
+             */
+            capital: number | null;
+            /**
+             * Resource
+             * @description Resource type (bread or wheat)
+             */
+            resource: ("bread" | "wheat") | null;
+            /**
+             * Price
+             * @description Price in cents
+             */
+            price: number | null;
+            /**
+             * Quantity
+             * @description Quantity of resource
+             */
+            quantity: number | null;
+            /**
+             * Rent
+             * @description Rent in cents
+             */
+            rent: number | null;
+            /**
+             * Periods
+             * @description Prepaid rent periods
+             */
+            periods: number | null;
+            /**
+             * Choice
+             * @description Vote choice: yes or no
+             */
+            choice: string | null;
+            /**
+             * Playing
+             * @description Simulation play/pause state
+             */
+            playing: boolean | null;
+            /**
+             * Speed
+             * @description Simulation playback speed (1, 2, or 4)
+             */
+            speed: number | null;
+            /**
+             * Scope
+             * @description Scope for interventions, e.g. all_bakeries or all_businesses
+             */
+            scope: string | null;
+        };
+        /**
          * Trade
          * @description Offer goods or money to another citizen; the recipient answers with respond_trade.
          */
@@ -5824,6 +6012,62 @@ export interface components {
             type: "upgrade_building";
             /** Building Id */
             building_id: string;
+        };
+        /**
+         * UserQueryRequest
+         * @description Prompt entered by the player in the user query bar.
+         */
+        UserQueryRequest: {
+            /**
+             * Query
+             * @description Natural language prompt to affect the game
+             */
+            query: string;
+            /**
+             * Branch Id
+             * @description Target timeline branch
+             */
+            branch_id?: string | null;
+            /**
+             * Expected Sequence
+             * @description Optimistic concurrency guard
+             */
+            expected_sequence?: number | null;
+        };
+        /**
+         * UserQueryResult
+         * @description Outcome of processing the user query and executing the determined toolkit endpoint.
+         */
+        UserQueryResult: {
+            /** Query */
+            query: string;
+            tool_call: components["schemas"]["DeterminedToolCall"];
+            /**
+             * Status
+             * @description Execution status
+             * @enum {string}
+             */
+            status: "applied" | "queued" | "executed" | "rejected" | "error";
+            /**
+             * Result
+             * @description Result returned by executing the determined toolkit endpoint
+             */
+            result: unknown;
+            /**
+             * Scheduled Tick
+             * @description Scheduled tick if queued
+             */
+            scheduled_tick: number | null;
+            /**
+             * Action Id
+             * @description Associated action or intervention ID
+             */
+            action_id: string | null;
+            /**
+             * Error
+             * @description Error code or description if rejected
+             */
+            error: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -6314,6 +6558,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpawnResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    user_query_api_user_query_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserQueryResult"];
                 };
             };
             /** @description Validation Error */

@@ -24,7 +24,12 @@ DEFAULT_TIMEOUT = 20.0
 # Models that accept server-side refusal fallbacks (`fallbacks: "default"`).
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
-_TASK_METHODS = {"decision": "decide", "ask": "ask", "intervention": "parse"}
+_TASK_METHODS = {
+    "decision": "decide",
+    "ask": "ask",
+    "intervention": "parse",
+    "user_query": "resolve_user_query",
+}
 # JSON-schema keywords structured outputs do not support; folded into the description instead
 # and still enforced by pydantic when AgentService validates the reply.
 _UNSUPPORTED = (

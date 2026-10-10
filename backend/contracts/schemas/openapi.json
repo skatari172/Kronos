@@ -224,6 +224,48 @@
         }
       }
     },
+    "/api/user/query": {
+      "post": {
+        "tags": [
+          "User tools"
+        ],
+        "summary": "Process player prompt and execute determined toolkit endpoint",
+        "description": "Translates player natural language prompt via LLM into the best toolkit endpoint,\nthen executes it against the simulation.",
+        "operationId": "user_query_api_user_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserQueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserQueryResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{citizen_id}/observation": {
       "get": {
         "tags": [
@@ -7679,6 +7721,53 @@
           "source"
         ],
         "title": "DecisionResult"
+      },
+      "DeterminedToolCall": {
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "description": "The API endpoint to call, e.g. /api/interventions, /api/actions, /api/agents"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "POST",
+              "PATCH",
+              "GET",
+              "DELETE"
+            ],
+            "title": "Method",
+            "description": "HTTP method",
+            "default": "POST"
+          },
+          "tool": {
+            "type": "string",
+            "title": "Tool",
+            "description": "Name of the specific toolkit tool or operation"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/ToolParameters",
+            "description": "Payload/arguments for the toolkit endpoint"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale",
+            "description": "Reasoning for selecting this toolkit endpoint",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "endpoint",
+          "method",
+          "tool",
+          "parameters",
+          "rationale"
+        ],
+        "title": "DeterminedToolCall",
+        "description": "The toolkit endpoint determined by the LLM to implement the user query."
       },
       "EmployeeRequest": {
         "properties": {
@@ -16268,6 +16357,358 @@
         ],
         "title": "TickPayload"
       },
+      "ToolParameters": {
+        "properties": {
+          "percent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent",
+            "description": "Percent change (-90 to 200) for price or wage"
+          },
+          "wage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wage",
+            "description": "Wage in cents"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount",
+            "description": "Money amount in cents to grant or take"
+          },
+          "stock_change": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Change",
+            "description": "Wheat stock change"
+          },
+          "regen_per_tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regen Per Tick",
+            "description": "Wheat regrowth per tick"
+          },
+          "change": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change",
+            "description": "Hunger change (-100 to 100)"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind",
+            "description": "Policy kind or building kind"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "Policy value in cents or basis points"
+          },
+          "citizen_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citizen Id",
+            "description": "Target citizen ID"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id",
+            "description": "Acting citizen ID"
+          },
+          "building_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Building Id",
+            "description": "Target building ID"
+          },
+          "plot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plot Id",
+            "description": "Target plot ID"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id",
+            "description": "Target entity or citizen ID"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Name for citizen or business"
+          },
+          "occupation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occupation",
+            "description": "Occupation for citizen"
+          },
+          "money": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Money",
+            "description": "Starting money in cents"
+          },
+          "capital": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capital",
+            "description": "Capital in cents for founding business"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "bread",
+                  "wheat"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource",
+            "description": "Resource type (bread or wheat)"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price",
+            "description": "Price in cents"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity",
+            "description": "Quantity of resource"
+          },
+          "rent": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rent",
+            "description": "Rent in cents"
+          },
+          "periods": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Periods",
+            "description": "Prepaid rent periods"
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice",
+            "description": "Vote choice: yes or no"
+          },
+          "playing": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Playing",
+            "description": "Simulation play/pause state"
+          },
+          "speed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed",
+            "description": "Simulation playback speed (1, 2, or 4)"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope",
+            "description": "Scope for interventions, e.g. all_bakeries or all_businesses"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "percent",
+          "wage",
+          "amount",
+          "stock_change",
+          "regen_per_tick",
+          "change",
+          "kind",
+          "value",
+          "citizen_id",
+          "actor_id",
+          "building_id",
+          "plot_id",
+          "target_id",
+          "name",
+          "occupation",
+          "money",
+          "capital",
+          "resource",
+          "price",
+          "quantity",
+          "rent",
+          "periods",
+          "choice",
+          "playing",
+          "speed",
+          "scope"
+        ],
+        "title": "ToolParameters",
+        "description": "Parameters for any determined toolkit endpoint."
+      },
       "Trade-Input": {
         "properties": {
           "actor_id": {
@@ -17208,6 +17649,124 @@
           "building_id"
         ],
         "title": "UpgradeBuilding"
+      },
+      "UserQueryRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query",
+            "description": "Natural language prompt to affect the game"
+          },
+          "branch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Id",
+            "description": "Target timeline branch"
+          },
+          "expected_sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sequence",
+            "description": "Optimistic concurrency guard"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "UserQueryRequest",
+        "description": "Prompt entered by the player in the user query bar."
+      },
+      "UserQueryResult": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "tool_call": {
+            "$ref": "#/components/schemas/DeterminedToolCall"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "queued",
+              "executed",
+              "rejected",
+              "error"
+            ],
+            "title": "Status",
+            "description": "Execution status"
+          },
+          "result": {
+            "title": "Result",
+            "description": "Result returned by executing the determined toolkit endpoint"
+          },
+          "scheduled_tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled Tick",
+            "description": "Scheduled tick if queued"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id",
+            "description": "Associated action or intervention ID"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error",
+            "description": "Error code or description if rejected"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "tool_call",
+          "status",
+          "result",
+          "scheduled_tick",
+          "action_id",
+          "error"
+        ],
+        "title": "UserQueryResult",
+        "description": "Outcome of processing the user query and executing the determined toolkit endpoint."
       },
       "ValidationError": {
         "properties": {

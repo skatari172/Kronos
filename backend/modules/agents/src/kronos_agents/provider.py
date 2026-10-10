@@ -9,6 +9,7 @@ from kronos_sim.models import (
     AgentAction,
     AgentObservation,
     AskResult,
+    DeterminedToolCall,
     Intervention,
     ProposalSource,
     SimulationEvent,
@@ -147,6 +148,206 @@ def mock_intervention(text: str, citizens: dict[str, str] | None = None) -> dict
     raise ProviderError(SUPPORTED_INTERVENTIONS)
 
 
+def mock_user_query(query: str, context: dict | None = None) -> dict:
+    """Determine the best toolkit endpoint for a player's query or prompt."""
+    q = re.sub(r"\s+", " ", query).strip().rstrip(".!").strip()
+
+    def match(pattern):
+        return re.fullmatch(pattern, q, re.IGNORECASE)
+
+    # Resolve context maps if provided
+    citizens: dict[str, str] = {}
+    buildings: dict[str, str] = {}
+    if context:
+        if "citizen_names" in context and isinstance(context["citizen_names"], dict):
+            citizens = context["citizen_names"]
+        elif "citizens" in context and isinstance(context["citizens"], dict):
+            citizens = {
+                cid: (c["name"] if isinstance(c, dict) else str(c))
+                for cid, c in context["citizens"].items()
+            }
+        if "buildings" in context and isinstance(context["buildings"], dict):
+            buildings = {
+                bid: (b["name"] if isinstance(b, dict) else str(b))
+                for bid, b in context["buildings"].items()
+            }
+
+    def _resolve_building(target: str) -> str:
+        if target in buildings:
+            return target
+        for bid, bname in buildings.items():
+            if bname.lower() == target.lower():
+                return bid
+        return target.lower()
+
+    def _resolve_plot(target: str) -> str:
+        p = target.replace(" ", "-").lower()
+        return p if p.startswith("plot-") else f"plot-{p}"
+
+    # 1. Simulation Controls
+    if match(r"(?:next day|advance(?: simulation)?|tick|step(?: simulation)?)"):
+        return {
+            "endpoint": "/api/simulation/tick",
+            "method": "POST",
+            "tool": "simulation_tick",
+            "parameters": {},
+            "rationale": "Advance simulation by one day",
+        }
+    if match(r"(?:play(?: simulation)?|resume(?: simulation)?|start simulation|unpause)"):
+        return {
+            "endpoint": "/api/simulation/play",
+            "method": "POST",
+            "tool": "simulation_playback",
+            "parameters": {"playing": True, "speed": 1},
+            "rationale": "Start simulation clock",
+        }
+    if match(r"(?:pause(?: simulation)?|stop simulation|halt)"):
+        return {
+            "endpoint": "/api/simulation/pause",
+            "method": "POST",
+            "tool": "simulation_playback",
+            "parameters": {"playing": False, "speed": 1},
+            "rationale": "Pause simulation clock",
+        }
+
+    # 2. Spawning Citizens
+    if m := match(
+        r"(?:spawn|create|add) (?:a )?(?:citizen|resident|person|villager)?"
+        r"\s*(?:named )?([A-Za-z]+)(?: with occupation ([A-Za-z_]+))?(?: with " + _MONEY + r")?"
+    ):
+        name = m[1].capitalize()
+        occ = m[2].lower() if m[2] else "unemployed"
+        money = _cents(m[3], m[4]) if m[3] else 1000
+        return {
+            "endpoint": "/api/agents",
+            "method": "POST",
+            "tool": "spawn_citizen",
+            "parameters": {"name": name, "occupation": occ, "money": money},
+            "rationale": f"Spawn citizen {name}",
+        }
+    if m := match(r"(?:spawn|create|add) (?:a )?([A-Za-z]+) named ([A-Za-z]+)"):
+        occ = m[1].lower()
+        name = m[2].capitalize()
+        return {
+            "endpoint": "/api/agents",
+            "method": "POST",
+            "tool": "spawn_citizen",
+            "parameters": {"name": name, "occupation": occ, "money": 1000},
+            "rationale": f"Spawn {occ} named {name}",
+        }
+
+    # 3. Founding Business
+    if m := match(r"found (?:a )?(farm|bakery|market) on (plot[- ]\w+)"):
+        plot_id = _resolve_plot(m[2])
+        return {
+            "endpoint": "/api/actions",
+            "method": "POST",
+            "tool": "found_business",
+            "parameters": {"plot_id": plot_id, "kind": m[1].lower(), "capital": 5000},
+            "rationale": f"Found a {m[1].lower()} on {plot_id}",
+        }
+
+    # 4. Set Price at Business
+    if m := match(
+        r"set (?:price (?:of|for) (bread|wheat) at (\w+)|(\w+) (?:bread )?price) to " + _MONEY
+    ):
+        res = m[1].lower() if m[1] else "bread"
+        b_target = m[2] or m[3]
+        bid = _resolve_building(b_target)
+        cents = _cents(m[4], m[5])
+        return {
+            "endpoint": "/api/actions",
+            "method": "POST",
+            "tool": "set_price",
+            "parameters": {"building_id": bid, "resource": res, "price": cents},
+            "rationale": f"Set {res} price at {bid} to {cents} cents",
+        }
+
+    # 5. Set Wage at Business
+    if m := match(r"set (?:wage at (\w+)|(?!(?:min(?:imum)?|all)\b)(\w+) wage) to " + _MONEY):
+        b_target = m[1] or m[2]
+        bid = _resolve_building(b_target)
+        cents = _cents(m[3], m[4])
+        return {
+            "endpoint": "/api/actions",
+            "method": "POST",
+            "tool": "set_wage",
+            "parameters": {"building_id": bid, "wage": cents},
+            "rationale": f"Set wage at {bid} to {cents} cents",
+        }
+
+    # 6. Hire / Fire
+    if m := match(r"(hire|fire) (\w+) (?:at|from) (\w+)"):
+        cid = _citizen(m[2], citizens) if citizens else m[2]
+        bid = _resolve_building(m[3])
+        tool_name = m[1].lower()
+        return {
+            "endpoint": "/api/actions",
+            "method": "POST",
+            "tool": tool_name,
+            "parameters": {"building_id": bid, "citizen_id": cid},
+            "rationale": f"{tool_name.capitalize()} {cid} at {bid}",
+        }
+
+    # 7. Upgrade / Close Business
+    if m := match(r"(upgrade|close) (\w+)"):
+        bid = _resolve_building(m[2])
+        tool_name = "upgrade_building" if m[1].lower() == "upgrade" else "close_business"
+        return {
+            "endpoint": "/api/actions",
+            "method": "POST",
+            "tool": tool_name,
+            "parameters": {"building_id": bid},
+            "rationale": f"{m[1].capitalize()} {bid}",
+        }
+
+    # 8. Plots: Lease, Set Rent, Evict
+    if m := match(r"lease (plot[- ]\w+)"):
+        plot_id = _resolve_plot(m[1])
+        return {
+            "endpoint": "/api/actions",
+            "method": "POST",
+            "tool": "lease_lot",
+            "parameters": {"plot_id": plot_id},
+            "rationale": f"Lease lot {plot_id}",
+        }
+    if m := match(r"set rent (?:for|on) (plot[- ]\w+) to " + _MONEY):
+        plot_id = _resolve_plot(m[1])
+        cents = _cents(m[2], m[3])
+        return {
+            "endpoint": "/api/actions",
+            "method": "POST",
+            "tool": "set_rent",
+            "parameters": {"plot_id": plot_id, "rent": cents},
+            "rationale": f"Set rent for {plot_id} to {cents} cents",
+        }
+    if m := match(r"evict (?:tenant )?(?:on|from) (plot[- ]\w+)"):
+        plot_id = _resolve_plot(m[1])
+        return {
+            "endpoint": "/api/actions",
+            "method": "POST",
+            "tool": "evict",
+            "parameters": {"plot_id": plot_id},
+            "rationale": f"Evict tenant on {plot_id}",
+        }
+
+    # 9. Interventions
+    try:
+        inter = mock_intervention(q, citizens)
+        params = {k: v for k, v in inter.items() if k != "type" and v is not None}
+        return {
+            "endpoint": "/api/interventions",
+            "method": "POST",
+            "tool": inter["type"],
+            "parameters": params,
+            "rationale": f"Intervention: {inter['type']}",
+        }
+    except ProviderError:
+        pass
+
+    raise ProviderError(f"Cannot determine toolkit endpoint for: '{query}'")
+
+
 class MockProvider:
     """Narrow, honest grammar; no paid service or invented interpretation."""
 
@@ -155,6 +356,8 @@ class MockProvider:
     async def complete(self, task: str, observation: dict) -> str:
         if task == "intervention":
             return json.dumps(mock_intervention(observation["text"], observation.get("citizens")))
+        if task == "user_query":
+            return json.dumps(mock_user_query(observation["query"], observation.get("context")))
         if task == "ask":
             return json.dumps(self._answer(observation))
         return json.dumps(self._decide(observation))
@@ -304,6 +507,13 @@ class AgentService:
         """
         observation = {"text": text, "citizens": dict(sorted((citizens or {}).items()))}
         return await self._validated("intervention", observation, TypeAdapter(Intervention))
+
+    async def resolve_user_query(
+        self, query: str, context: dict | None = None
+    ) -> DeterminedToolCall:
+        """Turn a player's natural language query into the best toolkit endpoint call."""
+        observation = {"query": query, "context": context or {}}
+        return await self._validated("user_query", observation, TypeAdapter(DeterminedToolCall))
 
     async def decide(self, observation: AgentObservation) -> AgentAction:
         """One proposal for the observed citizen. The engine still decides if it is valid."""

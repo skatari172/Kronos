@@ -1,7 +1,19 @@
-import type { WorldUpdate } from "./types";
+import type { UserQueryResult, WorldUpdate } from "./types";
 import { useWorld } from "../stores/world";
 
 export const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+export async function sendUserQuery(query: string): Promise<UserQueryResult> {
+  return request<UserQueryResult>(
+    "/api/user/query",
+    {
+      query,
+      ...context(),
+    },
+    45_000,
+  );
+}
+
 /** `timeoutMs` defaults to 8 s; calls that wait on an AI model pass more. */
 export async function request<T>(
   path: string,
