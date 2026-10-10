@@ -103,8 +103,6 @@ def test_long_run_invariants_and_reproducibility():
         {"type": "pay_rent", "plot_id": "plot-3"},
         {"type": "evict", "plot_id": "plot-3"},
         {"type": "interact", "recipient_id": "citizen-1", "kind": "befriend"},
-        {"type": "propose_vote", "kind": "min_wage", "value": 200},
-        {"type": "vote", "vote_id": "vote-1", "choice": "yes"},
     ],
 )
 def test_planned_actions_parse_but_are_rejected_until_implemented(payload):

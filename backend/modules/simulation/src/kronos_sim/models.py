@@ -223,6 +223,36 @@ class LicenseOffer(Model):
     tick: int
 
 
+VoteKind = Literal["market_tax", "bread_price_cap", "min_wage"]
+VoteChoice = Literal["yes", "no"]
+
+
+class Policies(Model):
+    """Town-vote outcomes in force. 0 means no policy for that kind."""
+
+    market_tax_bps: int = Field(
+        default=0, ge=0, le=10000, description="Cut of each buy, shared equally by all citizens"
+    )
+    bread_price_cap: int = Field(default=0, ge=0, description="Max bread price in cents; 0 = none")
+    min_wage: int = Field(default=0, ge=0, description="Min daily wage in cents; 0 = none")
+
+
+class Vote(Model):
+    """A town vote. Tally weights are influence basis points, recorded when the vote closes."""
+
+    id: str
+    proposer_id: str
+    kind: VoteKind
+    value: int = Field(ge=0)
+    rationale: str | None = None
+    opens_tick: int
+    closes_tick: int
+    status: Literal["open", "passed", "failed"] = "open"
+    ballots: dict[str, VoteChoice] = Field(default_factory=dict, description="Citizen ID to choice")
+    yes_weight: int = 0
+    no_weight: int = 0
+
+
 class WorldState(Model):
     schema_version: Literal[1] = 1
     branch_id: str
@@ -250,6 +280,8 @@ class WorldState(Model):
     )
     inventions: dict[str, Invention] = Field(default_factory=dict)
     license_offers: dict[str, LicenseOffer] = Field(default_factory=dict)
+    votes: dict[str, Vote] = Field(default_factory=dict)
+    policies: Policies = Field(default_factory=Policies)
 
 
 class ActionBase(Model):
@@ -911,6 +943,66 @@ class InventionAdopted(EventBase):
     payload: AdoptionPayload
 
 
+class VoteProposedPayload(Model):
+    vote_id: str
+    kind: VoteKind
+    value: int
+    closes_tick: int
+
+
+class VoteProposed(EventBase):
+    type: Literal["vote_proposed"] = "vote_proposed"
+    payload: VoteProposedPayload
+
+
+class BallotPayload(Model):
+    vote_id: str
+    choice: VoteChoice
+    previous_choice: VoteChoice | None = None
+
+
+class VoteCast(EventBase):
+    type: Literal["vote_cast"] = "vote_cast"
+    payload: BallotPayload
+
+
+class VoteClosedPayload(Model):
+    vote_id: str
+    kind: VoteKind
+    value: int
+    passed: bool
+    yes_weight: int
+    no_weight: int
+
+
+class VoteClosed(EventBase):
+    type: Literal["vote_closed"] = "vote_closed"
+    payload: VoteClosedPayload
+
+
+class PolicyPayload(Model):
+    kind: VoteKind
+    old_value: int
+    new_value: int
+
+
+class PolicyChanged(EventBase):
+    type: Literal["policy_changed"] = "policy_changed"
+    payload: PolicyPayload
+
+
+class TaxPayload(Model):
+    building_id: str
+    amount: int = Field(description="Total taken from the seller; equals per_citizen * recipients")
+    per_citizen: int
+    recipient_ids: list[str]
+
+
+class TaxCollected(EventBase):
+    type: Literal["tax_collected"] = "tax_collected"
+    payload: TaxPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -958,7 +1050,13 @@ SimulationEvent = Annotated[
     | InventionUnlocked
     | LicenseOffered
     | LicenseResolved
-    | InventionAdopted,
+    | InventionAdopted
+    | VoteProposed
+    | VoteCast
+    | VoteClosed
+    | PolicyChanged
+    | TaxCollected
+    | InterventionApplied,
     Field(discriminator="type"),
 ]
 
@@ -1047,6 +1145,7 @@ class CitizenProfile(Model):
     wealth_tier: WealthTier
     employed: bool
     owned_building_ids: list[str] = Field(default_factory=list)
+    influence: int = Field(default=0, ge=0, le=10000, description="Basis points (0-10000)")
 
 
 class AgentObservation(Model):
@@ -1178,6 +1277,48 @@ class GatherRequest(MutationRequest):
     rationale: str | None = Field(default=None, max_length=300)
 
 
+class InfluenceBreakdown(Model):
+    """All components are basis points (0-10000); see queries.influence for the formula."""
+
+    citizen_id: str
+    wealth: int = Field(description="Own money plus the cash of businesses owned, in cents")
+    wealth_share: int
+    reputation: int
+    trust_from_others: int
+    influence: int
+
+
+class RolePermission(Model):
+    action: str
+    scope: Literal["any", "own_business", "own_lot"]
+    supported: bool = Field(description="False while the engine still rejects it as not_supported")
+
+
+class RoleInfo(Model):
+    role: Role
+    description: str
+    permissions: list[RolePermission]
+
+
+class VoteTally(Model):
+    yes_weight: int
+    no_weight: int
+    yes_share: int = Field(description="Basis points of the weight cast; passes above 5000")
+    ballots: int
+
+
+class VoteView(Model):
+    vote: Vote
+    tally: VoteTally
+
+
+class VoteProposalRequest(MutationRequest):
+    actor_id: str
+    kind: VoteKind
+    value: int = Field(ge=0, le=1000000)
+    rationale: str | None = Field(default=None, max_length=300)
+
+
 class LoanCommand(MutationRequest):
     """Loan route body. actor_id is the citizen acting (lender to offer, borrower otherwise)."""
 
@@ -1302,3 +1443,9 @@ class RespondTradeRequest(BusinessCommand):
 
 class AdoptRequest(BusinessCommand):
     building_id: str
+
+
+class BallotRequest(MutationRequest):
+    actor_id: str
+    choice: VoteChoice
+    rationale: str | None = Field(default=None, max_length=300)

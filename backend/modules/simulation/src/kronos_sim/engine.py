@@ -41,6 +41,8 @@ SUPPORTED_ACTIONS = (
     "license_invention",
     "respond_license",
     "adopt_invention",
+    "propose_vote",
+    "vote",
 )
 MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
 BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
@@ -50,6 +52,8 @@ DEFAULT_TRUST_PENALTY = 30  # Lender trust lost toward a defaulting borrower (sp
 DEFAULT_REPUTATION_PENALTY = 5  # Borrower reputation lost on default (spec -0.05 on 0..1).
 OFFER_TTL_DAYS = 2  # An offer made on tick t may be accepted through tick t + 2.
 MAX_PENDING_OFFERS = 5  # Outgoing pending offers per citizen.
+VOTE_DAYS = 3  # A town vote closes this many days after it opens.
+VOTE_CADENCE_DAYS = 10  # Spec "every 10 ticks one proposal goes to a vote": min gap between opens.
 
 
 class InvalidAction(ValueError):
@@ -58,6 +62,10 @@ class InvalidAction(ValueError):
     def __init__(self, code: m.ActionErrorCode, message: str):
         super().__init__(message)
         self.code = code
+
+
+def _policy(policies: m.Policies, kind: str) -> int:
+    return policies.market_tax_bps if kind == "market_tax" else getattr(policies, kind)
 
 
 def _tuples(value):
@@ -194,6 +202,8 @@ class Engine:
                     quantity=action.quantity,
                 ),
             )
+            if buying:
+                self._collect_tax(building, amount, actor.id, action.rationale)
         elif isinstance(action, m.TransferMoney):
             recipient = s.citizens.get(action.recipient_id)
             if recipient is None or recipient.id == actor.id:
@@ -207,6 +217,9 @@ class Engine:
                 dict(sender_id=actor.id, recipient_id=recipient.id, amount=action.amount),
             )
         elif isinstance(action, m.SetPrice):
+            cap = s.policies.bread_price_cap
+            if action.resource == "bread" and cap and action.price > cap:
+                raise InvalidAction("bad_params", f"The town caps bread at {cap} cents")
             old = building.prices[action.resource]
             building.prices[action.resource] = action.price
             emit(
@@ -321,6 +334,10 @@ class Engine:
         elif isinstance(action, m.CloseBusiness):
             self._close(building, actor.id, action.rationale)
         elif isinstance(action, m.SetWage):
+            if action.wage < s.policies.min_wage:
+                raise InvalidAction(
+                    "bad_params", f"The town minimum wage is {s.policies.min_wage} cents"
+                )
             old = building.wage
             building.wage = action.wage
             emit(
@@ -625,6 +642,52 @@ class Engine:
                     cost=invention.adoption_cost,
                 ),
             )
+        elif isinstance(action, m.ProposeVote):
+            if any(v.status == "open" for v in s.votes.values()):
+                raise InvalidAction("bad_params", "Another town vote is already open")
+            last = max((v.opens_tick for v in s.votes.values()), default=None)
+            if last is not None and s.tick < last + VOTE_CADENCE_DAYS:
+                raise InvalidAction(
+                    "rate_limited", f"The next town vote may open on day {last + VOTE_CADENCE_DAYS}"
+                )
+            if action.kind == "market_tax" and action.value > 10000:
+                raise InvalidAction("bad_params", "Market tax is at most 10000 basis points")
+            if action.value == _policy(s.policies, action.kind):
+                raise InvalidAction("bad_params", "That policy is already in force")
+            vid = f"vote-{s.branch_id}-{s.sequence + 1}"
+            s.votes[vid] = m.Vote(
+                id=vid,
+                proposer_id=actor.id,
+                kind=action.kind,
+                value=action.value,
+                rationale=action.rationale,
+                opens_tick=s.tick,
+                closes_tick=s.tick + VOTE_DAYS,
+            )
+            emit(
+                "vote_proposed",
+                dict(
+                    vote_id=vid,
+                    kind=action.kind,
+                    value=action.value,
+                    closes_tick=s.tick + VOTE_DAYS,
+                ),
+            )
+        elif isinstance(action, m.CastVote):
+            vote = s.votes.get(action.vote_id)
+            if vote is None:
+                raise InvalidAction("unknown_entity", "Unknown vote")
+            if vote.status != "open":
+                raise InvalidAction("bad_params", "This vote is closed")
+            previous = vote.ballots.get(actor.id)
+            if previous == action.choice:
+                raise InvalidAction("bad_params", f"Already voted {action.choice}")
+            # A citizen may change their mind; the latest ballot replaces the earlier one.
+            vote.ballots[actor.id] = action.choice
+            emit(
+                "vote_cast",
+                dict(vote_id=vote.id, choice=action.choice, previous_choice=previous),
+            )
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
@@ -681,6 +744,32 @@ class Engine:
                 citizen_id=application.citizen_id,
                 building_id=application.building_id,
                 outcome=outcome,
+            ),
+            actor_id,
+            rationale,
+        )
+
+    def _collect_tax(self, building: m.Building, amount: int, actor_id, rationale):
+        """Market tax: a cut of the seller's revenue shared equally by every citizen.
+
+        Each citizen (sorted by ID, buyer and owner included) gets floor(tax / n); the
+        indivisible remainder stays with the seller, so money is conserved exactly.
+        """
+        recipients = sorted(self.state.citizens)
+        tax = amount * self.state.policies.market_tax_bps // 10000
+        share = tax // len(recipients) if recipients else 0
+        if not share:
+            return
+        building.cash -= share * len(recipients)
+        for cid in recipients:
+            self.state.citizens[cid].money += share
+        self.emit(
+            "tax_collected",
+            dict(
+                building_id=building.id,
+                amount=share * len(recipients),
+                per_citizen=share,
+                recipient_ids=recipients,
             ),
             actor_id,
             rationale,
@@ -825,6 +914,65 @@ class Engine:
             if last_day and citizen.research_invention_id is not None:
                 citizen.research_invention_id = None
                 citizen.research_until_tick = 0
+
+    def _settle_votes(self):
+        """Daily: close votes that have been open VOTE_DAYS days, apply passed policies, and
+        keep every business within the policies in force (also catches new businesses)."""
+        from kronos_sim.queries import vote_tally
+
+        s = self.state
+        for vote in sorted(s.votes.values(), key=lambda v: v.id):
+            if vote.status != "open" or s.tick < vote.closes_tick:
+                continue
+            tally = vote_tally(s, vote)
+            # Weighted by influence over ballots cast; abstaining carries no weight.
+            passed = tally.yes_weight * 2 > tally.yes_weight + tally.no_weight
+            vote.status = "passed" if passed else "failed"
+            vote.yes_weight, vote.no_weight = tally.yes_weight, tally.no_weight
+            closed = self.emit(
+                "vote_closed",
+                dict(
+                    vote_id=vote.id,
+                    kind=vote.kind,
+                    value=vote.value,
+                    passed=passed,
+                    yes_weight=tally.yes_weight,
+                    no_weight=tally.no_weight,
+                ),
+            )
+            if passed:
+                old = _policy(s.policies, vote.kind)
+                field = "market_tax_bps" if vote.kind == "market_tax" else vote.kind
+                setattr(s.policies, field, vote.value)
+                self.emit(
+                    "policy_changed",
+                    dict(kind=vote.kind, old_value=old, new_value=vote.value),
+                    causal_refs=[closed.id],
+                )
+                self._enforce_policies([closed.id])
+        self._enforce_policies([])
+
+    def _enforce_policies(self, causal_refs: list[str]):
+        """Raise wages below the minimum and lower bread prices above the cap."""
+        s = self.state
+        for building in sorted(s.buildings.values(), key=lambda b: b.id):
+            if building.wage < s.policies.min_wage:
+                old, building.wage = building.wage, s.policies.min_wage
+                self.emit(
+                    "wage_changed",
+                    dict(building_id=building.id, old_wage=old, new_wage=building.wage),
+                    rationale="Town minimum wage",
+                    causal_refs=causal_refs,
+                )
+            cap = s.policies.bread_price_cap
+            if cap and building.prices.get("bread", 0) > cap:
+                old, building.prices["bread"] = building.prices["bread"], cap
+                self.emit(
+                    "price_changed",
+                    dict(building_id=building.id, resource="bread", old_price=old, new_price=cap),
+                    rationale="Town bread price cap",
+                    causal_refs=causal_refs,
+                )
 
     def _close(self, building: m.Building, actor_id: str | None, rationale: str | None):
         """Remove a business: cash and goods go to the owner, employees are released."""
@@ -1181,6 +1329,7 @@ class Engine:
         tx._settle_loans()
         tx._expire_offers()
         tx._innovation_day()
+        tx._settle_votes()
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:

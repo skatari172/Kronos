@@ -20,6 +20,7 @@ from kronos.routes import (
     market,
     resources,
     user,
+    votes,
     world,
 )
 from kronos.service import Service
@@ -92,6 +93,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         market,
         resources,
         inventions,
+        votes,
         backend,
         world,
         history,
