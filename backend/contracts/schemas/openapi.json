@@ -1479,6 +1479,158 @@
         }
       }
     },
+    "/api/agents/{citizen_id}/relationships": {
+      "get": {
+        "tags": [
+          "World"
+        ],
+        "summary": "List a citizen's relationships",
+        "description": "How this citizen feels about each citizen it knows, by trust (highest first).",
+        "operationId": "agent_relationships_api_agents__citizen_id__relationships_get",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RelationshipView"
+                  },
+                  "title": "Response Agent Relationships Api Agents  Citizen Id  Relationships Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/relationships/{a_id}/{b_id}": {
+      "get": {
+        "tags": [
+          "World"
+        ],
+        "summary": "Read one tie in both directions",
+        "description": "a_to_b is a's trust, grudge and type toward b; b_to_a the reverse.\n\nA direction without an entry is neutral (trust 0, acquaintance) with known false.",
+        "operationId": "relationship_api_relationships__a_id___b_id__get",
+        "parameters": [
+          {
+            "name": "a_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "A Id"
+            }
+          },
+          {
+            "name": "b_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "B Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelationshipPair"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{citizen_id}/interact": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Befriend, gift, ally, argue, insult, betray or mentor another citizen",
+        "description": "Submitted as an interact action; effects are fixed engine rules.\n\nThe target's feeling toward the actor changes (ally and argue change both directions).\ngift moves amount cents to the target; ally needs the target's trust >= 50; insult costs\nthe target 2 reputation, betray costs the actor 10, mentor gives the target 2. One\ninteraction per pair per tick.",
+        "operationId": "interact_api_agents__citizen_id__interact_post",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InteractRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/lots": {
       "get": {
         "tags": [
@@ -3189,6 +3341,9 @@
                       },
                       {
                         "$ref": "#/components/schemas/TenantEvicted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenInteracted"
                       }
                     ],
                     "discriminator": {
@@ -3239,7 +3394,8 @@
                         "rent_changed": "#/components/schemas/RentChanged",
                         "rent_missed": "#/components/schemas/RentMissed",
                         "rent_covered": "#/components/schemas/RentCovered",
-                        "tenant_evicted": "#/components/schemas/TenantEvicted"
+                        "tenant_evicted": "#/components/schemas/TenantEvicted",
+                        "citizen_interacted": "#/components/schemas/CitizenInteracted"
                       }
                     }
                   },
@@ -3706,6 +3862,9 @@
                       },
                       {
                         "$ref": "#/components/schemas/TenantEvicted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenInteracted"
                       }
                     ],
                     "discriminator": {
@@ -3756,7 +3915,8 @@
                         "rent_changed": "#/components/schemas/RentChanged",
                         "rent_missed": "#/components/schemas/RentMissed",
                         "rent_covered": "#/components/schemas/RentCovered",
-                        "tenant_evicted": "#/components/schemas/TenantEvicted"
+                        "tenant_evicted": "#/components/schemas/TenantEvicted",
+                        "citizen_interacted": "#/components/schemas/CitizenInteracted"
                       }
                     }
                   },
@@ -4649,6 +4809,14 @@
             "type": "array",
             "title": "Incoming Offers",
             "description": "Pending trade offers this citizen may accept or decline"
+          },
+          "ties": {
+            "items": {
+              "$ref": "#/components/schemas/RelationshipView"
+            },
+            "type": "array",
+            "title": "Ties",
+            "description": "Strongest feelings toward others: top few by |trust| or grudge"
           }
         },
         "additionalProperties": false,
@@ -4664,7 +4832,8 @@
           "neighbors",
           "available_actions",
           "loans",
-          "incoming_offers"
+          "incoming_offers",
+          "ties"
         ],
         "title": "AgentObservation",
         "description": "Everything one agent may see: its own state plus public facts, never other citizens."
@@ -5837,6 +6006,90 @@
           "research_until_tick"
         ],
         "title": "Citizen"
+      },
+      "CitizenInteracted": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "type": {
+            "type": "string",
+            "const": "citizen_interacted",
+            "title": "Type",
+            "default": "citizen_interacted"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/InteractionPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "action_id",
+          "type",
+          "payload"
+        ],
+        "title": "CitizenInteracted"
       },
       "CitizenMoved": {
         "properties": {
@@ -7938,6 +8191,115 @@
         ],
         "title": "Interact",
         "description": "Bounded relationship change; amount is only used by gift."
+      },
+      "InteractRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "Target Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "befriend",
+              "gift",
+              "ally",
+              "argue",
+              "insult",
+              "betray",
+              "mentor"
+            ],
+            "title": "Kind"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount",
+            "description": "Cents; required for gift only"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "target_id",
+          "kind"
+        ],
+        "title": "InteractRequest"
+      },
+      "InteractionPayload": {
+        "properties": {
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "befriend",
+              "gift",
+              "ally",
+              "argue",
+              "insult",
+              "betray",
+              "mentor"
+            ],
+            "title": "Kind"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount",
+            "default": 0
+          },
+          "actor_reputation": {
+            "type": "integer",
+            "title": "Actor Reputation"
+          },
+          "recipient_reputation": {
+            "type": "integer",
+            "title": "Recipient Reputation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recipient_id",
+          "kind",
+          "amount",
+          "actor_reputation",
+          "recipient_reputation"
+        ],
+        "title": "InteractionPayload",
+        "description": "One interact action. Reputations are after the interaction's side effects."
       },
       "InterventionApplied": {
         "properties": {
@@ -11768,15 +12130,54 @@
             "minimum": -100.0,
             "title": "Trust",
             "default": 0
+          },
+          "grudge": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Grudge",
+            "default": 0
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "acquaintance",
+              "friend",
+              "ally",
+              "rival",
+              "trade",
+              "employer",
+              "creditor",
+              "landlord"
+            ],
+            "title": "Type",
+            "default": "acquaintance"
+          },
+          "last_interaction_tick": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Interaction Tick",
+            "description": "Last tick the holder started an interact toward them"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "citizen_id",
-          "trust"
+          "trust",
+          "grudge",
+          "type",
+          "last_interaction_tick"
         ],
-        "title": "Relationship"
+        "title": "Relationship",
+        "description": "How the holding citizen feels about citizen_id (directed; the reverse may differ).\n\nSpec 0..1 values are scaled by 100: trust 0.7 is 70, grudge 0.5 is 50."
       },
       "RelationshipChanged": {
         "properties": {
@@ -11862,6 +12263,34 @@
         ],
         "title": "RelationshipChanged"
       },
+      "RelationshipPair": {
+        "properties": {
+          "a_id": {
+            "type": "string",
+            "title": "A Id"
+          },
+          "b_id": {
+            "type": "string",
+            "title": "B Id"
+          },
+          "a_to_b": {
+            "$ref": "#/components/schemas/RelationshipView"
+          },
+          "b_to_a": {
+            "$ref": "#/components/schemas/RelationshipView"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "a_id",
+          "b_id",
+          "a_to_b",
+          "b_to_a"
+        ],
+        "title": "RelationshipPair",
+        "description": "Both directions of one tie: a_to_b is a's feeling toward b."
+      },
       "RelationshipPayload": {
         "properties": {
           "recipient_id": {
@@ -11871,15 +12300,117 @@
           "trust": {
             "type": "integer",
             "title": "Trust"
+          },
+          "grudge": {
+            "type": "integer",
+            "title": "Grudge",
+            "default": 0
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "acquaintance",
+              "friend",
+              "ally",
+              "rival",
+              "trade",
+              "employer",
+              "creditor",
+              "landlord"
+            ],
+            "title": "Type",
+            "default": "acquaintance"
+          },
+          "citizen_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citizen Id",
+            "description": "Whom the feeling is about; null in older events means actor_id"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "recipient_id",
-          "trust"
+          "trust",
+          "grudge",
+          "type",
+          "citizen_id"
         ],
-        "title": "RelationshipPayload"
+        "title": "RelationshipPayload",
+        "description": "recipient_id's feeling toward citizen_id, after the change."
+      },
+      "RelationshipView": {
+        "properties": {
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "trust": {
+            "type": "integer",
+            "title": "Trust",
+            "default": 0
+          },
+          "grudge": {
+            "type": "integer",
+            "title": "Grudge",
+            "default": 0
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "acquaintance",
+              "friend",
+              "ally",
+              "rival",
+              "trade",
+              "employer",
+              "creditor",
+              "landlord"
+            ],
+            "title": "Type",
+            "default": "acquaintance"
+          },
+          "last_interaction_tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Interaction Tick"
+          },
+          "known": {
+            "type": "boolean",
+            "title": "Known",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "citizen_id",
+          "name",
+          "trust",
+          "grudge",
+          "type",
+          "last_interaction_tick",
+          "known"
+        ],
+        "title": "RelationshipView",
+        "description": "One directed tie with the other citizen's name; known is false when no entry exists."
       },
       "RentChangePayload": {
         "properties": {
@@ -14061,6 +14592,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/TenantEvicted"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenInteracted"
                 }
               ],
               "discriminator": {
@@ -14071,6 +14605,7 @@
                   "building_constructed": "#/components/schemas/BuildingConstructed",
                   "building_removed": "#/components/schemas/BuildingRemoved",
                   "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                  "citizen_interacted": "#/components/schemas/CitizenInteracted",
                   "citizen_moved": "#/components/schemas/CitizenMoved",
                   "citizen_removed": "#/components/schemas/CitizenRemoved",
                   "citizen_spawned": "#/components/schemas/CitizenSpawned",
@@ -16418,6 +16953,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/TenantEvicted"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenInteracted"
                 }
               ],
               "discriminator": {
@@ -16428,6 +16966,7 @@
                   "building_constructed": "#/components/schemas/BuildingConstructed",
                   "building_removed": "#/components/schemas/BuildingRemoved",
                   "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                  "citizen_interacted": "#/components/schemas/CitizenInteracted",
                   "citizen_moved": "#/components/schemas/CitizenMoved",
                   "citizen_removed": "#/components/schemas/CitizenRemoved",
                   "citizen_spawned": "#/components/schemas/CitizenSpawned",

@@ -25,7 +25,7 @@ world state ──observe()──▶ AgentObservation ──AgentService.decide(
           events + new state (saved, then broadcast) ◀── applied ──┘
 ```
 
-1. **Observe:** `kronos_sim/queries.py::observe()` builds what one citizen may see: its own `Citizen` record, derived `role` and `wealth_tier`, bakery bread prices, neighbor names, the runnable action types, its open loans, and trade offers waiting for its answer. It never includes other citizens' state. The observation route, `/decide`, and the tick loop all use this one builder.
+1. **Observe:** `kronos_sim/queries.py::observe()` builds what one citizen may see: its own `Citizen` record, derived `role` and `wealth_tier`, bakery bread prices, neighbor names, the runnable action types, its open loans, trade offers waiting for its answer, and its 5 strongest ties. It never includes other citizens' state. The observation route, `/decide`, and the tick loop all use this one builder.
 2. **Decide:** `AgentService.decide()` sends the observation to an `LLMProvider` and validates the JSON reply against `AgentAction`. There's a 3 s timeout and 1 retry by default (at most 2). It refuses proposals for a different citizen. Any failure raises `ProviderError`.
 3. **Submit:** `Service.submit_agent_action()` takes the lock and checks `branch_id` + `expected_sequence` (409 if stale). It then runs the action through `Engine.apply()`. The AI call happens _before_ the lock, so a slow model never blocks the API.
 4. **Outcome:** the result is an `ActionResult` with `action_id`, `status` (`applied` or `rejected`), `sequence`, `event_ids`, and `error` code. Rejections are committed too: an `action_rejected` event, plus a memory such as `Rejected buy: Not enough stock`. Every event from the action carries its `action_id`.
@@ -53,28 +53,28 @@ world state ──observe()──▶ AgentObservation ──AgentService.decide(
 - **Loans:** `lend` makes an offer; the borrower must `respond_loan`. Owed = principal + principal × `rate_bps` / 10000 (flat). `repay` partially or fully. Unpaid after `due_tick` → defaulted: lender trust −30, borrower reputation −5.
 - **Resources:** `WorldState.resources` holds shared natural stocks (wheat only for now). Employees of a matching business can `gather_resource` (partial gathers allowed).
 - **Inventions:** `crop_rotation` (farm wheat ×1.4) and `water_mill` (bakery bread ×2). `research` with money or with time (forfeits wages). The top contributor owns it; licenses are offers the recipient must `respond_license` to the same tick; owners or licensees `adopt_invention` for their business.
+- **Relationships:** `interact` (`befriend`, `gift`, `ally`, `argue`, `insult`, `betray`, `mentor`) changes the target's trust and grudge toward the actor (`ally` and `argue` both ways); once per pair per tick; `ally` needs trust ≥ 50. Owners prefer applicants they trust when unanswered applications resolve.
 - **Town vote and influence:** influence (basis points) = 50% wealth share + 30% reputation + 20% average trust from others. One `propose_vote` at a time, at most every 10 days; open 3 days; passes if influence-weighted yes > 50% of ballots cast. Policies: `min_wage`, `bread_price_cap` (both enforced on `set_wage`/`set_price` and applied daily) and `market_tax` (share of each purchase, split equally among all citizens; remainder stays with the seller).
 
 ### Citizen data the AI layer uses
 
-| Field                                                     | Meaning                                                                                                                                 |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `money`, `inventory` (`wheat`, `bread`), `hunger` (0–100) | Needs and means                                                                                                                         |
-| `employer_id`, `occupation`                               | Job. `employed` = the employer building exists                                                                                          |
-| `goal_weights`                                            | `wealth` / `influence` / `safety` / `reputation`, integers summing to 100. Changed by `adjust_goals` (±10 per field, then renormalised) |
-| `personality`, `goals`                                    | Free text for prompts                                                                                                                   |
-| `memories`                                                | The last 8 lines: messages sent and received, and rejected actions                                                                      |
-| `relationships`                                           | `trust` −100…100 toward others. Each message received raises it by 1; a loan default costs the lender's trust 30                        |
-| `reputation`                                              | 0–100, default 50. Feeds influence; a loan default costs 5                                                                              |
-| `research_invention_id`, `research_until_tick`            | Time-mode research in progress (wages are forfeited until then)                                                                         |
-| _derived_ `role`                                          | `business_owner` if the citizen owns a building, otherwise `commoner`                                                                   |
-| _derived_ `wealth_tier`                                   | `rich` ≥ 10,000 cents, `middle` ≥ 3,000, otherwise `poor` (placeholders until the Veloria seed)                                         |
-| _derived_ `influence`                                     | Basis points 0–10000; see "Town vote and influence" above. `GET /api/agents/{id}/influence` shows the breakdown                         |
+| Field                                                     | Meaning                                                                                                                                                      |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `money`, `inventory` (`wheat`, `bread`), `hunger` (0–100) | Needs and means                                                                                                                                              |
+| `employer_id`, `occupation`                               | Job. `employed` = the employer building exists                                                                                                               |
+| `goal_weights`                                            | `wealth` / `influence` / `safety` / `reputation`, integers summing to 100. Changed by `adjust_goals` (±10 per field, then renormalised)                      |
+| `personality`, `goals`                                    | Free text for prompts                                                                                                                                        |
+| `memories`                                                | The last 8 lines: messages sent and received, and rejected actions                                                                                           |
+| `relationships`                                           | Directed ties: `trust` −100…100, `grudge` 0–100, `type` (acquaintance, friend, ally, rival, …). Changed by `interact`, messages (+1 trust) and loan defaults |
+| `reputation`                                              | 0–100, default 50. Feeds influence; a loan default costs 5                                                                                                   |
+| `research_invention_id`, `research_until_tick`            | Time-mode research in progress (wages are forfeited until then)                                                                                              |
+| _derived_ `role`                                          | `business_owner` if the citizen owns a building, otherwise `commoner`                                                                                        |
+| _derived_ `wealth_tier`                                   | `rich` ≥ 10,000 cents, `middle` ≥ 3,000, otherwise `poor` (placeholders until the Veloria seed)                                                              |
+| _derived_ `influence`                                     | Basis points 0–10000; see "Town vote and influence" above. `GET /api/agents/{id}/influence` shows the breakdown                                              |
 
 ### Actions
 
-- **`AgentAction` has 36 types; the engine runs 35** (`engine.SUPPORTED_ACTIONS`): `buy`, `sell`, `transfer_money`, `set_price`, `produce`, `consume`, `communicate`, `construct_building`, `upgrade_building`, `move_to`, `adjust_goals`, `found_business`, `close_business`, `set_wage`, `hire`, `fire`, `gather_resource`, `apply_job`, `quit_job`, `reject_application`, `lend`, `respond_loan`, `repay`, `trade`, `respond_trade`, `research`, `license_invention`, `respond_license`, `adopt_invention`, `propose_vote`, `vote`, `lease_lot`, `set_rent`, `pay_rent`, `evict`.
-- **Only `interact` is schema-only** (relationships, §5.2); it is rejected with `not_supported`.
+- **`AgentAction` has 36 types and the engine runs all of them** (`engine.SUPPORTED_ACTIONS`): `buy`, `sell`, `transfer_money`, `set_price`, `produce`, `consume`, `communicate`, `construct_building`, `upgrade_building`, `move_to`, `adjust_goals`, `found_business`, `close_business`, `set_wage`, `hire`, `fire`, `gather_resource`, `apply_job`, `quit_job`, `reject_application`, `lend`, `respond_loan`, `repay`, `trade`, `respond_trade`, `research`, `license_invention`, `respond_license`, `adopt_invention`, `propose_vote`, `vote`, `lease_lot`, `set_rent`, `pay_rent`, `evict`, `interact`.
 - **Who may do what:** `GET /api/roles` returns the permission matrix as data. Today the engine enforces ownership per action (`not_owner`); roles themselves aren't checked.
 - **Error codes:** `ActionErrorCode` in `models.py` (`insufficient_funds`, `not_owner`, `out_of_stock`, `lot_occupied`, `unknown_entity`, …).
 
@@ -106,6 +106,7 @@ world state ──observe()──▶ AgentObservation ──AgentService.decide(
 | `GET /api/loans`, `/{id}`; `POST /api/loans`, `/{id}/respond`, `/{id}/repay`                                                                        | Loan offers, acceptance, repayment                                                                        |
 | `GET /api/resources`; `POST /api/agents/{id}/gather`                                                                                                | Shared stocks; gathering at the citizen's employer                                                        |
 | `GET /api/inventions`, `/{id}`, `/license-offers`; `POST /api/inventions/{id}/research`, `/license`, `/adopt`, `/license-offers/{offer_id}/respond` | Research, licensing, adoption                                                                             |
+| `GET /api/agents/{id}/relationships`, `GET /api/relationships/{a}/{b}`; `POST /api/agents/{id}/interact`                                            | Ties and social actions                                                                                   |
 | `GET /api/roles`, `GET /api/agents/{id}/influence`, `GET /api/votes?status=`; `POST /api/votes`, `/{id}/ballot`                                     | Permission matrix, influence, town votes                                                                  |
 
 ### Extending
