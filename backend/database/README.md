@@ -4,12 +4,11 @@ This directory stores the authoritative SQLite database for local KRONOS simulat
 
 ## Files
 
+- `schema.sql`: Full relational DDL defining 14 normalized tables for simulation entities, economy, governance, and history.
+- `mock_data.sql`: Mock/seed SQL dataset matching the authoritative `initial_world(42)` simulation state.
 - `kronos.db`: The authoritative SQLite database containing:
-  - `branches`: Active and historical branch metadata and serialized world states
-  - `snapshots`: Immutable point-in-time state checkpoints with SHA-256 integrity hashes
-  - `actions`: Durable pending queue and permanent original proposals / applied or rejected results
-  - `events`: Append-only event ledger tracking actions, prices, transactions, and dialogue
-  - `settings`: Active timeline pointer and local simulation configuration
+  - **Relational Tables**: `world`, `plots`, `inventions`, `citizens`, `buildings`, `resources`, `job_applications`, `loans`, `trade_offers`, `license_offers`, `votes`
+  - **History & Queue**: `branches`, `snapshots`, `actions`, `events`, `settings`
 - `*.db-wal`, `*.db-shm`: Ephemeral SQLite write-ahead log and shared memory files (ignored by Git)
 
 ## Usage
