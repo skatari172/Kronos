@@ -29,9 +29,8 @@ async def status(service: ServiceDependency):
     summary="Advance the simulation by one day",
 )
 async def tick(body: m.MutationRequest, service: ServiceDependency):
-    async with service.lock:
-        service.check(body)
-        return await service.tick()
+    # Service.tick takes the lock itself so agent proposals are gathered outside it.
+    return await service.tick(body)
 
 
 @router.post(

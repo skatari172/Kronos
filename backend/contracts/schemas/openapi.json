@@ -4900,6 +4900,22 @@
             "type": "array",
             "title": "Ties",
             "description": "Strongest feelings toward others: top few by |trust| or grudge"
+          },
+          "open_jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobOpening"
+            },
+            "type": "array",
+            "title": "Open Jobs",
+            "description": "Public job openings (businesses with a free slot)"
+          },
+          "businesses": {
+            "items": {
+              "$ref": "#/components/schemas/BusinessProfile"
+            },
+            "type": "array",
+            "title": "Businesses",
+            "description": "Businesses this citizen owns, with their staff"
           }
         },
         "additionalProperties": false,
@@ -4916,7 +4932,9 @@
           "available_actions",
           "loans",
           "incoming_offers",
-          "ties"
+          "ties",
+          "open_jobs",
+          "businesses"
         ],
         "title": "AgentObservation",
         "description": "Everything one agent may see: its own state plus public facts, never other citizens."
@@ -6073,6 +6091,21 @@
             "title": "Destitute Days",
             "description": "Consecutive days ending with hunger 100 and no money; 3 means they leave",
             "default": 0
+          },
+          "memory_summary": {
+            "type": "string",
+            "maxLength": 400,
+            "title": "Memory Summary",
+            "description": "Rolling digest of routine events and memories older than the 8-line window",
+            "default": ""
+          },
+          "memory_tally": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Memory Tally",
+            "description": "Counters behind memory_summary (wages, purchases, meals, folded lines)"
           }
         },
         "additionalProperties": false,
@@ -6094,7 +6127,9 @@
           "reputation",
           "research_invention_id",
           "research_until_tick",
-          "destitute_days"
+          "destitute_days",
+          "memory_summary",
+          "memory_tally"
         ],
         "title": "Citizen"
       },
@@ -6975,13 +7010,24 @@
           },
           "result": {
             "$ref": "#/components/schemas/ActionResult"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "mock",
+              "fallback"
+            ],
+            "title": "Source",
+            "description": "Who chose the action: a real model, the offline mock, or the utility fallback used when the provider failed. Also prefixed to the rationale, e.g. [fallback]"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "action",
-          "result"
+          "result",
+          "source"
         ],
         "title": "DecisionResult"
       },
@@ -8246,6 +8292,44 @@
         ],
         "title": "GoalsUpdateRequest"
       },
+      "GrantIntervention": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "grant_money",
+            "title": "Type",
+            "default": "grant_money"
+          },
+          "citizen_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citizen Id",
+            "description": "One citizen; null = everyone"
+          },
+          "amount": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": -1000000.0,
+            "title": "Amount",
+            "description": "Cents per citizen; not zero"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "citizen_id",
+          "amount"
+        ],
+        "title": "GrantIntervention",
+        "description": "Money from outside the economy: positive gives, negative takes (never below zero)."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -8344,6 +8428,44 @@
           "citizen_id"
         ],
         "title": "Hire"
+      },
+      "HungerIntervention": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "adjust_hunger",
+            "title": "Type",
+            "default": "adjust_hunger"
+          },
+          "citizen_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citizen Id",
+            "description": "One citizen; null = everyone"
+          },
+          "change": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "title": "Change",
+            "description": "Added to hunger; not zero"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "citizen_id",
+          "change"
+        ],
+        "title": "HungerIntervention",
+        "description": "Feast (negative change) or famine (positive change); hunger stays within 0..100."
       },
       "InfluenceBreakdown": {
         "properties": {
@@ -8716,25 +8838,97 @@
             "type": "string",
             "title": "Text"
           },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "modify_price",
+              "set_wage",
+              "grant_money",
+              "adjust_resource",
+              "adjust_hunger",
+              "set_policy"
+            ],
+            "title": "Kind",
+            "default": "modify_price"
+          },
           "scope": {
             "type": "string",
-            "const": "all_bakeries",
             "title": "Scope",
             "default": "all_bakeries"
           },
           "percent": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Percent"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PriceIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WageIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GrantIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/HungerIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PolicyIntervention"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "adjust_hunger": "#/components/schemas/HungerIntervention",
+                    "adjust_resource": "#/components/schemas/ResourceIntervention",
+                    "grant_money": "#/components/schemas/GrantIntervention",
+                    "modify_price": "#/components/schemas/PriceIntervention",
+                    "set_policy": "#/components/schemas/PolicyIntervention",
+                    "set_wage": "#/components/schemas/WageIntervention"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "affected_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Affected Ids",
+            "description": "Citizens or businesses the intervention changed"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "text",
+          "kind",
           "scope",
-          "percent"
+          "percent",
+          "command",
+          "affected_ids"
         ],
-        "title": "InterventionPayload"
+        "title": "InterventionPayload",
+        "description": "`kind` names the intervention; `command` is the full parsed command (absent on events\nsaved before other kinds existed). `percent` is kept for bread price changes."
       },
       "InterventionRequest": {
         "properties": {
@@ -8766,7 +8960,38 @@
       "InterventionResult": {
         "properties": {
           "command": {
-            "$ref": "#/components/schemas/PriceIntervention"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PriceIntervention"
+              },
+              {
+                "$ref": "#/components/schemas/WageIntervention"
+              },
+              {
+                "$ref": "#/components/schemas/GrantIntervention"
+              },
+              {
+                "$ref": "#/components/schemas/ResourceIntervention"
+              },
+              {
+                "$ref": "#/components/schemas/HungerIntervention"
+              },
+              {
+                "$ref": "#/components/schemas/PolicyIntervention"
+              }
+            ],
+            "title": "Command",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "adjust_hunger": "#/components/schemas/HungerIntervention",
+                "adjust_resource": "#/components/schemas/ResourceIntervention",
+                "grant_money": "#/components/schemas/GrantIntervention",
+                "modify_price": "#/components/schemas/PriceIntervention",
+                "set_policy": "#/components/schemas/PolicyIntervention",
+                "set_wage": "#/components/schemas/WageIntervention"
+              }
+            }
           },
           "update": {
             "$ref": "#/components/schemas/WorldUpdate"
@@ -11801,6 +12026,41 @@
         ],
         "title": "PolicyChanged"
       },
+      "PolicyIntervention": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "set_policy",
+            "title": "Type",
+            "default": "set_policy"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "market_tax",
+              "bread_price_cap",
+              "min_wage"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Value",
+            "description": "Cents, or basis points for market_tax"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "kind",
+          "value"
+        ],
+        "title": "PolicyIntervention",
+        "description": "Put a town policy in force directly, without a vote. 0 lifts it."
+      },
       "PolicyPayload": {
         "properties": {
           "kind": {
@@ -11995,7 +12255,8 @@
           "scope",
           "percent"
         ],
-        "title": "PriceIntervention"
+        "title": "PriceIntervention",
+        "description": "Change every bakery's bread price by a percentage."
       },
       "PricePayload": {
         "properties": {
@@ -13831,6 +14092,54 @@
           "payload"
         ],
         "title": "ResourceGathered"
+      },
+      "ResourceIntervention": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "adjust_resource",
+            "title": "Type",
+            "default": "adjust_resource"
+          },
+          "resource": {
+            "type": "string",
+            "const": "wheat",
+            "title": "Resource",
+            "default": "wheat"
+          },
+          "stock_change": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": -10000.0,
+            "title": "Stock Change",
+            "description": "Added to the stock (clamped at zero)",
+            "default": 0
+          },
+          "regen_per_tick": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regen Per Tick",
+            "description": "New daily regrowth; null keeps it"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "resource",
+          "stock_change",
+          "regen_per_tick"
+        ],
+        "title": "ResourceIntervention",
+        "description": "Harvest boom or drought: change a natural stock and/or its daily regrowth."
       },
       "ResourceInventory-Input": {
         "properties": {
@@ -17088,6 +17397,60 @@
           "payload"
         ],
         "title": "WageChanged"
+      },
+      "WageIntervention": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "set_wage",
+            "title": "Type",
+            "default": "set_wage"
+          },
+          "scope": {
+            "type": "string",
+            "const": "all_businesses",
+            "title": "Scope",
+            "default": "all_businesses"
+          },
+          "wage": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000000.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wage",
+            "description": "New wage in cents"
+          },
+          "percent": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 200.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent",
+            "description": "Relative change"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "scope",
+          "wage",
+          "percent"
+        ],
+        "title": "WageIntervention",
+        "description": "Set every business's daily wage, either to `wage` cents or by `percent`."
       },
       "WagePayload": {
         "properties": {

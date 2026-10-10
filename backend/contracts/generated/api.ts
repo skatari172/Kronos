@@ -1599,6 +1599,16 @@ export interface components {
              * @description Strongest feelings toward others: top few by |trust| or grudge
              */
             ties: components["schemas"]["RelationshipView"][];
+            /**
+             * Open Jobs
+             * @description Public job openings (businesses with a free slot)
+             */
+            open_jobs: components["schemas"]["JobOpening"][];
+            /**
+             * Businesses
+             * @description Businesses this citizen owns, with their staff
+             */
+            businesses: components["schemas"]["BusinessProfile"][];
         };
         /** AgentOffers */
         AgentOffers: {
@@ -2024,6 +2034,19 @@ export interface components {
              * @default 0
              */
             destitute_days: number;
+            /**
+             * Memory Summary
+             * @description Rolling digest of routine events and memories older than the 8-line window
+             * @default
+             */
+            memory_summary: string;
+            /**
+             * Memory Tally
+             * @description Counters behind memory_summary (wages, purchases, meals, folded lines)
+             */
+            memory_tally: {
+                [key: string]: number;
+            };
         };
         /** CitizenInteracted */
         CitizenInteracted: {
@@ -2279,6 +2302,12 @@ export interface components {
             /** Action */
             action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"] | components["schemas"]["RejectApplication-Output"] | components["schemas"]["RespondLoan-Output"] | components["schemas"]["RespondLicense-Output"];
             result: components["schemas"]["ActionResult"];
+            /**
+             * Source
+             * @description Who chose the action: a real model, the offline mock, or the utility fallback used when the provider failed. Also prefixed to the rationale, e.g. [fallback]
+             * @enum {string}
+             */
+            source: "llm" | "mock" | "fallback";
         };
         /** EmployeeRequest */
         EmployeeRequest: {
@@ -2711,6 +2740,27 @@ export interface components {
             /** Rationale */
             rationale?: string | null;
         };
+        /**
+         * GrantIntervention
+         * @description Money from outside the economy: positive gives, negative takes (never below zero).
+         */
+        GrantIntervention: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "grant_money";
+            /**
+             * Citizen Id
+             * @description One citizen; null = everyone
+             */
+            citizen_id: string | null;
+            /**
+             * Amount
+             * @description Cents per citizen; not zero
+             */
+            amount: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2747,6 +2797,27 @@ export interface components {
             building_id: string;
             /** Citizen Id */
             citizen_id: string;
+        };
+        /**
+         * HungerIntervention
+         * @description Feast (negative change) or famine (positive change); hunger stays within 0..100.
+         */
+        HungerIntervention: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "adjust_hunger";
+            /**
+             * Citizen Id
+             * @description One citizen; null = everyone
+             */
+            citizen_id: string | null;
+            /**
+             * Change
+             * @description Added to hunger; not zero
+             */
+            change: number;
         };
         /**
          * InfluenceBreakdown
@@ -2885,18 +2956,34 @@ export interface components {
             type: "intervention_applied";
             payload: components["schemas"]["InterventionPayload"];
         };
-        /** InterventionPayload */
+        /**
+         * InterventionPayload
+         * @description `kind` names the intervention; `command` is the full parsed command (absent on events
+         *     saved before other kinds existed). `percent` is kept for bread price changes.
+         */
         InterventionPayload: {
             /** Text */
             text: string;
             /**
+             * Kind
+             * @default modify_price
+             * @enum {string}
+             */
+            kind: "modify_price" | "set_wage" | "grant_money" | "adjust_resource" | "adjust_hunger" | "set_policy";
+            /**
              * Scope
              * @default all_bakeries
-             * @constant
              */
-            scope: "all_bakeries";
+            scope: string;
             /** Percent */
-            percent: number;
+            percent: number | null;
+            /** Command */
+            command: (components["schemas"]["PriceIntervention"] | components["schemas"]["WageIntervention"] | components["schemas"]["GrantIntervention"] | components["schemas"]["ResourceIntervention"] | components["schemas"]["HungerIntervention"] | components["schemas"]["PolicyIntervention"]) | null;
+            /**
+             * Affected Ids
+             * @description Citizens or businesses the intervention changed
+             */
+            affected_ids: string[];
         };
         /** InterventionRequest */
         InterventionRequest: {
@@ -2909,7 +2996,8 @@ export interface components {
         };
         /** InterventionResult */
         InterventionResult: {
-            command: components["schemas"]["PriceIntervention"];
+            /** Command */
+            command: components["schemas"]["PriceIntervention"] | components["schemas"]["WageIntervention"] | components["schemas"]["GrantIntervention"] | components["schemas"]["ResourceIntervention"] | components["schemas"]["HungerIntervention"] | components["schemas"]["PolicyIntervention"];
             update: components["schemas"]["WorldUpdate"];
         };
         /**
@@ -4034,6 +4122,27 @@ export interface components {
             type: "policy_changed";
             payload: components["schemas"]["PolicyPayload"];
         };
+        /**
+         * PolicyIntervention
+         * @description Put a town policy in force directly, without a vote. 0 lifts it.
+         */
+        PolicyIntervention: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "set_policy";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "market_tax" | "bread_price_cap" | "min_wage";
+            /**
+             * Value
+             * @description Cents, or basis points for market_tax
+             */
+            value: number;
+        };
         /** PolicyPayload */
         PolicyPayload: {
             /**
@@ -4087,12 +4196,14 @@ export interface components {
             /** Points */
             points: components["schemas"]["PricePoint"][];
         };
-        /** PriceIntervention */
+        /**
+         * PriceIntervention
+         * @description Change every bakery's bread price by a percentage.
+         */
         PriceIntervention: {
             /**
-             * Type
-             * @default modify_price
-             * @constant
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
             type: "modify_price";
             /**
@@ -4781,6 +4892,34 @@ export interface components {
              */
             type: "resource_gathered";
             payload: components["schemas"]["GatherPayload"];
+        };
+        /**
+         * ResourceIntervention
+         * @description Harvest boom or drought: change a natural stock and/or its daily regrowth.
+         */
+        ResourceIntervention: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "adjust_resource";
+            /**
+             * Resource
+             * @default wheat
+             * @constant
+             */
+            resource: "wheat";
+            /**
+             * Stock Change
+             * @description Added to the stock (clamped at zero)
+             * @default 0
+             */
+            stock_change: number;
+            /**
+             * Regen Per Tick
+             * @description New daily regrowth; null keeps it
+             */
+            regen_per_tick: number | null;
         };
         /** ResourceInventory */
         "ResourceInventory-Input": {
@@ -5908,6 +6047,33 @@ export interface components {
              */
             type: "wage_changed";
             payload: components["schemas"]["WagePayload"];
+        };
+        /**
+         * WageIntervention
+         * @description Set every business's daily wage, either to `wage` cents or by `percent`.
+         */
+        WageIntervention: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "set_wage";
+            /**
+             * Scope
+             * @default all_businesses
+             * @constant
+             */
+            scope: "all_businesses";
+            /**
+             * Wage
+             * @description New wage in cents
+             */
+            wage: number | null;
+            /**
+             * Percent
+             * @description Relative change
+             */
+            percent: number | null;
         };
         /** WagePayload */
         WagePayload: {

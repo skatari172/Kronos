@@ -270,6 +270,7 @@ def test_decide_submits_the_provider_choice(client):
     assert decision["action"]["type"] == "communicate"
     assert decision["action"]["actor_id"] == "citizen-6"
     assert decision["result"]["status"] == "applied"
+    assert decision["source"] == "mock" and decision["action"]["rationale"].startswith("[mock] ")
     events = client.get("/api/history/events?branch_id=main").json()
     assert [e["id"] for e in events] == decision["result"]["event_ids"]
     assert all(e["action_id"] == decision["result"]["action_id"] for e in events)

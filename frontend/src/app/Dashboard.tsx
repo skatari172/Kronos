@@ -147,8 +147,11 @@ export function Dashboard() {
     });
     useWorld.getState().ingest(result.update);
     setText("");
+    const command = result.command;
     setNotice(
-      `Bread prices changed by ${result.command.percent}% across all bakeries.`,
+      command.type === "modify_price"
+        ? `Bread prices changed by ${command.percent}% across all bakeries.`
+        : `Intervention applied: ${command.type.replace("_", " ")}.`,
     );
   }
   async function seek(id: string) {

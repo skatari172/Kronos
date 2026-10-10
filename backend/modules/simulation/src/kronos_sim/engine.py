@@ -2,6 +2,7 @@
 
 import json
 import random
+import re
 from decimal import ROUND_HALF_UP, Decimal
 
 from pydantic import TypeAdapter
@@ -183,6 +184,72 @@ def _check_build_rights(plot: m.Plot, citizen_id: str):
         raise InvalidAction("not_owner", "This lot belongs to someone else; lease it first")
 
 
+# Memories (Engine._remember, applied to every emitted event; no AI, no RNG).
+MEMORY_WINDOW = 8  # Recent first-person lines kept verbatim on each citizen.
+SUMMARY_MAX = 400  # Characters; Citizen.memory_summary is bounded.
+_REPEAT = re.compile(r"(.*) \(x(\d+)\)")
+_MESSAGE = re.compile(r"[^:]{1,60}: .*")
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count:,} {word}{'' if count == 1 else 's'}"
+
+
+def _render_summary(t: dict[str, int]) -> str:
+    """Deterministic one-line digest of a citizen's memory tally."""
+    parts = []
+    if t.get("wage_days"):
+        days = _plural(t["wage_days"], "day")
+        parts.append(f"earned {t.get('wage_cents', 0):,} cents in wages over {days}")
+    if t.get("payout_cents"):
+        parts.append(f"received {t['payout_cents']:,} cents in business payouts")
+    if t.get("purchases"):
+        parts.append(
+            f"bought goods {_plural(t['purchases'], 'time')} for {t.get('spent_cents', 0):,} cents"
+        )
+    if t.get("meals"):
+        parts.append(f"ate {_plural(t['meals'], 'time')}")
+    if t.get("tax_cents"):
+        parts.append(f"received {t['tax_cents']:,} cents in market tax shares")
+    if t.get("rejections"):
+        parts.append(_plural(t["rejections"], "rejected action"))
+    if t.get("messages"):
+        parts.append(_plural(t["messages"], "message"))
+    if t.get("notes"):
+        parts.append(_plural(t["notes"], "older event"))
+    text = "Earlier: " + "; ".join(parts) if parts else ""
+    return text if len(text) <= SUMMARY_MAX else text[: SUMMARY_MAX - 3] + "..."
+
+
+def tally(citizen: m.Citizen, **counts: int):
+    """Add routine counts (wages, meals, purchases, folded lines) to the rolling summary."""
+    for key, value in counts.items():
+        citizen.memory_tally[key] = citizen.memory_tally.get(key, 0) + value
+    citizen.memory_summary = _render_summary(citizen.memory_tally)
+
+
+def remember(citizen: m.Citizen, line: str):
+    """Append one memory line. A repeat of the latest line becomes "line (xN)"; lines beyond
+    MEMORY_WINDOW fold, oldest first, into the counts behind memory_summary."""
+    if citizen.memories:
+        repeat = _REPEAT.fullmatch(citizen.memories[-1])
+        last, count = (repeat[1], int(repeat[2])) if repeat else (citizen.memories[-1], 1)
+        if last == line:
+            citizen.memories[-1] = f"{line} (x{count + 1})"
+            return
+    citizen.memories.append(line)
+    while len(citizen.memories) > MEMORY_WINDOW:
+        oldest = citizen.memories.pop(0)
+        repeat = _REPEAT.fullmatch(oldest)
+        text, count = (repeat[1], int(repeat[2])) if repeat else (oldest, 1)
+        if text.startswith("Rejected "):
+            tally(citizen, rejections=count)
+        elif _MESSAGE.fullmatch(text):
+            tally(citizen, messages=count)
+        else:
+            tally(citizen, notes=count)
+
+
 class Engine:
     def __init__(self, state: m.WorldState):
         self.state = state.model_copy(deep=True)
@@ -208,7 +275,168 @@ class Engine:
             )
         )
         self.events.append(event)
+        self._remember(kind, payload, actor_id)
         return event
+
+    def _name(self, entity_id: str | None) -> str:
+        s = self.state
+        entity = s.citizens.get(entity_id) or s.buildings.get(entity_id)
+        return entity.name if entity is not None else str(entity_id)
+
+    def _remember(self, kind: str, p: dict, actor_id: str | None):
+        """Turn one event into first-person memories for the citizens it involves.
+
+        Salient events become lines (Engine `remember`); routine ones (wages, meals, everyday
+        purchases, tax shares) only add to the rolling summary counts. Rejections are written
+        by `reject`, so action_rejected is skipped here. Deterministic; never touches the RNG.
+        """
+        s = self.state
+        citizen = s.citizens.get
+        name = self._name
+
+        def note(cid, line):
+            if citizen(cid) is not None:
+                remember(citizen(cid), line)
+
+        def staff_and_owner(building_id):
+            """The business's owner and its staff other than the actor (who already knows)."""
+            building = s.buildings.get(building_id)
+            staff = sorted(
+                c.id
+                for c in s.citizens.values()
+                if c.employer_id == building_id and c.id != actor_id
+            )
+            return (building.owner_id if building else None), staff
+
+        if kind == "transaction_completed":
+            sender, recipient, amount = p["sender_id"], p["recipient_id"], p["amount"]
+            if p.get("resource"):
+                if citizen(sender) and sender != actor_id:
+                    return  # Goods handed over in a trade; trade events cover it.
+                if citizen(sender) and recipient in s.buildings:
+                    tally(citizen(sender), purchases=1, spent_cents=amount)
+                elif sender in s.buildings and citizen(recipient) and amount:
+                    resource = p["resource"]
+                    note(
+                        recipient,
+                        f"Sold {p['quantity']} {resource} to {name(sender)} for {amount:,} cents",
+                    )
+            elif sender in s.buildings and citizen(recipient):
+                wage = citizen(recipient).employer_id == sender and actor_id == recipient
+                if wage:
+                    tally(citizen(recipient), wage_cents=amount, wage_days=1)
+                else:
+                    tally(citizen(recipient), payout_cents=amount)
+            elif sender == "town" and citizen(recipient):
+                note(recipient, f"The town gave me {amount:,} cents")
+            elif recipient == "town" and citizen(sender):
+                note(sender, f"The town took {amount:,} cents from me")
+        elif kind == "resource_consumed" and p["resource"] == "bread" and citizen(p["entity_id"]):
+            tally(citizen(p["entity_id"]), meals=p["quantity"])
+        elif kind == "tax_collected":
+            for cid in p["recipient_ids"]:
+                if citizen(cid):
+                    tally(citizen(cid), tax_cents=p["per_citizen"])
+        elif kind == "price_changed":
+            owner, staff = staff_and_owner(p["building_id"])
+            line = (
+                f"{p['resource'].capitalize()} at {name(p['building_id'])} went from "
+                f"{p['old_price']:,} to {p['new_price']:,} cents"
+            )
+            for cid in staff + ([owner] if owner not in (actor_id, *staff) else []):
+                note(cid, line)
+        elif kind == "wage_changed":
+            owner, staff = staff_and_owner(p["building_id"])
+            for cid in staff:
+                note(
+                    cid,
+                    f"My wage at {name(p['building_id'])} went from "
+                    f"{p['old_wage']:,} to {p['new_wage']:,} cents",
+                )
+            if owner not in (actor_id, *staff):
+                note(
+                    owner, f"Wages at {name(p['building_id'])} were set to {p['new_wage']:,} cents"
+                )
+        elif kind == "employment_changed" and p["building_id"] is None:
+            previous = name(p.get("previous_building_id"))
+            worker = p["citizen_id"]
+            note(
+                worker,
+                f"I quit my job at {previous}"
+                if actor_id == worker
+                else f"I lost my job at {previous}",
+            )
+        elif kind == "job_application_resolved":
+            building = name(p["building_id"])
+            if p["outcome"] == "accepted":
+                note(p["citizen_id"], f"Hired by {building}")
+            elif p["outcome"] == "rejected":
+                note(p["citizen_id"], f"{building} rejected my application")
+        elif kind == "agent_spoke":
+            note(actor_id, f"To {name(p['recipient_id'])}: {p['message']}")
+            note(p["recipient_id"], f"{name(actor_id)}: {p['message']}")
+        elif kind == "citizen_interacted":
+            verb = INTERACTION_VERBS[p["kind"]]
+            note(actor_id, f"I {verb} {name(p['recipient_id'])}")
+            note(p["recipient_id"], f"{name(actor_id)} {verb} me")
+        elif kind == "license_offered":
+            invention = s.inventions.get(p["invention_id"])
+            note(
+                p["recipient_id"],
+                f"{name(p['owner_id'])} offers a "
+                f"{invention.name if invention else p['invention_id']} license for {p['fee']} "
+                f"({p['offer_id']})",
+            )
+        elif kind == "license_resolved" and p.get("status") in ("accepted", "declined"):
+            note(p["owner_id"], f"{name(p['recipient_id'])} {p['status']} my license offer")
+        elif kind == "trade_offered":
+            note(p["recipient_id"], f"{name(p['sender_id'])} offered me a trade ({p['offer_id']})")
+        elif kind in ("trade_accepted", "trade_declined", "trade_expired"):
+            verb = kind.removeprefix("trade_")
+            note(p["sender_id"], f"Trade {p['offer_id']} with {name(p['recipient_id'])} {verb}")
+        elif kind == "loan_offered":
+            note(
+                p["borrower_id"],
+                f"{name(p['lender_id'])} offered me a {p['principal']:,}-cent loan "
+                f"({p['loan_id']})",
+            )
+        elif kind in ("loan_accepted", "loan_declined"):
+            verb = kind.removeprefix("loan_")
+            note(p["lender_id"], f"{name(p['borrower_id'])} {verb} my loan {p['loan_id']}")
+        elif kind == "loan_repaid":
+            note(p["lender_id"], f"{name(p['borrower_id'])} repaid me {p['amount']:,} cents")
+        elif kind == "loan_defaulted":
+            note(
+                p["borrower_id"], f"I defaulted on loan {p['loan_id']} from {name(p['lender_id'])}"
+            )
+            note(p["lender_id"], f"{name(p['borrower_id'])} defaulted on my loan {p['loan_id']}")
+        elif kind == "rent_missed":
+            note(p["tenant_id"], f"I missed rent on {p['plot_id']}; I owe {p['arrears']:,} cents")
+        elif kind == "tenant_evicted" and actor_id != p["tenant_id"]:
+            note(p["tenant_id"], f"I was evicted from {p['plot_id']}")
+            if actor_id == p["owner_id"]:
+                note(p["owner_id"], f"I evicted {name(p['tenant_id'])} from {p['plot_id']}")
+        elif kind == "lot_leased" and actor_id != p["owner_id"]:
+            note(p["owner_id"], f"{name(p['tenant_id'])} leased my lot {p['plot_id']}")
+        elif kind == "building_constructed" and actor_id is not None:
+            note(actor_id, f"I opened {name(p['entity_id'])}")
+        elif kind == "policy_changed":
+            for cid in sorted(s.citizens):
+                note(cid, f"Town policy {p['kind']} is now {p['new_value']:,}")
+        elif kind == "citizen_spawned":
+            newcomer = p["entity_id"]
+            for cid in sorted(s.citizens):
+                note(
+                    cid,
+                    "I arrived in the village"
+                    if cid == newcomer
+                    else f"{name(newcomer)} arrived in the village",
+                )
+        elif kind == "intervention_applied" and p.get("kind") == "adjust_hunger":
+            change = p["command"]["change"]
+            line = "A famine made me hungrier" if change > 0 else "A feast eased my hunger"
+            for cid in p.get("affected_ids", []):
+                note(cid, line)
 
     def result(self, rejected=None) -> m.SimulationTickResult:
         self.state.rng_state = json.loads(json.dumps(self.rng.getstate()))
@@ -238,7 +466,7 @@ class Engine:
         actor = tx.state.citizens.get(action.actor_id)
         if actor is None:
             raise error
-        actor.memories = (actor.memories + [f"Rejected {action.type}: {error}"])[-8:]
+        remember(actor, f"Rejected {action.type}: {error}")
         tx.emit(
             "action_rejected",
             dict(action_type=action.type, code=error.code, message=str(error)),
@@ -387,8 +615,6 @@ class Engine:
             recipient = s.citizens.get(action.recipient_id)
             if recipient is None or recipient.id == actor.id:
                 raise InvalidAction("bad_params", "Unknown or self recipient")
-            actor.memories = (actor.memories + [f"To {recipient.name}: {action.message}"])[-8:]
-            recipient.memories = (recipient.memories + [f"{actor.name}: {action.message}"])[-8:]
             emit("agent_spoke", dict(recipient_id=recipient.id, message=action.message))
             relation = _tie(recipient, actor.id)
             relation.trust = min(100, relation.trust + 1)
@@ -701,8 +927,6 @@ class Engine:
                 tick=s.tick,
             )
             s.license_offers[oid] = offer
-            note = f"{actor.name} offers a {invention.name} license for {action.fee} ({oid})"
-            recipient.memories = (recipient.memories + [note])[-8:]
             emit("license_offered", self._offer_payload(offer))
         elif isinstance(action, m.RespondLicense):
             offer = s.license_offers.get(action.offer_id)
@@ -917,9 +1141,6 @@ class Engine:
             target.reputation = _clamp(target.reputation + MENTOR_REPUTATION, 0, 100)
         elif action.kind == "betray":
             actor.reputation = _clamp(actor.reputation - BETRAY_REPUTATION, 0, 100)
-        verb = INTERACTION_VERBS[action.kind]
-        actor.memories = (actor.memories + [f"I {verb} {target.name}"])[-8:]
-        target.memories = (target.memories + [f"{actor.name} {verb} me"])[-8:]
         interaction = emit(
             "citizen_interacted",
             dict(
@@ -993,16 +1214,7 @@ class Engine:
         The record stays in job_applications with status hired (accepted) or rejected
         (rejected or withdrawn); the event keeps the finer-grained outcome.
         """
-        s = self.state
         application.status = "hired" if outcome == "accepted" else "rejected"
-        applicant = s.citizens.get(application.citizen_id)
-        building = s.buildings.get(application.building_id)
-        if applicant is not None and outcome != "withdrawn":
-            name = building.name if building else application.building_id
-            note = (
-                f"Hired by {name}" if outcome == "accepted" else f"{name} rejected my application"
-            )
-            applicant.memories = (applicant.memories + [note])[-8:]
         self.emit(
             "job_application_resolved",
             dict(
@@ -1332,6 +1544,8 @@ class Engine:
                     actor_id,
                     rationale,
                 )
+        if owner is not None:
+            remember(owner, f"{building.name} closed" + (f" ({rationale})" if rationale else ""))
         del s.buildings[building.id]
         self.emit(
             "building_removed",
@@ -1500,12 +1714,6 @@ class Engine:
         """Remove a pending offer, tell the offerer, and log the outcome."""
         s = self.state
         del s.trade_offers[offer.id]
-        offerer = s.citizens.get(offer.offerer_id)
-        recipient = s.citizens.get(offer.recipient_id)
-        if offerer is not None:
-            verb = kind.removeprefix("trade_")
-            other = recipient.name if recipient else offer.recipient_id
-            offerer.memories = (offerer.memories + [f"Trade {offer.id} with {other} {verb}"])[-8:]
         return self.emit(
             kind,
             dict(offer_id=offer.id, sender_id=offer.offerer_id, recipient_id=offer.recipient_id),
@@ -1818,29 +2026,153 @@ class Engine:
         )
         return tx.result()
 
-    def intervene(self, command: m.PriceIntervention, text: str) -> m.SimulationTickResult:
+    def intervene(self, command: m.Intervention, text: str) -> m.SimulationTickResult:
+        """Apply one parsed player intervention as a single validated transaction.
+
+        Emits intervention_applied (payload `kind` names the command) first, then the concrete
+        events it caused (price_changed, wage_changed, transaction_completed, policy_changed),
+        each citing it in causal_refs. Invalid commands raise InvalidAction("bad_params", ...).
+        """
         tx = Engine(self.state)
-        targets = [b for b in tx.state.buildings.values() if b.kind == "bakery"]
-        prices = [
-            int(
-                (Decimal(b.prices["bread"]) * (100 + command.percent) / 100).quantize(
-                    Decimal("1"), rounding=ROUND_HALF_UP
-                )
-            )
-            for b in targets
-        ]
+        handlers = {
+            "modify_price": tx._intervene_price,
+            "set_wage": tx._intervene_wage,
+            "grant_money": tx._intervene_grant,
+            "adjust_resource": tx._intervene_resource,
+            "adjust_hunger": tx._intervene_hunger,
+            "set_policy": tx._intervene_policy,
+        }
+        plan, scope, affected = handlers[command.type](command)
+        payload = dict(
+            text=text,
+            kind=command.type,
+            scope=scope,
+            percent=getattr(command, "percent", None),
+            command=command.model_dump(),
+            affected_ids=affected,
+        )
+        intervention = tx.emit("intervention_applied", payload)
+        for kind, event in plan(intervention.id):
+            tx.emit(kind, event, causal_refs=[intervention.id])
+        return tx.result()
+
+    def _targets(self, citizen_id: str | None) -> list[m.Citizen]:
+        if citizen_id is None:
+            return [self.state.citizens[c] for c in sorted(self.state.citizens)]
+        if citizen_id not in self.state.citizens:
+            raise InvalidAction("unknown_entity", "Unknown citizen")
+        return [self.state.citizens[citizen_id]]
+
+    @staticmethod
+    def _scaled(value: int, percent: int) -> int:
+        return int(
+            (Decimal(value) * (100 + percent) / 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        )
+
+    def _intervene_price(self, command: m.PriceIntervention):
+        targets = sorted(
+            (b for b in self.state.buildings.values() if b.kind == "bakery"), key=lambda b: b.id
+        )
+        prices = [self._scaled(b.prices["bread"], command.percent) for b in targets]
         if not targets or any(p < 1 or p > 1000000 for p in prices):
             raise InvalidAction("bad_params", "No bakery or resulting price out of bounds")
-        intervention = tx.emit("intervention_applied", dict(text=text, percent=command.percent))
-        for building, price in zip(targets, prices, strict=True):
-            old = building.prices["bread"]
-            building.prices["bread"] = price
-            tx.emit(
-                "price_changed",
-                dict(building_id=building.id, resource="bread", old_price=old, new_price=price),
-                causal_refs=[intervention.id],
-            )
-        return tx.result()
+        cap = self.state.policies.bread_price_cap
+        if cap and any(p > cap for p in prices):
+            raise InvalidAction("bad_params", f"The town caps bread at {cap} cents")
+
+        def plan(_):
+            for building, price in zip(targets, prices, strict=True):
+                old, building.prices["bread"] = building.prices["bread"], price
+                yield (
+                    "price_changed",
+                    dict(building_id=building.id, resource="bread", old_price=old, new_price=price),
+                )
+
+        return plan, "all_bakeries", [b.id for b in targets]
+
+    def _intervene_wage(self, command: m.WageIntervention):
+        targets = sorted(self.state.buildings.values(), key=lambda b: b.id)
+        wages = [
+            command.wage if command.wage is not None else self._scaled(b.wage, command.percent)
+            for b in targets
+        ]
+        if not targets:
+            raise InvalidAction("bad_params", "There is no business to pay wages")
+        if any(w < 1 or w > 1000000 for w in wages):
+            raise InvalidAction("bad_params", "Resulting wage out of bounds")
+        floor = self.state.policies.min_wage
+        if any(w < floor for w in wages):
+            raise InvalidAction("bad_params", f"The town minimum wage is {floor} cents")
+        changed = [(b, w) for b, w in zip(targets, wages, strict=True) if b.wage != w]
+        if not changed:
+            raise InvalidAction("bad_params", "Wages would not change")
+
+        def plan(_):
+            for building, wage in changed:
+                old, building.wage = building.wage, wage
+                yield "wage_changed", dict(building_id=building.id, old_wage=old, new_wage=wage)
+
+        return plan, "all_businesses", [b.id for b, _ in changed]
+
+    def _intervene_grant(self, command: m.GrantIntervention):
+        # Taking never drives money below zero; citizens with nothing to take are skipped.
+        moves = [
+            (c, command.amount if command.amount > 0 else -min(-command.amount, c.money))
+            for c in self._targets(command.citizen_id)
+        ]
+        moves = [(c, delta) for c, delta in moves if delta]
+        if not moves:
+            raise InvalidAction("insufficient_funds", "Nobody has money to take")
+
+        def plan(_):
+            for citizen, delta in moves:
+                citizen.money += delta
+                sender, recipient = ("town", citizen.id) if delta > 0 else (citizen.id, "town")
+                yield (
+                    "transaction_completed",
+                    dict(sender_id=sender, recipient_id=recipient, amount=abs(delta)),
+                )
+
+        scope = "all_citizens" if command.citizen_id is None else "citizen"
+        return plan, scope, [c.id for c, _ in moves]
+
+    def _intervene_resource(self, command: m.ResourceIntervention):
+        stock = self.state.resources.get(command.resource)
+        if stock is None:
+            raise InvalidAction("unknown_entity", f"The village has no {command.resource} stock")
+        new_stock = max(0, stock.stock + command.stock_change)
+        regen = stock.regen_per_tick if command.regen_per_tick is None else command.regen_per_tick
+        if (new_stock, regen) == (stock.stock, stock.regen_per_tick):
+            raise InvalidAction("bad_params", f"The {command.resource} stock would not change")
+        stock.stock, stock.regen_per_tick = new_stock, regen
+        return (lambda _: iter(())), command.resource, []
+
+    def _intervene_hunger(self, command: m.HungerIntervention):
+        changes = [
+            (c, _clamp(c.hunger + command.change, 0, 100))
+            for c in self._targets(command.citizen_id)
+        ]
+        changes = [(c, hunger) for c, hunger in changes if hunger != c.hunger]
+        if not changes:
+            raise InvalidAction("bad_params", "Hunger would not change")
+        for citizen, hunger in changes:
+            citizen.hunger = hunger
+        scope = "all_citizens" if command.citizen_id is None else "citizen"
+        return (lambda _: iter(())), scope, [c.id for c, _ in changes]
+
+    def _intervene_policy(self, command: m.PolicyIntervention):
+        policies = self.state.policies
+        old = _policy(policies, command.kind)
+        if old == command.value:
+            raise InvalidAction("bad_params", "That policy is already in force")
+
+        def plan(intervention_id):
+            field = "market_tax_bps" if command.kind == "market_tax" else command.kind
+            setattr(policies, field, command.value)
+            yield "policy_changed", dict(kind=command.kind, old_value=old, new_value=command.value)
+            self._enforce_policies([intervention_id])
+
+        return plan, "town", []
 
     def tick(self, proposals: list[m.AgentAction] | None = None) -> m.SimulationTickResult:
         tx = Engine(self.state)
@@ -1921,14 +2253,24 @@ class Engine:
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:
-            # Rejected proposals cannot leak partial mutations or RNG consumption.
+            # Each proposal is its own transaction, tagged like a route submission. A rule
+            # rejection is logged and remembered (as on the HTTP route) from the untouched
+            # pre-proposal state, so it cannot leak partial mutations or RNG consumption.
+            action_id = f"action-{tx.state.branch_id}:{tx.state.sequence}"
             try:
-                update = Engine(tx.state).apply(proposal)
-                tx.state = update.state
-                tx.rng.setstate(_tuples(update.state.rng_state))
-                tx.events.extend(update.events)
-            except (InvalidAction, ValueError) as exc:
+                update = Engine(tx.state).apply(proposal, action_id)
+            except InvalidAction as exc:
                 rejected.append(str(exc))
+                try:
+                    update = Engine(tx.state).reject(proposal, exc, action_id)
+                except InvalidAction:
+                    continue  # Unknown actor: nobody to remember it.
+            except ValueError as exc:
+                rejected.append(str(exc))
+                continue
+            tx.state = update.state
+            tx.rng.setstate(_tuples(update.state.rng_state))
+            tx.events.extend(update.events)
         return tx.result(rejected)
 
     def fork(self, branch_id: str) -> m.WorldState:

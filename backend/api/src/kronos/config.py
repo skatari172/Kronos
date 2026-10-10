@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,3 +11,5 @@ class Settings(BaseSettings):
     llm_model: str = "deterministic-v1"
     llm_timeout: float = 3
     llm_retries: int = 1
+    # Every citizen makes one strategic decision per round of this many days (staggered).
+    agent_round_ticks: int = Field(3, ge=1)

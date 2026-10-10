@@ -2,7 +2,8 @@ import asyncio
 from uuid import uuid4
 
 from fastapi import HTTPException, WebSocket
-from kronos_agents.provider import AgentService, MockProvider, ProviderError
+from kronos_agents.fallback import UtilityPolicy
+from kronos_agents.provider import AgentService, LLMProvider, MockProvider, ProviderError
 from kronos_history.store import HistoryStore
 from kronos_sim.engine import Engine, InvalidAction
 from kronos_sim.models import (
@@ -25,12 +26,34 @@ from kronos_sim.seed import initial_world
 from kronos.config import Settings
 
 
+def build_provider(config: Settings) -> tuple[LLMProvider, float]:
+    """Pick the provider from KRONOS_LLM_PROVIDER. `mock` (default) needs no key or network."""
+    if config.llm_provider == "mock":
+        return MockProvider(), config.llm_timeout
+    if config.llm_provider == "anthropic":
+        from kronos_agents.anthropic_provider import (
+            DEFAULT_MODEL,
+            DEFAULT_TIMEOUT,
+            AnthropicProvider,
+        )
+
+        # The 3 s default is tuned for the mock; a real model gets 20 s unless set explicitly.
+        timeout = (
+            config.llm_timeout if "llm_timeout" in config.model_fields_set else DEFAULT_TIMEOUT
+        )
+        model = DEFAULT_MODEL if config.llm_model == "deterministic-v1" else config.llm_model
+        try:
+            return AnthropicProvider(model, timeout=timeout), timeout
+        except ProviderError as exc:
+            raise ValueError(str(exc)) from exc
+    raise ValueError(
+        f"Unknown KRONOS_LLM_PROVIDER={config.llm_provider!r}; expected 'mock' or 'anthropic'"
+    )
+
+
 class Service:
     def __init__(self, config: Settings):
-        if config.llm_provider != "mock":
-            raise ValueError(
-                "Only KRONOS_LLM_PROVIDER=mock is bundled; implement LLMProvider to extend"
-            )
+        provider, timeout = build_provider(config)  # fail fast, before touching storage
         self.config = config
         self.store = HistoryStore(config.database_url)
         if self.store.active_id() is None:
@@ -39,7 +62,9 @@ class Service:
             )
             self.store.activate("main")
         self.state = self.store.world(self.store.active_id())
-        self.agents = AgentService(MockProvider(), config.llm_timeout, config.llm_retries)
+        self.agents = AgentService(provider, timeout, config.llm_retries)
+        self.agents.round_ticks = config.agent_round_ticks
+        self.agents.fallback = UtilityPolicy()  # A failed provider call falls back, never stalls.
         self.lock = asyncio.Lock()
         self.clients: set[WebSocket] = set()
         self.playing = False
@@ -176,14 +201,14 @@ class Service:
         async with self.lock:
             self.check(request)
             observation = observe(self.state, citizen_id)
-        action = await self.agents.decide(observation)
+        action, source = await self.agents.proposal(observation)
         body = ActionRequest(
             branch_id=observation.branch_id,
             expected_sequence=observation.sequence,
             action=action,
         )
         return DecisionResult(
-            action=action, result=await self.submit_agent_action(body, citizen_id)
+            action=action, result=await self.submit_agent_action(body, citizen_id), source=source
         )
 
     async def ask(self, citizen_id: str, question: str) -> AskResult:
@@ -209,12 +234,38 @@ class Service:
                 branch_id=self.state.branch_id, sequence=self.state.sequence, action=body.action
             )
 
-    async def tick(self):
+    async def tick(self, request: MutationRequest | None = None):
+        """Advance one day. Agent proposals are gathered outside the lock (see `_advance`).
+
+        With a `request` (the manual tick route) the caller's version is checked before and
+        after the provider calls, so a world that moved on meanwhile is a 409, like `/decide`.
+        """
+        async with self.lock:
+            if request is not None:
+                self.check(request)
+            world = self.state.model_copy(deep=True)
+        return await self._advance(world, request)
+
+    async def _advance(self, world: WorldState, request: MutationRequest | None = None):
+        """Gather proposals for `world` (a private copy) without the lock, then apply them.
+
+        A slow provider never blocks other API calls. If the world changed meanwhile (any
+        commit, seek or branch switch moves `branch_id`/`sequence`), the stale proposals are
+        dropped: the clock still advances the day with no proposals (when it is still
+        playing), and the citizens whose slot it was wait for their next round.
+        """
         try:
-            proposals = await self.agents.propose(self.state)
+            proposals = await self.agents.propose(world)
         except ProviderError:
             proposals = []  # Failed strategy never prevents routine food/economy mechanics.
-        return await self.commit(Engine(self.state).tick(proposals))
+        async with self.lock:
+            if request is not None:
+                self.check(request)
+            elif not self.playing:
+                return None  # Paused (or the branch switched) while proposals were gathered.
+            if (world.branch_id, world.sequence) != (self.state.branch_id, self.state.sequence):
+                proposals = []
+            return await self.commit(Engine(self.state).tick(proposals))
 
     async def fork(self, snapshot_id: str, name: str):
         original = self.store.restore(snapshot_id)
@@ -234,9 +285,11 @@ class Service:
         while True:
             await asyncio.sleep(max(0.1, self.config.tick_seconds / self.speed))
             async with self.lock:
-                if self.playing:
-                    try:
-                        await self.tick()
-                    except Exception as exc:
-                        self.playing = False
-                        self.error = f"Simulation paused: {type(exc).__name__}"
+                if not self.playing:
+                    continue
+                world = self.state.model_copy(deep=True)
+            try:
+                await self._advance(world)
+            except Exception as exc:
+                self.playing = False
+                self.error = f"Simulation paused: {type(exc).__name__}"

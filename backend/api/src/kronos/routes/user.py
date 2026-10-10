@@ -16,7 +16,8 @@ router = APIRouter(prefix="/api", tags=["User tools"])
 )
 async def intervene(body: m.InterventionRequest, service: ServiceDependency):
     """Parse supported text, validate the current version, then persist and broadcast."""
-    command = await service.agents.parse(body.text)
+    citizens = {cid: c.name for cid, c in service.state.citizens.items()}
+    command = await service.agents.parse(body.text, citizens)
     async with service.lock:
         service.check(body)
         result = await service.commit(Engine(service.state).intervene(command, body.text))

@@ -671,7 +671,9 @@
         "reputation": 50,
         "research_invention_id": null,
         "research_until_tick": 0,
-        "destitute_days": 0
+        "destitute_days": 0,
+        "memory_summary": "",
+        "memory_tally": {}
       },
       "citizen-1": {
         "id": "citizen-1",
@@ -704,7 +706,9 @@
         "reputation": 50,
         "research_invention_id": null,
         "research_until_tick": 0,
-        "destitute_days": 0
+        "destitute_days": 0,
+        "memory_summary": "",
+        "memory_tally": {}
       },
       "citizen-2": {
         "id": "citizen-2",
@@ -737,7 +741,9 @@
         "reputation": 50,
         "research_invention_id": null,
         "research_until_tick": 0,
-        "destitute_days": 0
+        "destitute_days": 0,
+        "memory_summary": "",
+        "memory_tally": {}
       },
       "citizen-3": {
         "id": "citizen-3",
@@ -770,7 +776,9 @@
         "reputation": 50,
         "research_invention_id": null,
         "research_until_tick": 0,
-        "destitute_days": 0
+        "destitute_days": 0,
+        "memory_summary": "",
+        "memory_tally": {}
       },
       "citizen-4": {
         "id": "citizen-4",
@@ -803,7 +811,9 @@
         "reputation": 50,
         "research_invention_id": null,
         "research_until_tick": 0,
-        "destitute_days": 0
+        "destitute_days": 0,
+        "memory_summary": "",
+        "memory_tally": {}
       },
       "citizen-5": {
         "id": "citizen-5",
@@ -836,7 +846,9 @@
         "reputation": 50,
         "research_invention_id": null,
         "research_until_tick": 0,
-        "destitute_days": 0
+        "destitute_days": 0,
+        "memory_summary": "",
+        "memory_tally": {}
       },
       "citizen-6": {
         "id": "citizen-6",
@@ -869,7 +881,9 @@
         "reputation": 50,
         "research_invention_id": null,
         "research_until_tick": 0,
-        "destitute_days": 0
+        "destitute_days": 0,
+        "memory_summary": "",
+        "memory_tally": {}
       }
     },
     "buildings": {

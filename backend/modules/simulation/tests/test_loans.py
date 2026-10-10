@@ -6,6 +6,14 @@ from kronos_sim.models import Lend, Relationship, Repay, RespondLoan, WorldState
 from kronos_sim.queries import observe
 from kronos_sim.seed import initial_world
 
+MEMORY_FIELDS = {"memories", "memory_summary", "memory_tally"}
+
+
+def holdings(citizens):
+    """Citizens without their memories: what an event may not change when nothing moves."""
+    return {cid: c.model_dump(exclude=MEMORY_FIELDS) for cid, c in citizens.items()}
+
+
 # Ada (citizen-2, 16,000 cents) lends to Finn (citizen-6, 550 cents): the Marco -> Teo story.
 
 
@@ -39,7 +47,7 @@ def test_loan_offer_moves_no_money_until_the_borrower_accepts():
     loan = offered.state.loans[loan_id]
     assert loan_id == "loan-main-1"
     assert (loan.status, loan.amount_owed, loan.amount_repaid) == ("offered", 6600, 0)
-    assert offered.state.citizens == state.citizens
+    assert holdings(offered.state.citizens) == holdings(state.citizens)
     assert [e.type for e in offered.events] == ["loan_offered"]
     assert offered.events[0].rationale == "Help Finn through the winter"
     assert [x.id for x in observe(offered.state, "citizen-6").loans] == [loan_id]
@@ -62,7 +70,7 @@ def test_declined_loan_and_lender_funds_are_rechecked_on_accept():
         RespondLoan(actor_id="citizen-6", loan_id=loan_id, accept=False)
     )
     assert declined.state.loans[loan_id].status == "declined"
-    assert declined.state.citizens == offered.state.citizens
+    assert holdings(declined.state.citizens) == holdings(offered.state.citizens)
     assert observe(declined.state, "citizen-6").loans == []
     broke = offered.state.model_copy(deep=True)
     broke.citizens["citizen-2"].money = 100

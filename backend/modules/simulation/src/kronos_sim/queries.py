@@ -53,6 +53,12 @@ def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
         ],
         incoming_offers=offers(state, citizen_id).incoming,
         ties=strongest_ties(state, citizen_id),
+        open_jobs=job_openings(state),
+        businesses=[
+            business_profile(state, b.id)
+            for b in sorted(state.buildings.values(), key=lambda b: b.id)
+            if b.owner_id == citizen_id
+        ],
     )
 
 
