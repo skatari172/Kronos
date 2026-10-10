@@ -1432,7 +1432,8 @@ footer > span:last-child {
 .talk .chronicle-icon {
   color: #9cc7e8;
 }
-.loss .chronicle-icon {
+.loss .chronicle-icon,
+.fight .chronicle-icon {
   color: #e8947f;
 }
 .chronicle-text {

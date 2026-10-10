@@ -135,19 +135,24 @@ export function useSimulation() {
 
   /**
    * Change the world in plain language. Any text is sent as-is: the backend's
-   * provider (an AI model when configured) turns it into a validated command,
-   * the engine applies it, and the new world is ingested like any other
-   * update. Throws with the backend's reason when nothing applies.
+   * provider (an AI model when configured) turns it into a validated command
+   * and queues it for the next simulated day; the changed world then arrives
+   * over the live connection like any other update. Throws with the
+   * backend's reason when the text is rejected.
    */
   const intervene = async (text: string) => {
     // The backend may hand the text to an AI model (up to ~20 s); wait longer.
-    const result = await request<InterventionResult>(
+    const outcome = await request<InterventionResult>(
       "/api/interventions",
       { ...context(), text },
       45_000,
     );
-    useWorld.getState().ingest(result.update);
-    return result;
+    if (outcome.result.status === "rejected")
+      throw new Error(
+        outcome.result.message ??
+          "The town couldn't act on that. Try rewording it.",
+      );
+    return outcome;
   };
 
   /** Start the clock at a speed (used by time-lapse). */

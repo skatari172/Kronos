@@ -9,6 +9,7 @@ import {
   Hourglass,
   MessageCircle,
   Search,
+  Swords,
   TrendingDown,
   UserPlus,
   X,
@@ -25,6 +26,7 @@ const ICONS: Record<FeedKind, LucideIcon> = {
   job: Coins,
   home: Home,
   loss: TrendingDown,
+  fight: Swords,
   decree: Crown,
 };
 
@@ -35,6 +37,7 @@ const FILTERS: { label: string; kinds: FeedKind[] | null }[] = [
   { label: "Trade", kinds: ["trade"] },
   { label: "Building", kinds: ["build"] },
   { label: "People", kinds: ["people"] },
+  { label: "Fights", kinds: ["fight"] },
   { label: "Talk", kinds: ["talk"] },
   { label: "Money", kinds: ["price", "job"] },
   { label: "Homes", kinds: ["home"] },

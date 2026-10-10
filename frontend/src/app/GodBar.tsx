@@ -7,6 +7,7 @@ import { useChronicle } from "./feed";
 import {
   describe,
   EXAMPLES,
+  moodOf,
   previewCommand,
   reactionTo,
   type Command,
@@ -55,6 +56,7 @@ export function GodBar({
       (document.activeElement as HTMLElement | null)?.blur();
       const id = Date.now();
       setFalling((f) => [...f, { id, text: words }]);
+      useDecrees.getState().fall(FALL_MS);
       setTimeout(() => {
         setFalling((f) => f.filter((d) => d.id !== id));
         land(words, command, live);
@@ -151,7 +153,7 @@ export function GodBar({
 
 /** The decree lands: strike the town, then write it into the chronicle. */
 function land(text: string, command: Command | null, live: boolean) {
-  useDecrees.getState().land();
+  useDecrees.getState().land(moodOf(command));
   const state = useWorld.getState().update?.state;
   useChronicle.getState().add({
     day: (state?.tick ?? 0) + 1,

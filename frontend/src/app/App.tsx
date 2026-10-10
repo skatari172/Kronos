@@ -10,7 +10,7 @@ import { useWorld } from "../stores/world";
 import { growthOf, TIERS } from "../world/progress";
 import { Village } from "../world/Village";
 import { EntityPanel } from "./EntityPanel";
-import { useSampleClock } from "./feed";
+import { useFightChronicle, useSampleClock } from "./feed";
 import { GodBar } from "./GodBar";
 import { Header } from "./Header";
 import { useSimulation } from "./useSimulation";
@@ -21,6 +21,7 @@ export function App() {
   const epoch = useWorld((s) => s.epoch);
   const sim = useSimulation();
   useSampleClock();
+  useFightChronicle();
   const [timelapse, setTimelapse] = useState(false);
   const growth = update ? growthOf(update.state, epoch) : null;
   const banner = useTierBanner(growth?.tier, epoch);

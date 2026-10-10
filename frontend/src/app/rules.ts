@@ -1,6 +1,7 @@
 /** Plain-language rule changes for the header (RuleBar.tsx). */
 import type { InterventionResult, WorldState } from "../api/types";
 import { coins } from "../api/format";
+import type { Mood } from "../world/decrees";
 
 /** Rule changes the backend understands today (agents/provider.py grammar). */
 export const EXAMPLES = [
@@ -196,5 +197,30 @@ export function reactionTo(command: Command): string {
         : "The old law is torn down. The market breathes easier.";
     default:
       return "The town takes note.";
+  }
+}
+
+/** Whether villagers will take a decree as good or bad news. */
+export function moodOf(command: Command | null): Mood {
+  if (!command) return "neutral";
+  const c = command as Record<string, unknown> & { type: string };
+  const n = (key: string) => Number(c[key] ?? 0);
+  switch (c.type) {
+    case "modify_price":
+      return n("percent") > 0 ? "bad" : "good";
+    case "set_wage":
+      return n("percent") < 0 ? "bad" : "good";
+    case "grant_money":
+      return n("amount") > 0 ? "good" : "bad";
+    case "adjust_resource":
+      return n("stock_change") < 0 ? "bad" : "good";
+    case "adjust_hunger":
+      return n("change") > 0 ? "bad" : "good";
+    case "set_policy":
+      // Taxes sting; caps and minimum wages are welcome; lifting is neutral.
+      if (!n("value")) return "neutral";
+      return c.kind === "market_tax" ? "bad" : "good";
+    default:
+      return "neutral";
   }
 }

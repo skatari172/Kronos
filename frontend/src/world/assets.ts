@@ -102,6 +102,9 @@ export const ANIMATION_FILES = [
   `${CHARACTERS}/Rig_Medium_MovementBasic.glb`,
   `${CHARACTERS}/Rig_Medium_Simulation.glb`,
   `${CHARACTERS}/Rig_Medium_Tools.glb`,
+  `${CHARACTERS}/Rig_Medium_CombatMelee.glb`,
+  `${CHARACTERS}/Rig_Medium_CombatRanged.glb`,
+  `${CHARACTERS}/Rig_Medium_MovementAdvanced.glb`,
 ];
 
 const BY_OCCUPATION: Record<string, string> = {
@@ -120,6 +123,12 @@ const NEWCOMERS = [
   "Cleric",
   "Ranger",
   "Helper_A",
+  "Knight",
+  "Mage",
+  "Rogue",
+  "Rogue_Hooded",
+  "Barbarian",
+  "Witch",
   ...Object.values(BY_OCCUPATION),
 ];
 export const CHARACTER_FILES = [...new Set(NEWCOMERS)].map(
@@ -142,4 +151,24 @@ export function characterModel(citizen: Citizen) {
     ? (BY_OCCUPATION[citizen.occupation] ?? NEWCOMERS[0])
     : NEWCOMERS[hash(citizen.id) % NEWCOMERS.length];
   return `${CHARACTERS}/${name}.glb`;
+}
+
+/**
+ * Presentation-only body and gait for a villager, stable per ID: height
+ * varies a little, and everyone has their own pace and walking style so a
+ * crowd never moves in lockstep.
+ */
+export function physique(id: string) {
+  // Mix the bits: IDs often differ only in their last character.
+  let h = hash(id);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h = Math.imul(h ^ (h >>> 16), 0x45d9f3b);
+  h = (h ^ (h >>> 16)) >>> 0;
+  return {
+    height: 0.9 + ((h >>> 4) % 17) / 100, // 0.90–1.06
+    /** Strolling speed in world units per second. */
+    pace: 0.45 + ((h >>> 8) % 11) * 0.05, // 0.45–0.95
+    walk: (["walkA", "walkB", "walkC"] as const)[(h >>> 12) % 3],
+    run: (["runA", "runB"] as const)[(h >>> 14) % 2],
+  };
 }

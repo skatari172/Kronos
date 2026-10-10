@@ -216,7 +216,22 @@ function layout(tier: number) {
       });
     } else if (seed % 5 !== 0) scenery.push(forest);
   }
-  return { tier, tiles, scenery, roads, places };
+  // Road ends at the island's edge: villagers fish there, facing the water.
+  const shore: { road: string; at: Point }[] = [];
+  for (const [id, road] of roads) {
+    const open = DIRECTIONS.findIndex(
+      (_, k) => !ISLAND_CELLS.has(key(step(road.at, k))),
+    );
+    if (road.next.length === 1 && open >= 0)
+      shore.push({
+        road: id,
+        at: {
+          x: road.at.x + DIRECTIONS[open].x * 0.38,
+          z: road.at.z + DIRECTIONS[open].z * 0.38,
+        },
+      });
+  }
+  return { tier, tiles, scenery, roads, places, shore };
 }
 
 const TOWNS = [0, 1, 2, 3].map(layout);

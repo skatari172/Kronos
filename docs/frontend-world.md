@@ -114,39 +114,35 @@ Lots are not tied to any hard-coded layout: each one renders at its own `positio
 
 ## Villagers — models from the snapshot, routes presentation only
 
-- **Models** (`assets.ts`). The seven founders (`citizen-0` … `citizen-6`) look like their trade: Farmer → Farmer_A, Baker → Helper_B, Merchant → Lorekeeper, Farmhand → Farmer_B, Miller → Protagonist_B, Builder → Engineer, Weaver → Hiker. Everyone who arrives later gets a varied look from a pool of 12 (Druid, Protagonist_A, Cleric, Ranger, Helper_A first, then the founders' looks), chosen by ID.
-- **Animations** come from four KayKit `Rig_Medium` sets: General, MovementBasic, Simulation, Tools. Every character shares the rig, so any clip plays on any character. `CharacterModel` blends the standing pose with walk and run from the current speed.
+- **Looks** (`assets.ts`). The seven founders (`citizen-0` … `citizen-6`) look like their trade: Farmer → Farmer_A, Baker → Helper_B, Merchant → Lorekeeper, Farmhand → Farmer_B, Miller → Protagonist_B, Builder → Engineer, Weaver → Hiker. Later arrivals draw from 18 looks (Druid, Protagonist_A, Cleric, Ranger, Helper_A, Knight, Mage, Rogue, Rogue_Hooded, Barbarian, Witch, then the founders' looks). `physique(id)` gives everyone a slightly different height (0.90–1.06), their own strolling pace (0.45–0.95 units/s), a walking style (Walking_A/B/C), and a run (Running_A/B).
+- **Animation** (`Models.tsx › CharacterModel`). Every character shares KayKit's `Rig_Medium`, so any of ~45 clips from seven sets (General, MovementBasic, Simulation, Tools, CombatMelee, CombatRanged, MovementAdvanced) plays on anyone. Only clips that are playing or fading out are evaluated, so the large set costs nothing until used. One-shot clips (punch, faint, pick up, spawn…) play once and hold. Speed picks the gait: the villager's walk, or their run above 1.15 units/s; broke villagers sneak.
+- **Errands** (`routine.ts`). Each stop is a short pose sequence. Pace follows the errand and the snapshot:
 
-| Pose     | Clip             | Used for                        |
-| -------- | ---------------- | ------------------------------- |
-| `idle`   | `Idle_A`         | Default, short pauses           |
-| `idleB`  | `Idle_B`         | Resting at home, looking around |
-| `sit`    | `Sit_Floor_Idle` | Breaks                          |
-| `wave`   | `Waving`         | Greeting on the road            |
-| `cheer`  | `Cheering`       | Leisure at landmarks            |
-| `work`   | `Interact`       | At the workplace or the bakery  |
-| `hammer` | `Hammering`      | Construction and upgrade sites  |
+| Errand     | When                                    | Pace          | At the stop                                                                                   |
+| ---------- | --------------------------------------- | ------------- | --------------------------------------------------------------------------------------------- |
+| Fight      | Picked by the fight director            | Sprint (×2.8) | Fists up, punch / block, hit / kick, dodge                                                    |
+| Help build | Builder or owner, while a site animates | Run (×2.6)    | Hammering until it's done                                                                     |
+| Faint      | Hunger ≥ 95                             | —             | Collapse, lie there, get up                                                                   |
+| Buy bread  | Hunger ≥ 70                             | Hurry (×1.8)  | Pick up a loaf, eat it                                                                        |
+| Work       | Has an employer                         | Brisk (×1.3)  | Farm: dig. Bakery: knead, tend. Market: handle goods, toss, tend                              |
+| Home       | 15%                                     | Stroll        | Nap (lie down, sleep, get up), sit, or rest                                                   |
+| Fishing    | Road ends at the shore exist            | Stroll        | Cast, wait, catch, cheer                                                                      |
+| Exercise   | 8%                                      | —             | Push-ups, sit-ups                                                                             |
+| Landmarks  | Otherwise                               | Stroll        | Forge: hammer. Lumbermill: chop, saw. Well: draw and drink. Chapel: rest, sit. Cottages: wave |
 
-- **Starting spots** (`startSpot`). When the scene loads, each villager stands in front of their home. If an earlier villager (by ID) already starts there, they start at another cottage, landmark, or business, picked in strides so neighbours begin far apart.
-- **Daily routine** (`routine.ts`). From there, each villager repeats errands along the road graph of the current tier:
+Villagers sometimes stop on the way to look around or wave (4% per road segment). Anyone with under 1.50 coins sneaks instead of strolling unless in a hurry.
 
-| Errand                                                     | Chance | Break at the destination      |
-| ---------------------------------------------------------- | ------ | ----------------------------- |
-| Help at a construction site (Builder, or the site's owner) | Always | Hammer until it is finished   |
-| Work at `employer_id`'s building                           | 35%    | Work, 6–12 s                  |
-| Go home                                                    | 20%    | Rest or sit, 5–10 s           |
-| Visit a bakery                                             | 15%    | Shop, 3–6 s                   |
-| Visit a landmark or a neighbour's cottage                  | 30%    | Idle, wave, sit, cheer, 3–8 s |
-
-Villagers sometimes stop on the way (4% per road segment). Each has its own pace and side of the road.
-
+- **Newcomers** rise out of the ground (`Spawn_Ground`) instead of popping in.
+- **Fights** (`fights.ts`, HARD-CODED for now). Every 30–55 s the director picks two villagers, a meeting point on the nearest road, and a start time 7 s ahead. Both sprint there, face off, and play a choreographed exchange. Each fight is written into the Chronicle with both sides' grudges (Fights filter). Later this should follow the backend's relationship events (argue, insult, betray, grudges).
+- **Decree reactions** (`decrees.ts`). While words fall, everyone stops, turns to the square, and raises their arms to the sky (`Ranged_Magic_Raise`). After the strike they react to what was decreed (`rules.ts › moodOf`): good news (raises, gifts, feasts, harvests, caps) brings cheering and jumping for joy; bad news (famine, drought, price hikes, wage cuts, taxes) brings a flinch, then grumbling.
 - **Homes** (`homeOf`). A citizen who leases a lot lives there. Everyone else gets a cottage in citizen-ID order, and it stays the same as the town grows (tested).
-- **No walking through each other** (`crowd.ts`). Each villager keeps at least `PERSONAL_SPACE` (0.42 units, about a body width) from every other villager: each frame it steps half of any overlap away, and the neighbour does the other half. Villagers visiting the same building stand side by side along its frontage, and the final stop counts as reached within a body width, so nobody pushes forever for an occupied spot. Villagers can still pass through buildings and scenery; only person-to-person contact is handled.
+- **Starting spots** (`startSpot`). When the scene loads, each villager stands in front of their home, or another cottage, landmark, or business if someone earlier already starts there.
+- **No walking through each other** (`crowd.ts`). Each villager keeps at least `PERSONAL_SPACE` (0.42 units) from every other; villagers visiting the same building stand side by side, and a stop counts as reached within a body width. Villagers can still pass through buildings and scenery.
 - **These routes are not simulation state.** The simulation still records each citizen's position on the main street. Do not read economic meaning into where a villager walks.
 
 ## Testing
 
-- `pnpm --filter @kronos/web test` runs the store tests, `town.test.ts`, and `crowd.test.ts`. These cover: growth only adds, roads stay connected, the seed starts as a Hamlet, starvation stalls growth, homes stay stable, a reached tier holds, and seven villagers on one spot spread to a body width apart.
+- `pnpm --filter @kronos/web test` runs the store tests, `town.test.ts`, `crowd.test.ts`, `routine.test.ts`, and `rules.test.ts`. These cover: growth only adds, roads stay connected, the seed starts as a Hamlet, starvation stalls growth, homes stay stable, a reached tier holds, and seven villagers on one spot spread to a body width apart.
 - `make check` runs everything, including the production build.
 - To try growth by hand without touching the committed database, start the backend on a scratch database:
 

@@ -34,3 +34,8 @@ export function keepApart(id: string, position: Vector3, seed: number) {
     position.z += (dz / distance) * push;
   }
 }
+
+/** Everyone currently in the crowd and where they stand. */
+export function crowdPositions() {
+  return [...crowd].map(([id, at]) => ({ id, x: at.x, z: at.z }));
+}

@@ -14,7 +14,7 @@ The KayKit itch.io pages hold the official downloads for every pack.
 `src/world/assets.ts` is the single registry: building per business kind, character per occupation, animation files, and scale constants. To add or swap a model, copy its `.gltf` + `.bin` (hexagon pack, which shares `hexagons_medieval.png`) or `.glb` (characters) here and reference it there.
 
 - **Buildings** use the hexagon pack's red set at `HEX_SCALE`. One hex tile is 2 units across in pack units.
-- **Characters** share the KayKit `Rig_Medium` skeleton, so any clip in the four `Rig_Medium_*.glb` animation files (General, MovementBasic, Simulation, Tools) plays on any character. More clip sets (Special, combat) are in the mirror under `character-animations-1.1`.
+- **Characters** share the KayKit `Rig_Medium` skeleton, so any clip in the seven `Rig_Medium_*.glb` animation files (General, MovementBasic, Simulation, Tools, CombatMelee, CombatRanged, MovementAdvanced) plays on any character. The Special set (skeleton clips) is in the mirror under `character-animations-1.1`.
 - **Construction** uses `building_stage_A/B/C`, `building_scaffolding`, and `building_destroyed` from the hexagon pack's neutral set.
 - Clips are in place (no root motion). The renderer moves villagers and blends idle → walk → run from their speed.
 - **Town scenery** (`src/world/town.ts`, rendered by `Ground.tsx`) is presentation only and grows by tier; see [docs/frontend-world.md](../../../docs/frontend-world.md).

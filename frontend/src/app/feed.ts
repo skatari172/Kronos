@@ -6,6 +6,8 @@
  */
 import { useEffect } from "react";
 import { create } from "zustand";
+import { useWorld } from "../stores/world";
+import { useFights } from "../world/fights";
 
 export type FeedKind =
   | "build"
@@ -16,6 +18,8 @@ export type FeedKind =
   | "job"
   | "home"
   | "loss"
+  /** Two villagers came to blows. */
+  | "fight"
   /** Something the player decreed from above. */
   | "decree";
 
@@ -415,4 +419,48 @@ export function useSampleClock(everyMs = 2800) {
     );
     return () => clearInterval(timer);
   }, [everyMs]);
+}
+
+/** HARD-CODED grudges behind the village scuffles (world/fights.ts). */
+const GRUDGES: [string, string][] = [
+  ["Owed them coin and never paid", "Tired of being chased for money"],
+  ["Was undercut at the market", "Sold fair and square"],
+  ["Heard an insult about their bread", "Only said what everyone thinks"],
+  ["Lost a job to them", "Was simply better at it"],
+  ["Their cart blocked the road all week", "Had nowhere else to park"],
+];
+
+/** Write each new scuffle into the chronicle. Mount once. */
+export function useFightChronicle() {
+  useEffect(
+    () =>
+      useFights.subscribe((now, before) => {
+        const fight = now.current;
+        if (!fight || fight.id === before.current?.id) return;
+        const state = useWorld.getState().update?.state;
+        const name = (id: string) => state?.citizens[id]?.name ?? "Someone";
+        const [a, b] = [name(fight.a), name(fight.b)];
+        const [grudge, reply] = GRUDGES[fight.id % GRUDGES.length];
+        useChronicle.getState().add({
+          day: (state?.tick ?? 0) + 1,
+          kind: "fight",
+          text: `${a} and ${b} came to blows`,
+          why: [
+            {
+              name: a,
+              role: "Threw the first punch",
+              incentive: grudge,
+              thought: `${b} has had this coming for weeks.`,
+            },
+            {
+              name: b,
+              role: "Fought back",
+              incentive: reply,
+              thought: `If ${a} wants a fight, ${a} gets one.`,
+            },
+          ],
+        });
+      }),
+    [],
+  );
 }

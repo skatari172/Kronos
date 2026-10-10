@@ -3,6 +3,7 @@ import { useFrame, type ThreeElements } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import {
   AnimationMixer,
+  LoopOnce,
   type AnimationAction,
   MathUtils,
   type AnimationClip,
@@ -167,33 +168,93 @@ function useClips() {
   }, [files]);
 }
 
-/** Natural ground speed of each clip at CHARACTER_SCALE, in world units/second. */
-const WALK_SPEED = 0.62;
-const RUN_SPEED = 1.7;
+/** Natural ground speed of each gait at CHARACTER_SCALE, in world units/second. */
+const GAIT_SPEED = { walk: 0.62, sneak: 0.4, run: 1.7 };
+/** Above this speed a villager runs instead of walking. */
+export const RUN_FROM = 1.15;
 
-/** What a villager does while standing still. */
-export type Pose =
-  "idle" | "idleB" | "sit" | "wave" | "work" | "cheer" | "hammer";
-export type Motion = { speed: number; pose: Pose };
-
+/** Clip for every pose and gait. Clips in ONCE play a single time and hold. */
 const CLIPS = {
+  // Standing
   idle: "Idle_A",
   idleB: "Idle_B",
-  sit: "Sit_Floor_Idle",
   wave: "Waving",
-  work: "Interact",
   cheer: "Cheering",
+  jump: "Jump_Full_Short",
+  raise: "Ranged_Magic_Raise",
+  crouch: "Crouching",
+  // Work
+  work: "Interact",
   hammer: "Hammering",
-  walk: "Walking_A",
-  run: "Running_A",
+  dig: "Digging",
+  chop: "Chopping",
+  saw: "Sawing",
+  knead: "Working_A",
+  tend: "Working_B",
+  pickup: "PickUp",
+  eat: "Use_Item",
+  throw: "Throw",
+  // Breaks
+  sit: "Sit_Floor_Idle",
+  pushups: "Push_Ups",
+  situps: "Sit_Ups",
+  lieDown: "Lie_Down",
+  sleep: "Lie_Idle",
+  getUp: "Lie_StandUp",
+  faint: "Death_A",
+  fishCast: "Fishing_Cast",
+  fishIdle: "Fishing_Idle",
+  fishCatch: "Fishing_Catch",
+  spawn: "Spawn_Ground",
+  // Fights
+  fists: "Melee_Unarmed_Idle",
+  punch: "Melee_Unarmed_Attack_Punch_A",
+  kick: "Melee_Unarmed_Attack_Kick",
+  block: "Melee_Block",
+  dodge: "Dodge_Backward",
+  hit: "Hit_A",
+  hitB: "Hit_B",
+  // Gaits
+  walkA: "Walking_A",
+  walkB: "Walking_B",
+  walkC: "Walking_C",
+  sneak: "Sneaking",
+  runA: "Running_A",
+  runB: "Running_B",
 } as const;
 type Clip = keyof typeof CLIPS;
-const ALL = Object.keys(CLIPS) as Clip[];
+const ONCE = new Set<Clip>([
+  "raise",
+  "pickup",
+  "eat",
+  "throw",
+  "lieDown",
+  "getUp",
+  "faint",
+  "fishCast",
+  "fishCatch",
+  "spawn",
+  "punch",
+  "kick",
+  "block",
+  "dodge",
+  "hit",
+  "hitB",
+]);
+
+export type Gait = "walkA" | "walkB" | "walkC" | "sneak";
+export type Run = "runA" | "runB";
+/** What a villager does while standing still. */
+export type Pose = Exclude<Clip, Gait | Run>;
+export type Motion = { speed: number; pose: Pose; gait: Gait; run: Run };
+
+type Playing = { action: AnimationAction; weight: number };
 
 /**
- * Skinned villager. Movement is driven by the parent; this only blends
- * between the standing pose and walk → run from the current speed, so feet
- * roughly match the ground.
+ * Skinned villager. Movement is driven by the parent; this blends between the
+ * current pose and the villager's own walk or run from the current speed, so
+ * feet roughly match the ground. Only clips that are playing or fading out
+ * are evaluated, so dozens of clips cost nothing until used.
  */
 export function CharacterModel({
   url,
@@ -212,43 +273,74 @@ export function CharacterModel({
     object.traverse((child) => (child.frustumCulled = false));
     return object;
   }, [scene]);
-  const { mixer, actions } = useMemo(() => {
-    const mixer = new AnimationMixer(model);
-    const actions = Object.fromEntries(
-      ALL.map((name) => [name, mixer.clipAction(clips.get(CLIPS[name])!)]),
-    ) as Record<Clip, AnimationAction>;
-    return { mixer, actions };
-  }, [model, clips]);
-  const weights = useRef(
-    Object.fromEntries(
-      ALL.map((name) => [name, name === "idle" ? 1 : 0]),
-    ) as Record<Clip, number>,
-  );
+  const mixer = useMemo(() => new AnimationMixer(model), [model]);
+  const playing = useRef(new Map<Clip, Playing>());
+  const current = useRef<Clip | null>(null);
 
   useEffect(() => {
-    for (const name of ALL) {
-      const action = actions[name];
-      action.enabled = true;
-      action.setEffectiveWeight(name === "idle" ? 1 : 0);
-      action.play();
-      // De-synchronize villagers so idles do not breathe in unison.
-      action.time = phase * action.getClip().duration;
-    }
+    const map = playing.current;
     // The mixer is per instance and garbage collected with it; uncaching here
     // would break actions reused by React's development re-run of effects.
-    return () => void mixer.stopAllAction();
-  }, [actions, mixer, phase]);
+    return () => {
+      mixer.stopAllAction();
+      map.clear();
+      current.current = null;
+    };
+  }, [mixer]);
 
   useFrame((_, delta) => {
-    const { speed = 0, pose = "idle" } = motion.current ?? {};
-    const active: Clip = speed < 0.05 ? pose : speed < 1.15 ? "walk" : "run";
-    const w = weights.current;
-    for (const name of ALL) {
-      w[name] = MathUtils.damp(w[name], name === active ? 1 : 0, 7, delta);
-      actions[name].setEffectiveWeight(w[name]);
+    const {
+      speed = 0,
+      pose = "idle",
+      gait = "walkA",
+      run = "runA",
+    } = motion.current ?? {};
+    const active: Clip = speed < 0.05 ? pose : speed < RUN_FROM ? gait : run;
+    const map = playing.current;
+    if (active !== current.current) {
+      current.current = active;
+      let entry = map.get(active);
+      if (!entry) {
+        const action = mixer.clipAction(clips.get(CLIPS[active])!);
+        entry = { action, weight: 0 };
+        map.set(active, entry);
+        if (!ONCE.has(active))
+          // De-synchronize villagers so loops do not run in unison.
+          action.time = phase * action.getClip().duration;
+      }
+      if (ONCE.has(active)) {
+        entry.action.setLoop(LoopOnce, 1);
+        entry.action.clampWhenFinished = true;
+        entry.action.reset();
+      }
+      entry.action.enabled = true;
+      entry.action.play();
     }
-    actions.walk.timeScale = MathUtils.clamp(speed / WALK_SPEED, 0.7, 1.7);
-    actions.run.timeScale = MathUtils.clamp(speed / RUN_SPEED, 0.75, 1.4);
+    for (const [name, entry] of map) {
+      entry.weight = MathUtils.damp(
+        entry.weight,
+        name === active ? 1 : 0,
+        8,
+        delta,
+      );
+      if (name !== active && entry.weight < 0.002) {
+        entry.action.stop();
+        map.delete(name);
+        continue;
+      }
+      entry.action.setEffectiveWeight(entry.weight);
+    }
+    const walking = gait === "sneak" ? GAIT_SPEED.sneak : GAIT_SPEED.walk;
+    map
+      .get(gait)
+      ?.action.setEffectiveTimeScale(
+        MathUtils.clamp(speed / walking, 0.6, 1.8),
+      );
+    map
+      .get(run)
+      ?.action.setEffectiveTimeScale(
+        MathUtils.clamp(speed / GAIT_SPEED.run, 0.75, 1.4),
+      );
     mixer.update(Math.min(delta, 0.1));
   });
 

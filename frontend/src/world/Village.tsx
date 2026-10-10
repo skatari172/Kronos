@@ -4,12 +4,13 @@ import { OrbitControls } from "@react-three/drei";
 import { Group, MathUtils, Vector3 } from "three";
 import type { Building, Citizen } from "../api/types";
 import { usePresentation, useWorld } from "../stores/world";
-import { characterModel, hash } from "./assets";
+import { characterModel, hash, physique } from "./assets";
 import { BuildingLife } from "./BuildingLife";
 import { Ground } from "./Ground";
-import { joinCrowd, keepApart } from "./crowd";
+import { crowdPositions, joinCrowd, keepApart } from "./crowd";
 import { DecreeEffect } from "./DecreeEffect";
-import { useDecrees } from "./decrees";
+import { decreeBusy, decreeReaction } from "./decrees";
+import { directFights } from "./fights";
 import { CharacterModel, type Motion } from "./Models";
 import { preloadModels } from "./preload";
 import { useTown } from "./progress";
@@ -36,8 +37,18 @@ function EntityRenderer({
 }: Visual & { done: () => void; town: Town }) {
   const group = useRef<Group>(null);
   const body = useRef<Group>(null);
-  const size = useRef<Spring>({ value: fresh ? 0 : 1, velocity: 0 });
-  const motion = useRef<Motion>({ speed: 0, pose: "idle" });
+  // Newcomers rise out of the ground (spawn pose) instead of popping in.
+  const size = useRef<Spring>({
+    value: fresh && entity.kind !== "citizen" ? 0 : 1,
+    velocity: 0,
+  });
+  const body_ = physique(entity.value.id);
+  const motion = useRef<Motion>({
+    speed: 0,
+    pose: "idle",
+    gait: body_.walk,
+    run: body_.run,
+  });
   const selected = usePresentation((s) => s.selectedId === entity.value.id);
   const select = usePresentation((s) => s.select);
   const seed = hash(entity.value.id);
@@ -55,7 +66,11 @@ function EntityRenderer({
     return new Vector3(spot.x, 0, spot.z);
   });
   const position = useRef(start.clone());
-  const routine = useRef(startRoutine(town, start, seed));
+  const routine = useRef(
+    entity.kind === "citizen"
+      ? startRoutine(town, start, entity.value, fresh)
+      : null,
+  );
   const townRef = useRef(town);
   useEffect(() => {
     townRef.current = town;
@@ -72,22 +87,23 @@ function EntityRenderer({
       group.current.position.copy(home);
       return;
     }
-    // A decree just landed: everyone stops, turns to the square, and cheers.
-    const cheering = useDecrees.getState().cheerUntil > performance.now();
-    if (!leaving && cheering) {
+    const face = (heading: number, rate: number) => {
+      if (!body.current) return;
+      const turn =
+        MathUtils.euclideanModulo(
+          heading - body.current.rotation.y + Math.PI,
+          Math.PI * 2,
+        ) - Math.PI;
+      body.current.rotation.y += turn * (1 - Math.exp(-rate * dt));
+    };
+    // A decree is falling or has just landed: stop and react to it.
+    const reaction = leaving ? null : decreeReaction(seed);
+    if (reaction) {
       motion.current.speed = 0;
-      motion.current.pose = "cheer";
-      if (body.current) {
-        const heading = Math.atan2(-p.x, -p.z);
-        const turn =
-          MathUtils.euclideanModulo(
-            heading - body.current.rotation.y + Math.PI,
-            Math.PI * 2,
-          ) - Math.PI;
-        body.current.rotation.y += turn * (1 - Math.exp(-8 * dt));
-      }
-    } else if (!leaving) {
-      const { speed, heading } = stepRoutine(
+      motion.current.pose = reaction;
+      face(Math.atan2(-p.x, -p.z), 8);
+    } else if (!leaving && routine.current) {
+      const { speed, heading, gait } = stepRoutine(
         routine.current,
         p,
         Math.min(dt, 0.1),
@@ -99,16 +115,9 @@ function EntityRenderer({
       keepApart(entity.value.id, p, seed);
       motion.current.speed = speed;
       motion.current.pose = routine.current.pose;
+      motion.current.gait = gait;
       // Face the road while walking; turn more gently into a break.
-      if (body.current) {
-        const turn =
-          MathUtils.euclideanModulo(
-            heading - body.current.rotation.y + Math.PI,
-            Math.PI * 2,
-          ) - Math.PI;
-        body.current.rotation.y +=
-          turn * (1 - Math.exp((speed ? -12 : -4) * dt));
-      }
+      face(heading, speed ? 12 : 4);
     }
     group.current.position.copy(p);
     // New villagers pop in; departing ones shrink away.
@@ -146,13 +155,15 @@ function EntityRenderer({
       ) : (
         <>
           <group ref={body} rotation={[0, FACING_VIEWER, 0]}>
-            <Suspense fallback={null}>
-              <CharacterModel
-                url={characterModel(entity.value)}
-                motion={motion}
-                phase={(seed % 97) / 97}
-              />
-            </Suspense>
+            <group scale={body_.height}>
+              <Suspense fallback={null}>
+                <CharacterModel
+                  url={characterModel(entity.value)}
+                  motion={motion}
+                  phase={(seed % 97) / 97}
+                />
+              </Suspense>
+            </group>
           </group>
           {selected && <Selection radius={0.32} />}
         </>
@@ -219,6 +230,17 @@ function Entities({ town }: { town: Town }) {
   ));
 }
 
+/** Starts the occasional scuffle (fights.ts); checks about once a second. */
+function FightDirector({ town }: { town: Town }) {
+  const clock = useRef(0);
+  useFrame((_, dt) => {
+    if ((clock.current += dt) < 1) return;
+    clock.current = 0;
+    directFights(crowdPositions(), town, decreeBusy());
+  });
+  return null;
+}
+
 function ResponsiveCamera() {
   const camera = useThree((state) => state.camera);
   const width = useThree((state) => state.size.width);
@@ -265,6 +287,7 @@ export function Village({ autoRotate = false }: { autoRotate?: boolean }) {
           <Ground key={`ground:${epoch}`} town={town} />
           <Entities key={epoch} town={town} />
           <DecreeEffect />
+          <FightDirector town={town} />
         </Suspense>
         <OrbitControls
           makeDefault

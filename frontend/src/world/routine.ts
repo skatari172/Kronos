@@ -1,14 +1,18 @@
 /**
  * Presentation-only daily life. Villagers walk the town's roads between their
  * workplace and home (both from the snapshot when it has them), the bakery,
- * landmarks, and construction sites, and take breaks. Economic state is never
- * inferred from these routes; the simulation's own citizen position is only
- * the starting point.
+ * landmarks, the shore, and construction sites, and take breaks made of short
+ * pose sequences. Pace follows the errand and the villager's state in the
+ * snapshot: hungry villagers hurry to the bakery, broke ones sneak, starving
+ * ones faint. Economic state is never inferred from these routes; the
+ * simulation's own citizen position is only the starting point.
  */
 import type { Vector3 } from "three";
-import type { Citizen, WorldState } from "../api/types";
-import type { Pose } from "./Models";
+import type { Building, Citizen, WorldState } from "../api/types";
+import { physique } from "./assets";
 import { PERSONAL_SPACE } from "./crowd";
+import { FIGHT_STEPS, fightFor, type Step } from "./fights";
+import type { Gait, Pose, Run } from "./Models";
 import { siteFor } from "./sites";
 import {
   nearestRoad,
@@ -21,24 +25,59 @@ import {
 
 export type Routine = {
   points: Point[];
-  /** Seconds left standing still. */
-  wait: number;
+  road: string;
+  lane: number;
+  /** Strolling speed, from the villager's physique. */
+  pace: number;
+  walk: Gait;
+  run: Run;
+  /** Multiplier on pace for the current leg (>1 hurries, runs past RUN_FROM). */
+  hurry: number;
+  sneaking: boolean;
+  /** Pose sequence at the current stop; the head is playing. */
+  steps: Step[];
+  /** Seconds left in the current step. */
+  left: number;
   pose: Pose;
   facing: number;
-  road: string;
-  speed: number;
-  lane: number;
   siteId?: string;
-  arrival?: { pose: Pose; wait: number; at?: Point };
+  fightId?: number;
+  arrival?: { steps: Step[]; face?: Point };
 };
 
 type Goal = { road: string; at: Point };
 
-const LEISURE: Pose[] = ["idle", "idleB", "idleB", "wave", "sit", "cheer"];
-
 const pick = <T>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 const between = (low: number, high: number) =>
   low + Math.random() * (high - low);
+const hold = (pose: Pose, low: number, high = low): Step => ({
+  pose,
+  seconds: between(low, high),
+});
+
+/** What a villager does at their workplace, by kind of business. */
+const WORK: Record<Building["kind"], () => Step[]> = {
+  farm: () => [hold("dig", 4, 7), hold("idle", 0.8), hold("dig", 3, 5)],
+  bakery: () => [hold("knead", 3, 5), hold("tend", 3, 5), hold("pickup", 1.6)],
+  market: () => [hold("work", 2, 3), hold("throw", 1.4), hold("tend", 3, 4)],
+};
+
+/** What a villager does at each landmark. */
+const LANDMARK: Record<string, () => Step[]> = {
+  "The Forge": () => [hold("hammer", 4, 6), hold("idleB", 1.5)],
+  "Riverside Lumbermill": () => [hold("chop", 3, 5), hold("saw", 3, 5)],
+  "Village Well": () => [hold("pickup", 1.6), hold("eat", 2), hold("idle", 1)],
+  "Oakhaven Chapel": () => [hold("idleB", 2, 4), hold("sit", 3, 5)],
+};
+
+const LEISURE = (): Step[] =>
+  pick([
+    [hold("idleB", 3, 6)],
+    [hold("wave", 2, 3), hold("idle", 2)],
+    [hold("sit", 4, 8)],
+    [hold("cheer", 2), hold("idleB", 2)],
+    [hold("jump", 1.6), hold("idle", 1.5)],
+  ]);
 
 /**
  * Where a villager lives: the lot they lease in the simulation, otherwise a
@@ -110,18 +149,36 @@ export function startSpot(
   return waypoints(town, [goal.road], lane, goal.at).at(-1)!;
 }
 
-export function startRoutine(town: Town, start: Point, seed: number): Routine {
+export function startRoutine(
+  town: Town,
+  start: Point,
+  citizen: Citizen,
+  fresh: boolean,
+): Routine {
+  const body = physique(citizen.id);
+  const seed = Math.floor(body.pace * 100);
   return {
     points: [],
-    wait: 0.5 + (seed % 40) / 10,
-    pose: "idle",
-    facing: 0,
     road: nearestRoad(town, start),
-    // Each villager has their own stride and side of the road.
-    speed: 0.6 + (seed % 7) * 0.04,
     lane: ((seed % 5) - 2) * 0.13,
+    pace: body.pace,
+    walk: body.walk,
+    run: body.run,
+    hurry: 1,
+    sneaking: false,
+    // Newcomers rise out of the ground; everyone else starts with a pause.
+    steps: fresh ? [hold("spawn", 2.4)] : [hold("idle", 0.5, 4)],
+    left: 0,
+    pose: fresh ? "spawn" : "idle",
+    facing: 0,
   };
 }
+
+/** The bakery a villager would buy from: the cheapest one. */
+const cheapestBakery = (buildings: Building[]) =>
+  buildings
+    .filter((b) => b.kind === "bakery")
+    .sort((x, y) => x.prices.bread - y.prices.bread)[0];
 
 /** Choose the next errand and lay out the walk there. */
 function plan(
@@ -129,46 +186,124 @@ function plan(
   citizen: Citizen,
   state: WorldState,
   town: Town,
+  position: Vector3,
 ) {
   const buildings = Object.values(state.buildings);
   const near = (at: Point): Goal => ({ road: nearestRoad(town, at), at });
-  const site = siteFor(citizen.id, citizen.occupation);
+  const here = { x: position.x, z: position.z };
   const work = buildings.find((b) => b.id === citizen.employer_id);
-  const bakery = pick(buildings.filter((b) => b.kind === "bakery"));
+  const bakery = cheapestBakery(buildings);
   const home = homeOf(citizen, state, town);
+  const broke = citizen.money < 150;
   const roll = Math.random();
-  let goal: Goal;
-  let pose: Pose;
-  let wait: number;
+  let goal: Goal | null;
+  let steps: Step[];
+  let hurry = 1;
   routine.siteId = undefined;
+  routine.fightId = undefined;
+
+  const site = siteFor(citizen.id, citizen.occupation);
+  const fight = fightFor(citizen.id);
+  if (fight) {
+    // Run to the fight; trade blows from the agreed start.
+    routine.fightId = fight.fight.id;
+    goal = { road: nearestRoad(town, fight.spot), at: fight.spot };
+    const until = Math.max(0, (fight.fight.startAt - performance.now()) / 1000);
+    steps = [{ pose: "fists", seconds: until }, ...FIGHT_STEPS[fight.role]];
+    hurry = 2.8;
+    routine.arrival = { steps, face: fight.opponent };
+    return walkTo(routine, town, goal, hurry, false, true);
+  }
   if (site) {
     goal = near(site.at);
     routine.siteId = site.buildingId;
-    [pose, wait] = ["hammer", (site.until - performance.now()) / 1000 + 0.5];
+    steps = [hold("hammer", (site.until - performance.now()) / 1000 + 0.5)];
+    hurry = 2.6;
+  } else if (citizen.hunger >= 95 && roll < 0.3) {
+    // Starving: faint where they stand, then get back up.
+    goal = null;
+    steps = [hold("faint", 3), hold("getUp", 2.2), hold("idleB", 1.5)];
+  } else if (bakery && citizen.hunger >= 70 && roll < 0.65) {
+    // Hungry: hurry to the cheapest bakery, buy a loaf, eat it.
+    goal = near(bakery.position);
+    steps = [hold("pickup", 1.6), hold("eat", 2.2), hold("idle", 1)];
+    hurry = 1.8;
   } else if (work && roll < 0.35) {
     goal = near(work.position);
-    [pose, wait] = ["work", between(6, 12)];
-  } else if (home && roll < 0.55) {
+    steps = WORK[work.kind]();
+    hurry = 1.3;
+  } else if (home && roll < 0.5) {
     goal = home;
-    [pose, wait] = [pick<Pose>(["idleB", "sit"]), between(5, 10)];
-  } else if (bakery && roll < 0.7) {
+    steps = pick([
+      [hold("lieDown", 2.2), hold("sleep", 6, 10), hold("getUp", 2.2)],
+      [hold("sit", 5, 9)],
+      [hold("idleB", 4, 6)],
+    ]);
+  } else if (town.shore.length && roll < 0.58) {
+    // Fishing off the end of the road.
+    goal = pick(town.shore);
+    steps = [
+      hold("fishCast", 2.2),
+      hold("fishIdle", 6, 10),
+      hold("fishCatch", 2.6),
+      hold("cheer", 1.6),
+    ];
+  } else if (roll < 0.66) {
+    // Exercise right where they are.
+    goal = null;
+    steps = [hold("pushups", 3, 5), hold("situps", 3, 5), hold("idleB", 1)];
+  } else if (bakery && roll < 0.74) {
     goal = near(bakery.position);
-    [pose, wait] = ["work", between(3, 6)];
+    steps = [hold("pickup", 1.6), hold("eat", 2.2)];
   } else {
-    goal = town.places.length ? pick(town.places) : near({ x: 0, z: 0 });
-    [pose, wait] = [pick(LEISURE), between(3, 8)];
+    const place = town.places.length ? pick(town.places) : null;
+    goal = place ?? near(here);
+    steps =
+      (place && LANDMARK[place.name]?.()) ||
+      (place?.kind === "home"
+        ? [hold("wave", 2), hold("idleB", 2, 4)]
+        : null) ||
+      LEISURE();
   }
+  routine.arrival = { steps, face: goal?.at };
+  if (!goal) {
+    routine.points = [];
+    beginSteps(routine, steps, routine.facing);
+    return;
+  }
+  // Villagers short of money keep their heads down unless they are in a hurry.
+  walkTo(routine, town, goal, hurry, broke && hurry <= 1, false);
+}
+
+function walkTo(
+  routine: Routine,
+  town: Town,
+  goal: Goal,
+  hurry: number,
+  sneaking: boolean,
+  exact: boolean,
+) {
   // A shrinking town (another branch, a decline) can strand a villager off-road.
   if (!town.roads.has(routine.road)) routine.road = goal.road;
   const path = route(town, routine.road, goal.road);
-  routine.points = waypoints(town, path, routine.lane, goal.at);
+  routine.points = exact
+    ? [...waypoints(town, path, routine.lane).slice(0, -1), goal.at]
+    : waypoints(town, path, routine.lane, goal.at);
   routine.road = goal.road;
-  routine.arrival = { pose, wait, at: goal.at };
+  routine.hurry = hurry;
+  routine.sneaking = sneaking;
+}
+
+function beginSteps(routine: Routine, steps: Step[], facing: number) {
+  routine.steps = [...steps];
+  routine.left = steps[0]?.seconds ?? 0;
+  routine.pose = steps[0]?.pose ?? "idle";
+  routine.facing = facing;
 }
 
 /**
- * Advance one frame. Returns the walking speed (0 while on a break) and the
- * direction to face.
+ * Advance one frame. Returns the speed (0 while stopped), the direction to
+ * face, and the gait to animate.
  */
 export function stepRoutine(
   routine: Routine,
@@ -177,47 +312,75 @@ export function stepRoutine(
   citizen: Citizen,
   state: WorldState,
   town: Town,
-) {
-  // Drop everything to help raise a new building.
+): { speed: number; heading: number; gait: Gait } {
+  // Drop everything for a fight or to help raise a new building.
+  const fight = fightFor(citizen.id);
   const site = siteFor(citizen.id, citizen.occupation);
-  if (site && routine.siteId !== site.buildingId) {
+  if (
+    (fight && routine.fightId !== fight.fight.id) ||
+    (!fight && site && routine.siteId !== site.buildingId)
+  ) {
     routine.points = [];
-    routine.wait = 0;
+    routine.steps = [];
   }
-  if (routine.wait > 0) {
-    routine.wait -= dt;
-    return { speed: 0, heading: routine.facing };
+  // Playing a pose sequence.
+  if (routine.steps.length) {
+    routine.left -= dt;
+    if (routine.left <= 0) {
+      routine.steps.shift();
+      if (routine.steps.length) {
+        routine.left = routine.steps[0].seconds;
+        routine.pose = routine.steps[0].pose;
+      } else routine.fightId = undefined;
+    }
+    if (routine.steps.length)
+      return { speed: 0, heading: routine.facing, gait: routine.walk };
   }
-  if (!routine.points.length) plan(routine, citizen, state, town);
+  if (!routine.points.length) {
+    plan(routine, citizen, state, town, position);
+    if (routine.steps.length)
+      return { speed: 0, heading: routine.facing, gait: routine.walk };
+  }
   const target = routine.points[0];
   const dx = target.x - position.x;
   const dz = target.z - position.z;
   const distance = Math.hypot(dx, dz);
   const heading = Math.atan2(dx, dz);
-  // Hurry to a construction site; stroll otherwise.
-  const speed = routine.siteId ? routine.speed * 1.8 : routine.speed;
+  const speed = routine.sneaking
+    ? routine.pace * 0.6
+    : routine.pace * routine.hurry;
   const travel = Math.min(distance, speed * dt);
   position.x += (dx / (distance || 1)) * travel;
   position.z += (dz / (distance || 1)) * travel;
   // Close enough counts as arrived: someone may already be standing on the
-  // exact spot, and the crowd keeps a body-width between villagers.
+  // exact spot, and the crowd keeps a body-width between villagers. Fighters
+  // need their exact spots to face off.
   const last = routine.points.length === 1;
-  if (distance - travel < (last ? PERSONAL_SPACE : 0.15)) {
+  const reach = last ? (routine.fightId ? 0.12 : PERSONAL_SPACE) : 0.15;
+  if (distance - travel < reach) {
     routine.points.shift();
     if (!routine.points.length && routine.arrival) {
-      // Break at the destination, facing it.
-      const { pose, wait, at } = routine.arrival;
-      routine.pose = pose;
-      routine.wait = wait;
-      routine.facing = at
-        ? Math.atan2(at.x - position.x, at.z - position.z)
-        : heading;
-    } else if (!routine.siteId && Math.random() < 0.04) {
+      // Begin the stop's poses, facing what they came for.
+      const { steps, face } = routine.arrival;
+      routine.arrival = undefined;
+      beginSteps(
+        routine,
+        steps,
+        face ? Math.atan2(face.x - position.x, face.z - position.z) : heading,
+      );
+      routine.hurry = 1;
+    } else if (!routine.siteId && !routine.fightId && Math.random() < 0.04) {
       // Now and then, stop on the way to look around or greet someone.
-      routine.pose = pick<Pose>(["idle", "idleB", "wave"]);
-      routine.wait = between(1.5, 3.5);
-      routine.facing = heading + between(-1.2, 1.2);
+      beginSteps(
+        routine,
+        [hold(pick<Pose>(["idle", "idleB", "wave"]), 1.5, 3.5)],
+        heading + between(-1.2, 1.2),
+      );
     }
   }
-  return { speed, heading };
+  return {
+    speed,
+    heading,
+    gait: routine.sneaking ? "sneak" : routine.walk,
+  };
 }
