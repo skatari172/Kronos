@@ -28,6 +28,10 @@ SUPPORTED_ACTIONS = (
     "set_wage",
     "hire",
     "fire",
+    "research",
+    "license_invention",
+    "respond_license",
+    "adopt_invention",
 )
 MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
 BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
@@ -127,6 +131,7 @@ class Engine:
             m.SetWage,
             m.Hire,
             m.Fire,
+            m.AdoptInvention,
         )
         if isinstance(action, owner_only):
             if building.owner_id != actor.id:
@@ -206,6 +211,7 @@ class Engine:
                 resource, quantity = "bread", 3 * building.level
             else:
                 raise InvalidAction("bad_params", "Markets do not produce goods")
+            quantity = self._boosted(building, resource, quantity)
             setattr(building.inventory, resource, getattr(building.inventory, resource) + quantity)
             emit(
                 "resource_produced",
@@ -343,9 +349,227 @@ class Engine:
                 "goals_changed",
                 dict(citizen_id=actor.id, old=old.model_dump(), new=new.model_dump()),
             )
+        elif isinstance(action, m.Research):
+            invention = self._open_invention(action.invention_id)
+            if action.mode == "money":
+                spend = min(action.amount, invention.cost - invention.progress)
+                if actor.money < spend:
+                    raise InvalidAction("insufficient_funds", "Insufficient funds for research")
+                actor.money -= spend  # Research spending leaves the economy (materials, trials).
+                self._contribute(invention, actor, spend, "money", action.rationale)
+            else:
+                if actor.employer_id not in s.buildings:
+                    raise InvalidAction(
+                        "bad_params", "Time research forfeits wages; get a job first"
+                    )
+                if self._researching(actor):
+                    raise InvalidAction("bad_params", "Already researching on wage time")
+                actor.research_invention_id = invention.id
+                actor.research_until_tick = s.tick + action.ticks
+                emit(
+                    "research_contributed",
+                    dict(
+                        invention_id=invention.id,
+                        citizen_id=actor.id,
+                        mode="time",
+                        amount=0,
+                        progress=invention.progress,
+                        cost=invention.cost,
+                        days_left=action.ticks,
+                    ),
+                )
+        elif isinstance(action, m.LicenseInvention):
+            invention = s.inventions.get(action.invention_id)
+            if invention is None:
+                raise InvalidAction("unknown_entity", "Unknown invention")
+            if not invention.unlocked:
+                raise InvalidAction("invention_locked", "Only unlocked inventions can be licensed")
+            if invention.owner_id != actor.id:
+                raise InvalidAction("not_owner", "Only the invention owner may license it")
+            recipient = s.citizens.get(action.recipient_id)
+            if recipient is None or recipient.id == actor.id:
+                raise InvalidAction("bad_params", "Invalid recipient")
+            if recipient.id in invention.licensees:
+                raise InvalidAction("bad_params", f"{recipient.name} already holds a license")
+            if any(
+                o.invention_id == invention.id and o.recipient_id == recipient.id
+                for o in s.license_offers.values()
+            ):
+                raise InvalidAction("bad_params", "An offer to this citizen is already pending")
+            oid = f"license-{s.branch_id}-{s.sequence + 1}"
+            offer = m.LicenseOffer(
+                id=oid,
+                invention_id=invention.id,
+                owner_id=actor.id,
+                recipient_id=recipient.id,
+                fee=action.fee,
+                tick=s.tick,
+            )
+            s.license_offers[oid] = offer
+            note = f"{actor.name} offers a {invention.name} license for {action.fee} ({oid})"
+            recipient.memories = (recipient.memories + [note])[-8:]
+            emit("license_offered", self._offer_payload(offer))
+        elif isinstance(action, m.RespondLicense):
+            offer = s.license_offers.get(action.offer_id)
+            if offer is None:
+                raise InvalidAction("unknown_entity", "Unknown or expired license offer")
+            if offer.recipient_id != actor.id:
+                raise InvalidAction(
+                    "insufficient_authority", "Only the recipient may answer this offer"
+                )
+            if offer.tick != s.tick:
+                raise InvalidAction("bad_params", "License offers must be answered the same tick")
+            invention = s.inventions[offer.invention_id]
+            owner = s.citizens.get(offer.owner_id)
+            if action.accept:
+                if owner is None:
+                    raise InvalidAction("unknown_entity", "The invention owner is gone")
+                if actor.money < offer.fee:
+                    raise InvalidAction("insufficient_funds", "Insufficient funds for the fee")
+                actor.money -= offer.fee
+                owner.money += offer.fee
+                invention.licensees = sorted({*invention.licensees, actor.id})
+                if offer.fee:
+                    emit(
+                        "transaction_completed",
+                        dict(sender_id=actor.id, recipient_id=owner.id, amount=offer.fee),
+                    )
+            del s.license_offers[offer.id]
+            status = "accepted" if action.accept else "declined"
+            emit("license_resolved", dict(**self._offer_payload(offer), status=status))
+        elif isinstance(action, m.AdoptInvention):
+            invention = s.inventions.get(action.invention_id)
+            if invention is None:
+                raise InvalidAction("unknown_entity", "Unknown invention")
+            if not invention.unlocked:
+                raise InvalidAction("invention_locked", "The invention is not unlocked yet")
+            if actor.id != invention.owner_id and actor.id not in invention.licensees:
+                raise InvalidAction(
+                    "insufficient_authority", "Adopting needs ownership or a license"
+                )
+            if building.kind != invention.effect.building_kind:
+                raise InvalidAction(
+                    "bad_params", f"{invention.name} only helps a {invention.effect.building_kind}"
+                )
+            if building.id in invention.adopters:
+                raise InvalidAction("bad_params", "Already adopted here")
+            if building.cash < invention.adoption_cost:
+                raise InvalidAction("insufficient_funds", "The business cannot pay to adopt")
+            building.cash -= invention.adoption_cost  # Tools and works leave the economy.
+            invention.adopters = sorted({*invention.adopters, building.id})
+            emit(
+                "invention_adopted",
+                dict(
+                    invention_id=invention.id,
+                    building_id=building.id,
+                    cost=invention.adoption_cost,
+                ),
+            )
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
+
+    def _boosted(self, building: m.Building, resource: str, quantity: int) -> int:
+        """Apply adopted invention multipliers in invention ID order (integer, deterministic)."""
+        for _, invention in sorted(self.state.inventions.items()):
+            effect = invention.effect
+            if (
+                building.id in invention.adopters
+                and effect.building_kind == building.kind
+                and effect.resource == resource
+            ):
+                quantity = quantity * effect.multiplier_pct // 100
+        return quantity
+
+    def _researching(self, citizen: m.Citizen) -> bool:
+        """True while a citizen's wages go to time-mode research instead of their pocket."""
+        return (
+            citizen.research_invention_id is not None
+            and self.state.tick <= citizen.research_until_tick
+        )
+
+    def _open_invention(self, invention_id: str) -> m.Invention:
+        invention = self.state.inventions.get(invention_id)
+        if invention is None:
+            raise InvalidAction("unknown_entity", "Unknown invention")
+        if invention.unlocked:
+            raise InvalidAction("bad_params", "Invention is already unlocked")
+        return invention
+
+    @staticmethod
+    def _offer_payload(offer: m.LicenseOffer) -> dict:
+        return dict(
+            offer_id=offer.id,
+            invention_id=offer.invention_id,
+            owner_id=offer.owner_id,
+            recipient_id=offer.recipient_id,
+            fee=offer.fee,
+        )
+
+    def _contribute(self, invention: m.Invention, citizen: m.Citizen, amount, mode, rationale=None):
+        """Add progress; at full cost the top contributor (lowest ID on ties) owns it."""
+        invention.progress += amount
+        invention.contributors[citizen.id] = invention.contributors.get(citizen.id, 0) + amount
+        days_left = max(0, citizen.research_until_tick - self.state.tick) if mode == "time" else 0
+        self.emit(
+            "research_contributed",
+            dict(
+                invention_id=invention.id,
+                citizen_id=citizen.id,
+                mode=mode,
+                amount=amount,
+                progress=invention.progress,
+                cost=invention.cost,
+                days_left=days_left,
+            ),
+            citizen.id,
+            rationale,
+        )
+        if invention.progress < invention.cost:
+            return
+        invention.unlocked = True
+        invention.owner_id = min(
+            invention.contributors, key=lambda c: (-invention.contributors[c], c)
+        )
+        released = []
+        for other in sorted(self.state.citizens.values(), key=lambda c: c.id):
+            if other.research_invention_id == invention.id:
+                other.research_invention_id = None
+                other.research_until_tick = 0
+                released.append(other.id)
+        self.emit(
+            "invention_unlocked",
+            dict(
+                invention_id=invention.id,
+                owner_id=invention.owner_id,
+                released_researcher_ids=released,
+            ),
+            citizen.id,
+            rationale,
+        )
+
+    def _innovation_day(self):
+        """Expire unanswered license offers, then credit each time researcher's forfeited wage."""
+        s = self.state
+        for oid in sorted(s.license_offers):
+            offer = s.license_offers[oid]
+            if offer.tick < s.tick:
+                del s.license_offers[oid]
+                self.emit("license_resolved", dict(**self._offer_payload(offer), status="expired"))
+        for citizen in sorted(s.citizens.values(), key=lambda c: c.id):
+            if not self._researching(citizen):
+                continue
+            invention = s.inventions.get(citizen.research_invention_id)
+            employer = s.buildings.get(citizen.employer_id)
+            last_day = s.tick >= citizen.research_until_tick
+            if invention is not None and not invention.unlocked:
+                wage = employer.wage if employer else 0  # Losing the job ends the forfeit.
+                self._contribute(
+                    invention, citizen, min(wage, invention.cost - invention.progress), "time"
+                )
+            if last_day and citizen.research_invention_id is not None:
+                citizen.research_invention_id = None
+                citizen.research_until_tick = 0
 
     def _close(self, building: m.Building, actor_id: str | None, rationale: str | None):
         """Remove a business: cash and goods go to the owner, employees are released."""
@@ -470,7 +694,8 @@ class Engine:
                     pass  # Scarcity is a valid economic outcome.
         missed_payroll = set()
         for citizen in s.citizens.values():
-            employer = s.buildings.get(citizen.employer_id)
+            # Time-mode researchers forfeit today's wage; _innovation_day credits it as progress.
+            employer = None if tx._researching(citizen) else s.buildings.get(citizen.employer_id)
             if employer and employer.cash >= employer.wage:
                 employer.cash -= employer.wage
                 citizen.money += employer.wage
@@ -505,6 +730,7 @@ class Engine:
             building.unpaid_days = building.unpaid_days + 1 if building.id in missed_payroll else 0
             if building.unpaid_days >= BANKRUPTCY_DAYS:
                 tx._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
+        tx._innovation_day()
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:

@@ -76,6 +76,12 @@ class Citizen(Model):
     personality: str = "practical"
     relationships: list[Relationship] = Field(default_factory=list)
     memories: list[str] = Field(default_factory=list)
+    research_invention_id: str | None = Field(
+        default=None, description="Invention this citizen forfeits wages for (time mode)"
+    )
+    research_until_tick: int = Field(
+        default=0, ge=0, description="Last day of time-mode research; wages are skipped until then"
+    )
 
 
 class Plot(Model):
@@ -101,6 +107,43 @@ class Building(Model):
     )
 
 
+class InventionEffect(Model):
+    """Production multiplier for adopting buildings, in percent (140 = +40%, 200 = x2)."""
+
+    building_kind: BuildingKind
+    resource: TradedResource
+    multiplier_pct: int = Field(gt=100, le=1000)
+
+
+class Invention(Model):
+    """Shared research target. Cost and progress are cents; time research counts lost wages."""
+
+    id: str
+    name: str
+    cost: int = Field(gt=0)
+    progress: int = Field(default=0, ge=0)
+    contributors: dict[str, int] = Field(
+        default_factory=dict, description="Citizen ID to cents contributed"
+    )
+    unlocked: bool = False
+    owner_id: str | None = None
+    licensees: list[str] = Field(default_factory=list, description="Citizen IDs")
+    adopters: list[str] = Field(default_factory=list, description="Building IDs")
+    adoption_cost: int = Field(default=1000, ge=0, description="Paid once from business cash")
+    effect: InventionEffect
+
+
+class LicenseOffer(Model):
+    """A pending license; the recipient must accept on the tick it was offered."""
+
+    id: str
+    invention_id: str
+    owner_id: str
+    recipient_id: str
+    fee: int = Field(ge=0)
+    tick: int
+
+
 class WorldState(Model):
     schema_version: Literal[1] = 1
     branch_id: str
@@ -111,6 +154,8 @@ class WorldState(Model):
     citizens: dict[str, Citizen]
     buildings: dict[str, Building]
     plots: dict[str, Plot]
+    inventions: dict[str, Invention] = Field(default_factory=dict)
+    license_offers: dict[str, LicenseOffer] = Field(default_factory=dict)
 
 
 class ActionBase(Model):
@@ -314,6 +359,14 @@ class AdoptInvention(ActionBase):
     building_id: str
 
 
+class RespondLicense(ActionBase):
+    """The license recipient accepts (paying the fee) or declines a same-tick offer."""
+
+    type: Literal["respond_license"] = "respond_license"
+    offer_id: str
+    accept: bool
+
+
 class Lend(ActionBase):
     """Loan offer; rate is basis points per term so money stays integral."""
 
@@ -384,7 +437,8 @@ AgentAction = Annotated[
     | Repay
     | ProposeVote
     | CastVote
-    | GatherResource,
+    | GatherResource
+    | RespondLicense,
     Field(discriminator="type"),
 ]
 
@@ -558,6 +612,65 @@ class WageChanged(EventBase):
     payload: WagePayload
 
 
+class ResearchPayload(Model):
+    invention_id: str
+    citizen_id: str
+    mode: Literal["money", "time"]
+    amount: int = Field(description="Cents of progress added; 0 when time research starts")
+    progress: int
+    cost: int
+    days_left: int = 0
+
+
+class ResearchContributed(EventBase):
+    type: Literal["research_contributed"] = "research_contributed"
+    payload: ResearchPayload
+
+
+class InventionUnlockedPayload(Model):
+    invention_id: str
+    owner_id: str
+    released_researcher_ids: list[str] = Field(default_factory=list)
+
+
+class InventionUnlocked(EventBase):
+    type: Literal["invention_unlocked"] = "invention_unlocked"
+    payload: InventionUnlockedPayload
+
+
+class LicenseOfferPayload(Model):
+    offer_id: str
+    invention_id: str
+    owner_id: str
+    recipient_id: str
+    fee: int
+
+
+class LicenseOffered(EventBase):
+    type: Literal["license_offered"] = "license_offered"
+    payload: LicenseOfferPayload
+
+
+class LicenseResolvedPayload(LicenseOfferPayload):
+    status: Literal["accepted", "declined", "expired"]
+
+
+class LicenseResolved(EventBase):
+    type: Literal["license_resolved"] = "license_resolved"
+    payload: LicenseResolvedPayload
+
+
+class AdoptionPayload(Model):
+    invention_id: str
+    building_id: str
+    cost: int
+
+
+class InventionAdopted(EventBase):
+    type: Literal["invention_adopted"] = "invention_adopted"
+    payload: AdoptionPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -586,7 +699,12 @@ SimulationEvent = Annotated[
     | GoalsChanged
     | EmploymentChanged
     | WageChanged
-    | InterventionApplied,
+    | InterventionApplied
+    | ResearchContributed
+    | InventionUnlocked
+    | LicenseOffered
+    | LicenseResolved
+    | InventionAdopted,
     Field(discriminator="type"),
 ]
 
@@ -789,3 +907,30 @@ class PurchaseRequest(BusinessCommand):
     resource: TradedResource
     quantity: int = Field(gt=0, le=100)
     max_unit_price: int = Field(gt=0)
+
+
+class ResearchRequest(BusinessCommand):
+    mode: Literal["money", "time"]
+    amount: int | None = Field(default=None, gt=0)
+    ticks: int | None = Field(default=None, gt=0, le=30)
+
+    @model_validator(mode="after")
+    def _mode_fields(self):
+        if (self.mode == "money") != (self.amount is not None) or (self.mode == "time") != (
+            self.ticks is not None
+        ):
+            raise ValueError("money mode needs amount only; time mode needs ticks only")
+        return self
+
+
+class LicenseRequest(BusinessCommand):
+    recipient_id: str
+    fee: int = Field(ge=0)
+
+
+class LicenseResponseRequest(BusinessCommand):
+    accept: bool
+
+
+class AdoptRequest(BusinessCommand):
+    building_id: str
