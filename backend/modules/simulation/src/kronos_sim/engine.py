@@ -65,6 +65,37 @@ MAX_RENT_CHANGE_PERCENT = 20  # Per set_rent while a lot is leased.
 MIN_RENT_STEP = 100  # Cents; lets a leased lot at zero (or tiny) rent still change.
 EVICTION_PERIODS = 3  # Missed rent periods before the owner may evict.
 MAX_PREPAID_PERIODS = 4  # How far ahead a tenant may pay.
+# Village growth (Engine._grow, a daily step with no AI). Money is cents; 1 coin = 100 cents.
+NEW_PLOTS_PER_EXPANSION = 2  # Town-land lots opened once every lot is built on or leased.
+PLOT_SPACING_X = 4  # Seed lots sit at x in {-4, 0, 4} ...
+PLOT_SPACING_Z = 6  # ... and z in {-3, 3}; new lots continue that grid ring by ring.
+NEWCOMER_INTERVAL_DAYS = 3  # A newcomer may arrive on ticks divisible by this.
+NEWCOMER_MAX_AVG_HUNGER = 50  # Only a village whose average hunger is below this attracts one.
+NEWCOMER_MONEY = 1000  # 10 coins.
+NEWCOMER_NAMES = (
+    "Ivo",
+    "Lena",
+    "Bram",
+    "Clara",
+    "Otto",
+    "Nell",
+    "Silas",
+    "Wren",
+    "Hugo",
+    "Talia",
+    "Jonas",
+    "Edda",
+)
+LEAVE_AFTER_DAYS = 3  # Days in a row at hunger 100 with no money before a citizen leaves.
+FOUNDER_MIN_MONEY = 8000  # A saver founds a business holding more than 80 coins ...
+FOUNDER_CAPITAL = 5000  # ... and puts 50 coins in as business cash.
+FOUNDING_ORDER: tuple[m.BuildingKind, ...] = ("farm", "bakery", "market")  # Tie order.
+UPGRADE_MIN_CASH = 10000  # A full business holding more than 100 coins upgrades ...
+UPGRADE_COST = 2500  # ... paying 25 coins from its cash (spent, as with upgrade_building) ...
+UPGRADE_JOB_SLOTS = 2  # ... for this many extra job slots.
+MAX_LEVEL = 3
+RENTER_MIN_MONEY = 2000  # An employed citizen with more than 20 coins rents a free home.
+BUSINESS_CASH_CAP = 20000  # 200 coins; surplus is paid out to staff each day (tuned: 120-day run).
 # interact effects (spec section 5.2, 0..1 values scaled by 100): (trust delta, grudge delta).
 # Each applies to the target's feeling toward the actor; MUTUAL_INTERACTIONS also change the
 # actor's feeling toward the target the same way.
@@ -945,7 +976,9 @@ class Engine:
             (
                 a
                 for a in self.state.job_applications.values()
-                if a.citizen_id == citizen_id and a.building_id == building_id
+                if a.status == "pending"
+                and a.citizen_id == citizen_id
+                and a.building_id == building_id
             ),
             None,
         )
@@ -955,9 +988,13 @@ class Engine:
         return building.job_slots - staff
 
     def _resolve(self, application: m.JobApplication, outcome: str, actor_id, rationale):
-        """Close one pending application and tell the applicant how it ended."""
+        """Close one pending application and tell the applicant how it ended.
+
+        The record stays in job_applications with status hired (accepted) or rejected
+        (rejected or withdrawn); the event keeps the finer-grained outcome.
+        """
         s = self.state
-        del s.job_applications[application.id]
+        application.status = "hired" if outcome == "accepted" else "rejected"
         applicant = s.citizens.get(application.citizen_id)
         building = s.buildings.get(application.building_id)
         if applicant is not None and outcome != "withdrawn":
@@ -1107,7 +1144,7 @@ class Engine:
             rationale,
         )
         for other in sorted(s.job_applications.values(), key=lambda a: a.sequence):
-            if other.citizen_id == application.citizen_id:
+            if other.status == "pending" and other.citizen_id == application.citizen_id:
                 self._resolve(other, "withdrawn", None, "Applicant took another job")
 
     def _resolve_job_applications(self):
@@ -1132,9 +1169,12 @@ class Engine:
                 0,
             )
 
-        pending = sorted(s.job_applications.values(), key=lambda a: (-owner_trust(a), a.sequence))
+        pending = sorted(
+            (a for a in s.job_applications.values() if a.status == "pending"),
+            key=lambda a: (-owner_trust(a), a.sequence),
+        )
         for application in pending:
-            if application.id not in s.job_applications:
+            if application.status != "pending":
                 continue  # Withdrawn by an earlier hire this tick.
             applicant = s.citizens.get(application.citizen_id)
             building = s.buildings.get(application.building_id)
@@ -1249,7 +1289,8 @@ class Engine:
                 self.emit("rent_missed", _lot_payload(plot), tenant.id)
 
     def _close(self, building: m.Building, actor_id: str | None, rationale: str | None):
-        """Remove a business: cash and goods go to the owner, employees are released."""
+        """Remove a business: cash and goods go to the owner, pending applications are
+        rejected and employees are released."""
         s = self.state
         owner = s.citizens.get(building.owner_id)
         if owner is not None:
@@ -1279,6 +1320,9 @@ class Engine:
                         actor_id,
                         rationale,
                     )
+        for application in sorted(s.job_applications.values(), key=lambda a: a.sequence):
+            if application.status == "pending" and application.building_id == building.id:
+                self._resolve(application, "rejected", actor_id, "Business closed")
         for worker in sorted(s.citizens.values(), key=lambda c: c.id):
             if worker.employer_id == building.id:
                 worker.employer_id = None
@@ -1482,23 +1526,296 @@ class Engine:
                 refs = [offer.event_id] if offer.event_id else []
                 self._resolve_offer(offer, "trade_expired", None, "Offer expired", refs)
 
+    def _add_citizen(self, cid: str, plot: m.Plot, **fields) -> m.Citizen:
+        """Place a new citizen by a lot and announce it (spawn route and newcomers)."""
+        citizen = m.Citizen(id=cid, position=m.Position(x=plot.position.x, z=0), **fields)
+        self.state.citizens[cid] = citizen
+        self.emit("citizen_spawned", dict(entity_id=cid, position=citizen.position.model_dump()))
+        return citizen
+
+    def _grow(self):
+        """Daily growth rules, in order, with no AI and no randomness (choices go by ID)."""
+        self._open_land()
+        self._welcome_newcomer()
+        self._let_destitute_leave()
+        self._found_by_saver()
+        self._upgrade_busy_businesses()
+        self._rent_homes()
+        self._pay_out_surplus()
+
+    @staticmethod
+    def _numbered(ids, prefix: str) -> list[int]:
+        return [
+            int(i[len(prefix) :])
+            for i in ids
+            if i.startswith(prefix) and i[len(prefix) :].isdigit()
+        ]
+
+    def _plot_order(self) -> list[m.Plot]:
+        """Lots in numeric ID order (plot-2 before plot-10), then any other IDs."""
+
+        def key(plot: m.Plot):
+            n = self._numbered([plot.id], "plot-")
+            return (0, n[0], "") if n else (1, 0, plot.id)
+
+        return sorted(self.state.plots.values(), key=key)
+
+    def _open_land(self):
+        """When every lot holds a building or a tenant, open NEW_PLOTS_PER_EXPANSION town lots.
+
+        Lots sit on a grid (PLOT_SPACING_X by PLOT_SPACING_Z, rows at z = +-3, +-9, ...).
+        Ring r holds the cells with max(|column|, rows beyond the middle two + 1) == r, so the
+        seed lots form ring 1. Within a ring, nearer rows and columns come first, then -x before
+        +x and -z before +z. Taken cells are skipped, so new lots never collide.
+        """
+        s = self.state
+        built = {b.plot_id for b in s.buildings.values()}
+        if not s.plots or any(p.id not in built and p.tenant_id is None for p in s.plots.values()):
+            return
+        taken = {(p.position.x, p.position.z) for p in s.plots.values()}
+        next_id = max(self._numbered(s.plots, "plot-"), default=-1) + 1
+        opened, ring = 0, 1
+        while opened < NEW_PLOTS_PER_EXPANSION:
+            cells = []
+            for gx in range(-ring, ring + 1):
+                for row in range(-ring, ring + 1):  # row 0 is z = -3, row 1 is z = 3
+                    depth = row - 1 if row >= 1 else -row
+                    if max(abs(gx), depth + 1) == ring:
+                        cells.append((depth, abs(gx), gx, row))
+            for _, _, gx, row in sorted(cells):
+                x, z = float(gx * PLOT_SPACING_X), float(row * PLOT_SPACING_Z - PLOT_SPACING_Z / 2)
+                if (x, z) in taken or opened == NEW_PLOTS_PER_EXPANSION:
+                    continue
+                while f"plot-{next_id}" in s.plots:
+                    next_id += 1
+                plot = m.Plot(id=f"plot-{next_id}", position=m.Position(x=x, z=z))
+                s.plots[plot.id] = plot
+                taken.add((x, z))
+                opened += 1
+                self.emit(
+                    "plot_opened",
+                    dict(**_lot_payload(plot), position=plot.position.model_dump()),
+                    rationale="Every lot is in use; the village grows",
+                )
+            ring += 1
+
+    def _welcome_newcomer(self):
+        """Every NEWCOMER_INTERVAL_DAYS, a fed village with an opening attracts one newcomer,
+        who applies to the business with the most free slots (ties by building ID)."""
+        s = self.state
+        if s.tick % NEWCOMER_INTERVAL_DAYS:
+            return
+        hunger = [c.hunger for c in s.citizens.values()]
+        if hunger and sum(hunger) >= NEWCOMER_MAX_AVG_HUNGER * len(hunger):
+            return
+        openings = [b for b in s.buildings.values() if self._free_slots(b) > 0]
+        if not openings:
+            return
+        building = min(openings, key=lambda b: (-self._free_slots(b), b.id))
+        number = max(self._numbered(s.citizens, "citizen-"), default=-1) + 1
+        while f"citizen-{number}" in s.citizens:
+            number += 1
+        cid = f"citizen-{number}"
+        self._add_citizen(
+            cid,
+            s.plots[building.plot_id],
+            name=NEWCOMER_NAMES[number % len(NEWCOMER_NAMES)],
+            occupation="Newcomer",
+            money=NEWCOMER_MONEY,
+        )
+        self._execute(
+            m.ApplyJob(
+                actor_id=cid, building_id=building.id, rationale="Came to the village for work"
+            )
+        )
+
+    def _let_destitute_leave(self):
+        """A citizen at hunger 100 with no money for LEAVE_AFTER_DAYS days in a row leaves,
+        unless they own a building or a lot. Their job, lease, pending applications and
+        pending offers end first so nothing points at them."""
+        s = self.state
+        owners = {b.owner_id for b in s.buildings.values()} | {
+            p.owner_id for p in s.plots.values() if p.owner_id is not None
+        }
+        for citizen in sorted(s.citizens.values(), key=lambda c: c.id):
+            destitute = citizen.hunger == 100 and citizen.money == 0
+            citizen.destitute_days = citizen.destitute_days + 1 if destitute else 0
+            if citizen.destitute_days >= LEAVE_AFTER_DAYS and citizen.id not in owners:
+                self._remove_citizen(citizen, "Starving and penniless; left the village")
+
+    def _remove_citizen(self, citizen: m.Citizen, rationale: str):
+        s = self.state
+        employer = s.buildings.get(citizen.employer_id)
+        if citizen.employer_id is not None:
+            citizen.employer_id = None
+            self.emit(
+                "employment_changed",
+                dict(
+                    citizen_id=citizen.id,
+                    building_id=None,
+                    previous_building_id=employer.id if employer else None,
+                ),
+                citizen.id,
+                rationale,
+            )
+        for plot in self._plot_order():
+            if plot.tenant_id == citizen.id:
+                ended = _lot_payload(plot)  # arrears here are the written-off debt
+                plot.tenant_id = None
+                plot.arrears = plot.missed_periods = plot.prepaid_periods = 0
+                self.emit("tenant_evicted", ended, citizen.id, rationale)
+        for application in sorted(s.job_applications.values(), key=lambda a: a.sequence):
+            if application.status == "pending" and application.citizen_id == citizen.id:
+                self._resolve(application, "rejected", None, rationale)
+        for lid in sorted(s.loans):
+            loan = s.loans[lid]
+            if loan.status == "offered" and citizen.id in (loan.lender_id, loan.borrower_id):
+                loan.status = "expired"
+                self.emit("loan_expired", self._loan_payload(loan), citizen.id, rationale)
+        for offer_id in sorted(s.trade_offers):
+            offer = s.trade_offers[offer_id]
+            if citizen.id in (offer.offerer_id, offer.recipient_id):
+                refs = [offer.event_id] if offer.event_id else []
+                self._resolve_offer(offer, "trade_expired", None, rationale, refs)
+        for oid in sorted(s.license_offers):
+            offer = s.license_offers[oid]
+            if citizen.id in (offer.owner_id, offer.recipient_id):
+                del s.license_offers[oid]
+                self.emit("license_resolved", dict(**self._offer_payload(offer), status="expired"))
+        del s.citizens[citizen.id]
+        self.emit(
+            "citizen_removed",
+            dict(entity_id=citizen.id, position=citizen.position.model_dump()),
+            citizen.id,
+            rationale,
+        )
+
+    def _found_by_saver(self):
+        """At most one founding a day: the first saver (by ID) without a building of their own
+        and more than FOUNDER_MIN_MONEY founds the scarcest kind on the first free town lot."""
+        s = self.state
+        built = {b.plot_id for b in s.buildings.values()}
+        plot = next(
+            (
+                p
+                for p in self._plot_order()
+                if p.owner_id is None and p.tenant_id is None and p.id not in built
+            ),
+            None,
+        )
+        if plot is None:
+            return
+        owners = {b.owner_id for b in s.buildings.values()}
+        founder = next(
+            (
+                c
+                for c in sorted(s.citizens.values(), key=lambda c: c.id)
+                if c.id not in owners and c.money > FOUNDER_MIN_MONEY
+            ),
+            None,
+        )
+        if founder is None:
+            return
+        counts = {kind: 0 for kind in FOUNDING_ORDER}
+        for building in s.buildings.values():
+            counts[building.kind] = counts.get(building.kind, 0) + 1
+        kind = min(FOUNDING_ORDER, key=lambda k: (counts[k], FOUNDING_ORDER.index(k)))
+        self._execute(
+            m.FoundBusiness(
+                actor_id=founder.id,
+                plot_id=plot.id,
+                kind=kind,
+                capital=FOUNDER_CAPITAL,
+                rationale="Savings put to work",
+            )
+        )
+
+    def _upgrade_busy_businesses(self):
+        """A business with every slot filled and more than UPGRADE_MIN_CASH upgrades one level,
+        paying UPGRADE_COST from its cash for UPGRADE_JOB_SLOTS more slots."""
+        for building in sorted(self.state.buildings.values(), key=lambda b: b.id):
+            if (
+                building.level < MAX_LEVEL
+                and building.cash > UPGRADE_MIN_CASH
+                and self._free_slots(building) <= 0
+            ):
+                building.cash -= UPGRADE_COST
+                building.level += 1
+                building.job_slots = min(20, building.job_slots + UPGRADE_JOB_SLOTS)
+                self.emit(
+                    "building_upgraded",
+                    dict(entity_id=building.id, level=building.level),
+                    building.owner_id,
+                    "Every job slot is filled",
+                )
+
+    def _rent_homes(self):
+        """Employed citizens with more than RENTER_MIN_MONEY and no lease take the first free
+        owned lot (no tenant, no building, not their own) they can afford."""
+        s = self.state
+        for citizen in sorted(s.citizens.values(), key=lambda c: c.id):
+            if (
+                citizen.employer_id not in s.buildings
+                or citizen.money <= RENTER_MIN_MONEY
+                or any(p.tenant_id == citizen.id for p in s.plots.values())
+            ):
+                continue
+            built = {b.plot_id for b in s.buildings.values()}
+            plot = next(
+                (
+                    p
+                    for p in self._plot_order()
+                    if p.owner_id in s.citizens
+                    and p.owner_id != citizen.id
+                    and p.tenant_id is None
+                    and p.id not in built
+                    and p.rent <= citizen.money
+                ),
+                None,
+            )
+            if plot is not None:
+                self._execute(
+                    m.LeaseLot(actor_id=citizen.id, plot_id=plot.id, rationale="A home near work")
+                )
+
+    def _pay_out_surplus(self):
+        """Business cash above BUSINESS_CASH_CAP is shared evenly by its employees (ID order);
+        the remainder, or everything when there is no staff, goes to the owner."""
+        s = self.state
+        for building in sorted(s.buildings.values(), key=lambda b: b.id):
+            surplus = building.cash - BUSINESS_CASH_CAP
+            owner = s.citizens.get(building.owner_id)
+            if surplus <= 0:
+                continue
+            staff = sorted(c.id for c in s.citizens.values() if c.employer_id == building.id)
+            share = surplus // len(staff) if staff else 0
+            payouts = {cid: share for cid in staff if share}
+            if owner is not None and surplus - share * len(staff):
+                payouts[owner.id] = payouts.get(owner.id, 0) + surplus - share * len(staff)
+            for cid, amount in sorted(payouts.items()):
+                building.cash -= amount
+                s.citizens[cid].money += amount
+                self.emit(
+                    "transaction_completed",
+                    dict(sender_id=building.id, recipient_id=cid, amount=amount),
+                    building.owner_id,
+                    "Surplus paid out to the people who earned it",
+                )
+
     def spawn(self, request: m.SpawnCitizenRequest) -> m.SimulationTickResult:
         tx = Engine(self.state)
         plot = tx.state.plots.get(request.plot_id)
         if plot is None:
             raise InvalidAction("unknown_entity", "Unknown plot")
-        cid = f"citizen-{tx.state.branch_id}-{tx.state.sequence + 1}"
-        tx.state.citizens[cid] = m.Citizen(
-            id=cid,
+        tx._add_citizen(
+            f"citizen-{tx.state.branch_id}-{tx.state.sequence + 1}",
+            plot,
             name=request.name,
             occupation=request.occupation,
-            position=m.Position(x=plot.position.x, z=0),
             money=request.money,
             personality=request.personality,
             goal_weights=request.goal_weights,
         )
-        position = tx.state.citizens[cid].position.model_dump()
-        tx.emit("citizen_spawned", dict(entity_id=cid, position=position))
         return tx.result()
 
     def intervene(self, command: m.PriceIntervention, text: str) -> m.SimulationTickResult:
@@ -1600,6 +1917,7 @@ class Engine:
         tx._innovation_day()
         tx._settle_votes()
         tx._collect_rent()
+        tx._grow()
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:

@@ -71,6 +71,7 @@ To resolve the latency disparity between the fast simulation clock (1–2 s/tick
 ### Execution Rules
 
 - **Steps 1–5 (Tier 1: Micro-tick)** are 100% deterministic rule-based Python execution. They NEVER invoke an LLM.
+- **Growth (end of Tier 1)**: after the daily bookkeeping, `Engine.tick()` runs the v1 growth step (new plots, newcomers, departures, founding, upgrades, renting, cash cap). It is rule-based and uses tunable constants in `engine.py`; see `docs/simulation-design.md`.
 - **Step 6 (Tier 2: Macro-deliberation)** drains proposals that arrived asynchronously from player inputs or background agent deliberation tasks.
 
 ---

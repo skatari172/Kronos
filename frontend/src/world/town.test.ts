@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { initialMock } from "../api/mock";
 import { growthOf, prosperity } from "./progress";
 import { homeOf } from "./routine";
-import { MAX_TIER, route, townAt } from "./town";
+import { MAX_TIER, route, townAt, withLots } from "./town";
 
 describe("town growth", () => {
   it("only ever adds ground, roads, and places as tiers rise", () => {
@@ -75,5 +75,73 @@ describe("town growth", () => {
     expect(growthOf({ ...hungry, tick: day }, epoch).tier).toBe(1);
     // A seek or branch switch starts fresh.
     expect(growthOf({ ...hungry, tick: day }, epoch + 1).tier).toBe(0);
+  });
+
+  it("gives runtime-opened lots ground and room at every tier", () => {
+    const seedLots = Object.values(initialMock().state.plots).map(
+      (p) => p.position,
+    );
+    // New town land at the edge, including past the hamlet's shore.
+    const opened = [
+      { x: -8, z: -6 },
+      { x: 8, z: 6 },
+      { x: 14, z: -8 },
+    ];
+    const lots = [...seedLots, ...opened];
+    for (let tier = 0; tier <= MAX_TIER; tier++) {
+      const town = withLots(townAt(tier), lots);
+      for (const lot of lots) {
+        const ground = Math.min(
+          ...town.tiles.map((t) => Math.hypot(t.x - lot.x, t.z - lot.z)),
+        );
+        expect(ground).toBeLessThan(1.7);
+        for (const piece of town.scenery)
+          expect(Math.hypot(piece.x - lot.x, piece.z - lot.z)).toBeGreaterThan(
+            2,
+          );
+        for (const place of town.places)
+          expect(
+            Math.hypot(place.at.x - lot.x, place.at.z - lot.z),
+          ).toBeGreaterThan(2);
+      }
+      // Adding lots never removes ground or roads.
+      expect(town.tiles.length).toBeGreaterThanOrEqual(
+        townAt(tier).tiles.length,
+      );
+      expect(town.roads).toBe(townAt(tier).roads);
+      // Same lots, same town object: no re-render churn.
+      expect(withLots(townAt(tier), [...lots].reverse())).toBe(town);
+    }
+  });
+
+  it("leaves the seed town untouched by the seed lots", () => {
+    const lots = Object.values(initialMock().state.plots).map(
+      (p) => p.position,
+    );
+    for (let tier = 0; tier <= MAX_TIER; tier++) {
+      const town = withLots(townAt(tier), lots);
+      expect(town.places.map((p) => p.id)).toEqual(
+        townAt(tier).places.map((p) => p.id),
+      );
+      expect(town.tiles.length).toBe(townAt(tier).tiles.length);
+    }
+  });
+
+  it("scores the seed world at 0 and follows the growth rules", () => {
+    const state = structuredClone(initialMock().state);
+    expect(prosperity(state).score).toBe(0);
+    // +0.5 a day, capped at day 240.
+    expect(prosperity({ ...state, tick: 300 }).score).toBe(120);
+    // +6 for a rented home (tenant, no building), +2 per citizen.
+    const grown = structuredClone(state);
+    const free = Object.values(grown.plots).find(
+      (p) => !Object.values(grown.buildings).some((b) => b.plot_id === p.id),
+    )!;
+    free.tenant_id = "citizen-0";
+    grown.citizens.newcomer = {
+      ...structuredClone(grown.citizens["citizen-0"]),
+      id: "newcomer",
+    };
+    expect(prosperity(grown).score).toBe(8);
   });
 });

@@ -196,15 +196,19 @@ export function Dashboard() {
   }
   async function construct() {
     const state = useWorld.getState().update!.state;
+    const builder = "citizen-1";
+    // Town land, or a lot the builder owns or leases (others are `not_owner`).
     const plot = Object.values(state.plots).find(
-      (p) => !Object.values(state.buildings).some((b) => b.plot_id === p.id),
+      (p) =>
+        !Object.values(state.buildings).some((b) => b.plot_id === p.id) &&
+        (!p.owner_id || p.owner_id === builder || p.tenant_id === builder),
     );
     if (!plot) throw new Error("All construction plots are occupied");
     const result = await request<WorldUpdate>("/api/actions", {
       ...context(),
       action: {
         type: "construct_building",
-        actor_id: "citizen-1",
+        actor_id: builder,
         plot_id: plot.id,
         kind: "bakery",
         rationale: "Player requested a construction demonstration.",
@@ -224,7 +228,8 @@ export function Dashboard() {
   const state = update.state;
   const citizens = Object.values(state.citizens);
   const avgHunger = Math.round(
-    citizens.reduce((sum, c) => sum + c.hunger, 0) / citizens.length,
+    citizens.reduce((sum, c) => sum + c.hunger, 0) /
+      Math.max(1, citizens.length),
   );
   const bread = Object.values(state.buildings).filter(
     (b) => b.kind === "bakery",

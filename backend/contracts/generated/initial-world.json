@@ -670,7 +670,8 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
-        "research_until_tick": 0
+        "research_until_tick": 0,
+        "destitute_days": 0
       },
       "citizen-1": {
         "id": "citizen-1",
@@ -702,7 +703,8 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
-        "research_until_tick": 0
+        "research_until_tick": 0,
+        "destitute_days": 0
       },
       "citizen-2": {
         "id": "citizen-2",
@@ -734,7 +736,8 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
-        "research_until_tick": 0
+        "research_until_tick": 0,
+        "destitute_days": 0
       },
       "citizen-3": {
         "id": "citizen-3",
@@ -766,7 +769,8 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
-        "research_until_tick": 0
+        "research_until_tick": 0,
+        "destitute_days": 0
       },
       "citizen-4": {
         "id": "citizen-4",
@@ -798,7 +802,8 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
-        "research_until_tick": 0
+        "research_until_tick": 0,
+        "destitute_days": 0
       },
       "citizen-5": {
         "id": "citizen-5",
@@ -830,7 +835,8 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
-        "research_until_tick": 0
+        "research_until_tick": 0,
+        "destitute_days": 0
       },
       "citizen-6": {
         "id": "citizen-6",
@@ -862,7 +868,8 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
-        "research_until_tick": 0
+        "research_until_tick": 0,
+        "destitute_days": 0
       }
     },
     "buildings": {

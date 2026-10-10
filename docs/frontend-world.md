@@ -47,10 +47,10 @@ The frontend is a full-screen 3D village that grows from a hamlet into a city as
 | Upgrades   | 10 per level above 1                      | `buildings[].level`     |
 | Homes      | 6 per leased lot without a business       | `plots[].tenant_id`     |
 | Population | 2 per citizen                             | `citizens`              |
-| Inventions | 12 per adopting business                  | `inventions[].adopters` |
+| Inventions | 12 per adopting business (beyond v1 core) | `inventions[].adopters` |
 | Hardship   | −0.5 per point of average hunger above 60 | `citizens[].hunger`     |
 
-The score is the sum minus 38, so the seed world starts near zero. Tier thresholds: **Hamlet 0, Village 25, Town 70, City 140**. With the seed world, age alone reaches Village after ~40 days and Town after ~130 if the town stays fed. City needs real development: new businesses, upgrades, homes, inventions. A starving town stalls.
+The score is the sum minus 44 (`SEED_OFFSET`), so the seed world (3 businesses, 1 leased home, 7 citizens) starts at exactly zero. Tier thresholds: **Hamlet 0, Village 25, Town 70, City 140**. With the seed world, age alone reaches Village after ~50 days and Town after ~140 if the town stays fed. City needs real development: new businesses, upgrades, homes, newcomers, inventions. A starving town stalls.
 
 **Holding a tier.** Hunger moves daily, so a score near a threshold would flip the town between tiers and shrink and regrow the island. `growthOf` holds a reached tier until the score falls 8 points (`MARGIN`) below its threshold. A new epoch (seek or branch switch) starts from the raw tier. The HUD and the town both use this settled tier.
 
@@ -106,6 +106,8 @@ Every plot without a business shows what the simulation says about it:
 
 A change of use (a new lease, a new owner) rebuilds the lot with the rise animation.
 
+Lots are not tied to any hard-coded layout: each one renders at its own `position`, including lots the engine opens at runtime (`plot_opened`). `useTown()` passes every lot position to `withLots` (`town.ts`), which adds grass under a lot past the island's current shore and clears scenery (trees, cottages, landmarks) standing on it.
+
 ## Villagers — models from the snapshot, routes presentation only
 
 - **Model per occupation** (`assets.ts`): Farmer → Farmer_A, Baker → Helper_B, Merchant → Lorekeeper, Farmhand → Farmer_B, Miller → Protagonist_B, Builder → Engineer, Weaver → Hiker. Other occupations (spawned citizens) get Druid or Protagonist_A.
@@ -155,7 +157,7 @@ Villagers sometimes stop on the way (4% per road segment). Each has its own pace
 
 - **Committed database (API/history).** `backend/database/kronos.db` is tracked, and the page auto-starts the clock. Running the app locally therefore changes a tracked file. Consider ignoring it, or seeding it on first run.
 - **Economy stability (simulation).** In testing, the seed economy starved by about day 60–90 at 4×: average hunger 94, villagers nearly broke, a bakery holding most of the cash, and the market bankrupt. Growth stalls by design when that happens. A healthier money loop would let towns reach Town and City on their own.
-- **Lots and population (simulation).** There are 6 fixed plots and no automatic arrivals. Buying new lots and population growth would make the expanding districts carry real businesses and homes, not just scenery.
+- **Lots and population (simulation).** The v1 growth step (`simulation-design.md`) targets this: 2 town-land plots open when every plot is used, newcomers arrive every 3 days while the town is fed, destitute citizens leave, and citizens found, upgrade, and rent on their own. New plots appear through `plot_opened` and are shown by the existing lot rules.
 - **More building kinds (simulation).** Chapel, forge, and lumbermill are scenery. Making them `BuildingKind`s would let the existing lifecycle stage them.
 - **Loading.** `preload.ts` starts loading every model any tier, upgrade, construction, or lot can show (about 9.5 MB) when the page opens. Each tile, building, and villager also has its own loading boundary, so a model that is still downloading hides only that piece instead of the whole scene.
 - **Rendering cost.** A City has ~150 tiles plus scenery as individual objects. If frame rate drops on low-end machines, switch tiles to instanced meshes.

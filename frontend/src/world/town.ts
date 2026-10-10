@@ -301,3 +301,60 @@ export function waypoints(
   }
   return points;
 }
+
+/** Hex cells whose centre lies within `radius` of a point, nearest first. */
+function cellsNear(p: Point, radius: number) {
+  const cells: Point[] = [];
+  const row0 = Math.round(p.z / ROW);
+  for (let row = row0 - 1; row <= row0 + 1; row++) {
+    const offset = row % 2 ? WIDTH / 2 : 0;
+    const col0 = Math.round((p.x - offset) / WIDTH);
+    for (let col = col0 - 1; col <= col0 + 1; col++)
+      cells.push({ x: col * WIDTH + offset, z: row * ROW });
+  }
+  const distance = (c: Point) => Math.hypot(c.x - p.x, c.z - p.z);
+  cells.sort((a, b) => distance(a) - distance(b));
+  // The nearest cell always holds the lot; neighbours only if it overhangs.
+  return cells.filter((c, i) => i === 0 || distance(c) < radius);
+}
+
+/** Scenery closer than this to a lot would stand inside its building. */
+const LOT_CLEARANCE = WIDTH * 0.8;
+const fitted = new Map<string, Town>();
+
+/**
+ * The town with room for the simulation's lots. The engine may open new lots
+ * anywhere (new town land at the edge of the village), so every lot gets
+ * ground under it, even past the island's current shore, and no scenery
+ * stands on it. Cottages cleared for a lot also stop being homes.
+ */
+export function withLots(town: Town, lots: Point[]): Town {
+  const id = `${town.tier}|${lots.map(key).sort().join(";")}`;
+  const cached = fitted.get(id);
+  if (cached) return cached;
+  const near = (p: Point) =>
+    lots.some((lot) => Math.hypot(lot.x - p.x, lot.z - p.z) < LOT_CLEARANCE);
+  const scenery = town.scenery.filter((piece) => !near(piece));
+  const tiles = [...town.tiles];
+  const covered = new Set(tiles.map(key));
+  for (const lot of lots)
+    for (const cell of cellsNear(lot, LOT_CLEARANCE))
+      if (!covered.has(key(cell))) {
+        covered.add(key(cell));
+        tiles.push({
+          ...cell,
+          model: "hex_grass",
+          rotation: 0,
+          district: district(cell),
+        });
+      }
+  const result: Town = {
+    ...town,
+    tiles,
+    scenery,
+    places: town.places.filter((place) => !near(place.at)),
+  };
+  if (fitted.size > 64) fitted.clear();
+  fitted.set(id, result);
+  return result;
+}

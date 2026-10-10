@@ -4,18 +4,20 @@
  * It is a presentation score: the simulation has no notion of tiers.
  */
 import type { WorldState } from "../api/types";
+import { useMemo } from "react";
 import { useWorld } from "../stores/world";
-import { townAt } from "./town";
+import { townAt, withLots } from "./town";
 
 export const TIERS = ["Hamlet", "Village", "Town", "City"] as const;
 export type TierName = (typeof TIERS)[number];
 
 /**
  * Score needed to reach each tier. With the seed world, age alone reaches
- * Village after ~40 days and Town after ~130; City needs real construction,
- * upgrades, homes, or inventions.
+ * Village after ~50 days and Town after ~140; City needs real construction,
+ * upgrades, homes, newcomers, or inventions.
  */
 const THRESHOLDS = [0, 25, 70, 140];
+const SEED_OFFSET = 44;
 
 export function prosperity(state: WorldState) {
   const buildings = Object.values(state.buildings);
@@ -38,13 +40,15 @@ export function prosperity(state: WorldState) {
     upgrades: buildings.reduce((sum, b) => sum + (b.level - 1), 0) * 10,
     homes: homes * 6,
     population: citizens.length * 2,
+    // Beyond the v1 score list; kept because inventions are already implemented.
     inventions: adopted * 12,
     // A starving town stalls.
     hardship: -Math.max(0, hunger - 60) * 0.5,
   };
+  // The seed world (3 businesses, 1 rented home, 7 citizens, day 0) scores 0.
   const score = Math.max(
     0,
-    Object.values(parts).reduce((sum, v) => sum + v, 0) - 38,
+    Object.values(parts).reduce((sum, v) => sum + v, 0) - SEED_OFFSET,
   );
   let tier = 0;
   while (tier + 1 < THRESHOLDS.length && score >= THRESHOLDS[tier + 1]) tier++;
@@ -100,8 +104,30 @@ export function growthOf(state: WorldState, epoch: number) {
   };
 }
 
-/** The town for the current snapshot's settled growth tier. */
+/**
+ * The town for the current snapshot's settled growth tier, with ground under
+ * and room around every lot, including lots the simulation opens at runtime.
+ */
 export function useTown() {
   const tier = useWorld((s) => growthOf(s.update!.state, s.epoch).tier);
-  return townAt(tier);
+  // A string, so the selector stays stable until a lot is added or removed.
+  const lots = useWorld((s) =>
+    Object.values(s.update!.state.plots)
+      .map((plot) => `${plot.position.x},${plot.position.z}`)
+      .sort()
+      .join(";"),
+  );
+  return useMemo(
+    () =>
+      withLots(
+        townAt(tier),
+        lots
+          ? lots.split(";").map((pair) => {
+              const [x, z] = pair.split(",").map(Number);
+              return { x, z };
+            })
+          : [],
+      ),
+    [tier, lots],
+  );
 }

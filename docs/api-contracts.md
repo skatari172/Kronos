@@ -13,6 +13,8 @@ Canonical Pydantic models live in `backend/modules/simulation/src/kronos_sim/mod
 | `GET /api/simulation/status`             | Playback state and any loop failure                        |
 | `POST /api/interventions`                | Parse and commit supported free text                       |
 | `POST /api/actions`                      | Validate and commit a structured engine action             |
+| `GET /api/events?after=…&limit=…`        | Active-branch events after a sequence, ascending, paged    |
+| `GET /api/jobs`                          | Open job slots                                             |
 | `GET /api/history/events?branch_id=…`    | Ordered events; optional `through`, bounded `limit`        |
 | `GET /api/history/snapshots?branch_id=…` | Saved checkpoints in sequence order                        |
 | `GET /api/history/snapshots/{id}`        | Read historical state, leaving live state unchanged        |
@@ -21,6 +23,8 @@ Canonical Pydantic models live in `backend/modules/simulation/src/kronos_sim/mod
 | `POST /api/branches/{id}/activate`       | Pause playback, activate branch, broadcast its world       |
 | `GET /api/branches/{id}/world`           | Read branch head                                           |
 | `WS /ws/world`                           | Initial snapshot then committed full-state updates         |
+
+The v1 core endpoints are `GET /api/world`, `WS /ws/world`, simulation status/play/pause/tick, `POST /api/actions`, `POST /api/interventions`, `GET /api/events`, and `GET /api/jobs`. New villages, history, branches, and the agent routes are beyond v1 core and already implemented. Poll `GET /api/events?after=<sequence>` to catch up on the ledger; `/api/history/events` remains for branch-scoped queries.
 
 Tick, play, action, and intervention requests include `branch_id` and `expected_sequence`. Stale commands return **409**; reload the current world and reconsider the command. Unsupported/invalid actions and provider output return **422**. Unknown snapshots/branches return **404**.
 

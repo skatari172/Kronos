@@ -101,6 +101,11 @@ class Citizen(Model):
     research_until_tick: int = Field(
         default=0, ge=0, description="Last day of time-mode research; wages are skipped until then"
     )
+    destitute_days: int = Field(
+        default=0,
+        ge=0,
+        description="Consecutive days ending with hunger 100 and no money; 3 means they leave",
+    )
 
 
 class Plot(Model):
@@ -160,14 +165,24 @@ def default_resources() -> dict[str, ResourceStock]:
     return {"wheat": ResourceStock(kind="wheat", stock=120, regen_per_tick=6, cap=200)}
 
 
+JobApplicationStatus = Literal["pending", "hired", "rejected"]
+
+
 class JobApplication(Model):
-    """A pending request to work at a business. Resolved by the owner or the next daily tick."""
+    """A request to work at a business. Resolved by the owner or the next daily tick.
+
+    Resolved applications keep their record with status `hired` or `rejected` (a withdrawn
+    application counts as rejected); only `pending` ones are open.
+    """
 
     id: str
     citizen_id: str
     building_id: str
     tick: int = Field(ge=0, description="Tick when the citizen applied")
     sequence: int = Field(ge=0, description="World sequence when applied; orders first-come")
+    status: JobApplicationStatus = Field(
+        default="pending", description="pending until hired or rejected"
+    )
 
 
 LoanStatus = Literal["offered", "active", "repaid", "defaulted", "declined", "expired"]
@@ -293,7 +308,8 @@ class WorldState(Model):
     plots: dict[str, Plot]
     resources: dict[str, ResourceStock] = Field(default_factory=default_resources)
     job_applications: dict[str, JobApplication] = Field(
-        default_factory=dict, description="Pending job applications by ID"
+        default_factory=dict,
+        description="Job applications by ID; resolved ones keep their status",
     )
 
     loans: dict[str, Loan] = Field(default_factory=dict)
@@ -1053,6 +1069,17 @@ class LotLeased(EventBase):
     payload: LotPayload
 
 
+class PlotOpenedPayload(LotPayload):
+    position: Position
+
+
+class PlotOpened(EventBase):
+    """The village grew: a new town-land lot opened on the outer ring."""
+
+    type: Literal["plot_opened"] = "plot_opened"
+    payload: PlotOpenedPayload
+
+
 class RentChangePayload(Model):
     plot_id: str
     old_rent: int
@@ -1155,6 +1182,7 @@ SimulationEvent = Annotated[
     | TaxCollected
     | InterventionApplied
     | LotLeased
+    | PlotOpened
     | RentChanged
     | RentMissed
     | RentCovered
@@ -1174,6 +1202,17 @@ class WorldUpdate(Model):
 
 class SimulationTickResult(WorldUpdate):
     rejected_actions: list[str] = Field(default_factory=list)
+
+
+class EventPage(Model):
+    """One page of the event log, oldest first. Pass `next_after` as `after` to read on."""
+
+    branch_id: str
+    events: list[SimulationEvent] = Field(default_factory=list)
+    next_after: int = Field(
+        ge=0, description="Sequence of the last event returned, or the requested `after` if none"
+    )
+    has_more: bool = Field(description="More events exist after `next_after`")
 
 
 class InterventionRequest(Model):

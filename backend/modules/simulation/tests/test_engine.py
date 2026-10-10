@@ -280,7 +280,7 @@ def test_hiring_firing_and_wages():
     )
     assert hired.state.citizens["citizen-5"].employer_id == "market"
     assert [e.type for e in hired.events] == ["job_application_resolved", "employment_changed"]
-    assert hired.state.job_applications == {}
+    assert hired.state.job_applications["application-main-1"].status == "hired"
     raised = Engine(hired.state).apply(
         SetWage(actor_id="citizen-2", building_id="market", wage=400)
     )
@@ -612,7 +612,8 @@ def test_owner_rejects_an_application():
         Engine(state).apply(reject.model_copy(update={"actor_id": "citizen-0"}))
     assert error.value.code == "not_owner"
     result = Engine(state).apply(reject)
-    assert result.state.job_applications == {}
+    assert _pending(result.state) == {}
+    assert result.state.job_applications["application-main-1"].status == "rejected"
     assert result.state.citizens["citizen-5"].employer_id is None
     assert result.events[0].payload.outcome == "rejected"
     assert result.state.citizens["citizen-5"].memories[-1] == (
@@ -631,7 +632,10 @@ def test_hire_withdraws_the_applicants_other_applications():
     result = Engine(state).apply(
         Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
     )
-    assert result.state.job_applications == {}
+    assert {a.building_id: a.status for a in result.state.job_applications.values()} == {
+        "farm": "rejected",
+        "market": "hired",
+    }
     assert [(e.type, getattr(e.payload, "outcome", None)) for e in result.events] == [
         ("job_application_resolved", "accepted"),
         ("employment_changed", None),
@@ -650,7 +654,7 @@ def test_unanswered_applications_resolve_on_the_next_tick():
     first, second = Engine(state).tick(), Engine(state).tick()
     assert first == second
     after = first.state
-    assert after.job_applications == {}
+    assert _pending(after) == {}
     assert after.citizens["citizen-6"].employer_id == "market"  # First come, first served.
     assert after.citizens["citizen-5"].employer_id is None
     resolved = [
@@ -666,14 +670,17 @@ def test_unanswered_applications_resolve_on_the_next_tick():
 
 
 def test_applications_to_vanished_businesses_are_withdrawn():
-    from kronos_sim.models import CloseBusiness
-
     state = apply_job(initial_world(), "citizen-5", "market").state
-    state = Engine(state).apply(CloseBusiness(actor_id="citizen-2", building_id="market")).state
+    del state.buildings["market"]  # Gone without _close (e.g. an older saved world).
     result = Engine(state).tick()
-    assert result.state.job_applications == {}
+    assert _pending(result.state) == {}
+    assert result.state.job_applications["application-main-1"].status == "rejected"
     event = next(e for e in result.events if e.type == "job_application_resolved")
     assert event.payload.outcome == "withdrawn" and event.actor_id is None
+
+
+def _pending(state):
+    return {k: a for k, a in state.job_applications.items() if a.status == "pending"}
 
 
 def test_worlds_saved_before_job_applications_still_load():

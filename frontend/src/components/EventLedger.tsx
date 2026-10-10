@@ -2,8 +2,19 @@ import { Activity, ArrowUpRight } from "lucide-react";
 import type { SimulationEvent } from "../api/types";
 import { useWorld } from "../stores/world";
 import { coins } from "../api/format";
+const INTERACTIONS: Record<string, string> = {
+  befriend: "Two citizens become friendlier",
+  gift: "A citizen gives a gift",
+  ally: "Two citizens form an alliance",
+  argue: "Two citizens argue",
+  insult: "A citizen trades insults",
+  betray: "A citizen betrays a friend",
+  mentor: "A citizen mentors another",
+};
 function describe(event: SimulationEvent) {
   switch (event.type) {
+    case "plot_opened":
+      return "New town land opens at the edge of the village";
     case "price_changed":
       return `Bread price: ${coins(event.payload.old_price)} → ${coins(event.payload.new_price)} coins`;
     case "intervention_applied":
@@ -98,6 +109,8 @@ function describe(event: SimulationEvent) {
       return `${coins(event.payload.amount)} coins of market tax shared out`;
     case "building_removed":
       return "A building is removed";
+    case "citizen_interacted":
+      return INTERACTIONS[event.payload.kind] ?? "Two citizens cross paths";
     default:
       return "Something happens in the village";
   }
