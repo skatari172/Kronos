@@ -7,6 +7,7 @@ from kronos_history.store import HistoryStore
 from kronos_sim.engine import Engine, InvalidAction
 from kronos_sim.models import (
     ActionRequest,
+    ActionResult,
     ActionValidationResult,
     BranchMetadata,
     MutationRequest,
@@ -90,14 +91,21 @@ class Service:
         await self.broadcast(result)
         return result
 
-    def _evaluate_action(self, body: ActionRequest, citizen_id: str | None = None):
-        """Caller holds the lock. Evaluate a proposal against a copied world."""
+    def _authorize(self, body: ActionRequest, citizen_id: str | None):
+        """Caller holds the lock. Request-level checks; failures are HTTP errors, never logged."""
         self.check(body)
         if citizen_id is not None:
             if citizen_id not in self.state.citizens:
                 raise KeyError("Unknown citizen")
             if body.action.actor_id != citizen_id:
-                raise InvalidAction("Proposal actor_id must match the citizen_id in the route")
+                raise InvalidAction(
+                    "insufficient_authority",
+                    "Proposal actor_id must match the citizen_id in the route",
+                )
+
+    def _evaluate_action(self, body: ActionRequest, citizen_id: str | None = None):
+        """Caller holds the lock. Evaluate a proposal against a copied world."""
+        self._authorize(body, citizen_id)
         return Engine(self.state).apply(body.action)
 
     async def execute_action(self, body: ActionRequest, citizen_id: str | None = None):
@@ -105,6 +113,28 @@ class Service:
         async with self.lock:
             result = self._evaluate_action(body, citizen_id)
             return await self.commit(result)
+
+    async def submit_agent_action(self, body: ActionRequest, citizen_id: str) -> ActionResult:
+        """Like execute_action, but a rule rejection is committed as an action_rejected event."""
+        async with self.lock:
+            self._authorize(body, citizen_id)
+            action_id = f"action-{self.state.branch_id}:{self.state.sequence}"
+            try:
+                result = await self.commit(Engine(self.state).apply(body.action))
+                status, error = "applied", None
+            except InvalidAction as exc:
+                result = await self.commit(Engine(self.state).reject(body.action, exc))
+                status, error = "rejected", exc
+            return ActionResult(
+                action_id=action_id,
+                branch_id=result.branch_id,
+                status=status,
+                tick=result.tick,
+                sequence=result.sequence,
+                event_ids=[event.id for event in result.events],
+                error=error.code if error else None,
+                message=str(error) if error else None,
+            )
 
     async def validate_action(self, body: ActionRequest, citizen_id: str):
         """Run engine checks without changing live state, persistence, or clients."""

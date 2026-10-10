@@ -449,6 +449,34 @@ class RelationshipChanged(EventBase):
     payload: RelationshipPayload
 
 
+ActionErrorCode = Literal[
+    "insufficient_authority",
+    "insufficient_funds",
+    "not_owner",
+    "no_free_slot",
+    "already_employed",
+    "lot_occupied",
+    "invention_locked",
+    "out_of_stock",
+    "trust_too_low",
+    "bad_params",
+    "rate_limited",
+    "unknown_entity",
+    "not_supported",
+]
+
+
+class RejectionPayload(Model):
+    action_type: str
+    code: ActionErrorCode
+    message: str
+
+
+class ActionRejected(EventBase):
+    type: Literal["action_rejected"] = "action_rejected"
+    payload: RejectionPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -473,6 +501,7 @@ SimulationEvent = Annotated[
     | BuildingRemoved
     | AgentSpoke
     | RelationshipChanged
+    | ActionRejected
     | InterventionApplied,
     Field(discriminator="type"),
 ]
@@ -563,3 +592,20 @@ class ActionValidationResult(Model):
     sequence: int
     valid: Literal[True] = True
     action: AgentAction
+
+
+class ActionResult(Model):
+    """Outcome of an agent action. Rule rejections are logged events, not HTTP errors.
+
+    Request problems (stale sequence, unknown citizen, malformed body) still fail with HTTP codes.
+    sequence is the world version after this result; send it as the next expected_sequence.
+    """
+
+    action_id: str
+    branch_id: str
+    status: Literal["applied", "rejected"]
+    tick: int
+    sequence: int
+    event_ids: list[str] = Field(default_factory=list)
+    error: ActionErrorCode | None = None
+    message: str | None = None

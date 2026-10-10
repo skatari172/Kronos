@@ -66,7 +66,8 @@ def create_app(config: Settings | None = None) -> FastAPI:
     @app.exception_handler(InvalidAction)
     @app.exception_handler(ProviderError)
     async def bad_action(request, exc):
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+        content = {"detail": str(exc), "code": getattr(exc, "code", None)}
+        return JSONResponse(status_code=422, content=content)
 
     @app.exception_handler(KeyError)
     async def not_found(request, exc):

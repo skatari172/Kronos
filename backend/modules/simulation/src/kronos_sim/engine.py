@@ -13,7 +13,11 @@ ACTION = TypeAdapter(m.AgentAction)
 
 
 class InvalidAction(ValueError):
-    pass
+    """A rule rejection with a stable code for agents and a message for people."""
+
+    def __init__(self, code: m.ActionErrorCode, message: str):
+        super().__init__(message)
+        self.code = code
 
 
 def _tuples(value):
@@ -63,19 +67,34 @@ class Engine:
         transaction._execute(ACTION.validate_python(action.model_dump()))
         return transaction.result()
 
+    def reject(self, action: m.AgentAction, error: InvalidAction) -> m.SimulationTickResult:
+        """Log a rule rejection and remember it, so agents can learn from refused proposals."""
+        tx = Engine(self.state)
+        actor = tx.state.citizens.get(action.actor_id)
+        if actor is None:
+            raise error
+        actor.memories = (actor.memories + [f"Rejected {action.type}: {error}"])[-8:]
+        tx.emit(
+            "action_rejected",
+            dict(action_type=action.type, code=error.code, message=str(error)),
+            actor.id,
+            action.rationale,
+        )
+        return tx.result()
+
     def _execute(self, action: m.AgentAction):
         s = self.state
         if action.actor_id not in s.citizens:
-            raise InvalidAction("Unknown citizen")
+            raise InvalidAction("unknown_entity", "Unknown citizen")
         actor = s.citizens[action.actor_id]
         building = None
         if hasattr(action, "building_id"):
             building = s.buildings.get(action.building_id)
             if building is None:
-                raise InvalidAction("Unknown building")
+                raise InvalidAction("unknown_entity", "Unknown building")
         if isinstance(action, (m.SetPrice, m.Produce, m.UpgradeBuilding)):
             if building.owner_id != actor.id:
-                raise InvalidAction("Only the owner may perform this action")
+                raise InvalidAction("not_owner", "Only the owner may perform this action")
 
         def emit(kind, payload):
             return self.emit(kind, payload, actor.id, action.rationale)
@@ -83,15 +102,17 @@ class Engine:
         if isinstance(action, (m.Buy, m.Sell)):
             price = building.prices.get(action.resource)
             if price is None:
-                raise InvalidAction("Resource is not traded here")
+                raise InvalidAction("bad_params", "Resource is not traded here")
             buying = isinstance(action, m.Buy)
             if buying and price > action.max_unit_price:
-                raise InvalidAction("Price exceeds buyer limit")
+                raise InvalidAction("bad_params", "Price exceeds buyer limit")
             source, target = (building, actor) if buying else (actor, building)
             amount = action.quantity * price
             balance = actor.money if buying else building.cash
-            if getattr(source.inventory, action.resource) < action.quantity or balance < amount:
-                raise InvalidAction("Insufficient funds or stock")
+            if getattr(source.inventory, action.resource) < action.quantity:
+                raise InvalidAction("out_of_stock", "Not enough stock")
+            if balance < amount:
+                raise InvalidAction("insufficient_funds", "Insufficient funds")
             setattr(
                 source.inventory,
                 action.resource,
@@ -116,8 +137,10 @@ class Engine:
             )
         elif isinstance(action, m.TransferMoney):
             recipient = s.citizens.get(action.recipient_id)
-            if recipient is None or recipient.id == actor.id or actor.money < action.amount:
-                raise InvalidAction("Invalid recipient or insufficient funds")
+            if recipient is None or recipient.id == actor.id:
+                raise InvalidAction("bad_params", "Invalid recipient")
+            if actor.money < action.amount:
+                raise InvalidAction("insufficient_funds", "Insufficient funds")
             actor.money -= action.amount
             recipient.money += action.amount
             emit(
@@ -141,12 +164,12 @@ class Engine:
                 resource, quantity = "wheat", self.rng.randint(3, 6) * building.level
             elif building.kind == "bakery":
                 if building.inventory.wheat < 2:
-                    raise InvalidAction("Bakery requires two wheat")
+                    raise InvalidAction("out_of_stock", "Bakery requires two wheat")
                 building.inventory.wheat -= 2
                 emit("resource_consumed", dict(entity_id=building.id, resource="wheat", quantity=2))
                 resource, quantity = "bread", 3 * building.level
             else:
-                raise InvalidAction("Markets do not produce goods")
+                raise InvalidAction("bad_params", "Markets do not produce goods")
             setattr(building.inventory, resource, getattr(building.inventory, resource) + quantity)
             emit(
                 "resource_produced",
@@ -154,20 +177,20 @@ class Engine:
             )
         elif isinstance(action, m.Consume):
             if actor.inventory.bread < 1:
-                raise InvalidAction("No bread to consume")
+                raise InvalidAction("out_of_stock", "No bread to consume")
             actor.inventory.bread -= 1
             actor.hunger = max(0, actor.hunger - 30)
             emit("resource_consumed", dict(entity_id=actor.id, resource="bread", quantity=1))
         elif isinstance(action, m.MoveTo):
             plot = s.plots.get(action.plot_id)
             if plot is None:
-                raise InvalidAction("Unknown waypoint")
+                raise InvalidAction("unknown_entity", "Unknown waypoint")
             actor.position = m.Position(x=plot.position.x, z=0)
             emit("citizen_moved", dict(entity_id=actor.id, position=actor.position.model_dump()))
         elif isinstance(action, m.Communicate):
             recipient = s.citizens.get(action.recipient_id)
             if recipient is None or recipient.id == actor.id:
-                raise InvalidAction("Unknown or self recipient")
+                raise InvalidAction("bad_params", "Unknown or self recipient")
             actor.memories = (actor.memories + [f"To {recipient.name}: {action.message}"])[-8:]
             recipient.memories = (recipient.memories + [f"{actor.name}: {action.message}"])[-8:]
             emit("agent_spoke", dict(recipient_id=recipient.id, message=action.message))
@@ -179,10 +202,12 @@ class Engine:
             emit("relationship_changed", dict(recipient_id=recipient.id, trust=relation.trust))
         elif isinstance(action, m.ConstructBuilding):
             plot = s.plots.get(action.plot_id)
-            if plot is None or any(b.plot_id == action.plot_id for b in s.buildings.values()):
-                raise InvalidAction("Construction needs a vacant plot")
+            if plot is None:
+                raise InvalidAction("unknown_entity", "Unknown plot")
+            if any(b.plot_id == action.plot_id for b in s.buildings.values()):
+                raise InvalidAction("lot_occupied", "Construction needs a vacant plot")
             if actor.money < 5000:
-                raise InvalidAction("Construction costs 50 coins")
+                raise InvalidAction("insufficient_funds", "Construction costs 50 coins")
             actor.money -= 5000
             bid = f"building-{s.branch_id}-{s.sequence + 1}"
             s.buildings[bid] = m.Building(
@@ -196,14 +221,16 @@ class Engine:
             )
             emit("building_constructed", dict(entity_id=bid, position=plot.position.model_dump()))
         elif isinstance(action, m.UpgradeBuilding):
-            if building.level >= 3 or actor.money < 2500:
-                raise InvalidAction("Upgrade requires 25 coins and a level below 3")
+            if building.level >= 3:
+                raise InvalidAction("bad_params", "Building is already at level 3")
+            if actor.money < 2500:
+                raise InvalidAction("insufficient_funds", "Upgrade costs 25 coins")
             actor.money -= 2500
             building.level += 1
             emit("building_upgraded", dict(entity_id=building.id, level=building.level))
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
-            raise InvalidAction(f"Action '{action.type}' is not supported yet")
+            raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
 
     def intervene(self, command: m.PriceIntervention, text: str) -> m.SimulationTickResult:
         tx = Engine(self.state)
@@ -217,7 +244,7 @@ class Engine:
             for b in targets
         ]
         if not targets or any(p < 1 or p > 1000000 for p in prices):
-            raise InvalidAction("No bakery or resulting price out of bounds")
+            raise InvalidAction("bad_params", "No bakery or resulting price out of bounds")
         intervention = tx.emit("intervention_applied", dict(text=text, percent=command.percent))
         for building, price in zip(targets, prices, strict=True):
             old = building.prices["bread"]

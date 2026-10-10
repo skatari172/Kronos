@@ -46,12 +46,14 @@ async def validate(citizen_id: str, body: m.ActionRequest, service: ServiceDepen
 
 @router.post(
     "/{citizen_id}/actions",
-    response_model=m.WorldUpdate,
+    response_model=m.ActionResult,
     summary="Submit an agent action for engine execution",
 )
 async def execute(citizen_id: str, body: m.ActionRequest, service: ServiceDependency):
     """Require actor_id to match citizen_id, then validate, persist, and broadcast.
 
-    This route submits a proposal to the engine; agents never mutate live state themselves.
+    A rule rejection returns status "rejected" with an error code, and is saved as an
+    action_rejected event plus a memory for the agent. Stale versions still return 409.
+    Agents never mutate live state themselves; the full world arrives on WS /ws/world.
     """
-    return await service.execute_action(body, citizen_id)
+    return await service.submit_agent_action(body, citizen_id)
