@@ -291,3 +291,19 @@ def roles() -> list[m.RoleInfo]:
             permissions=common + perms(_OWN_BUSINESS, "own_business"),
         ),
     ]
+
+
+def lot_profile(state: m.WorldState, plot_id: str) -> m.LotProfile:
+    plot = state.plots.get(plot_id)
+    if plot is None:
+        raise KeyError("Unknown lot")
+    building = next(
+        (
+            b.id
+            for b in sorted(state.buildings.values(), key=lambda b: b.id)
+            if b.plot_id == plot_id
+        ),
+        None,
+    )
+    use = "business" if building else "home" if plot.tenant_id else "empty"
+    return m.LotProfile(lot=plot.model_copy(deep=True), use=use, building_id=building)

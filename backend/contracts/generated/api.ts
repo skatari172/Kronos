@@ -198,6 +198,72 @@ export interface paths {
         patch: operations["goals_api_agents__citizen_id__goals_patch"];
         trace?: never;
     };
+    "/api/agents/{citizen_id}/gather": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gather from a shared natural stock into the citizen's employer
+         * @description Submitted as a gather_resource action at the citizen's current employer.
+         *
+         *     The employer must match the resource (wheat: farm). Takes up to quantity; a nearly empty
+         *     stock gives a partial gather, and an empty one is rejected as out_of_stock.
+         */
+        post: operations["gather_api_agents__citizen_id__gather_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{citizen_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply for a job at a business
+         * @description Submitted as an apply_job action. Requires being unemployed and a free slot.
+         *
+         *     The owner accepts (hire) or rejects (reject_application); unanswered applications are
+         *     resolved on the next tick: hired if a slot is free and the wage is covered, else rejected.
+         */
+        post: operations["apply_api_agents__citizen_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{citizen_id}/quit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Quit the current job
+         * @description Submitted as a quit_job action; emits employment_changed.
+         */
+        post: operations["quit_job_api_agents__citizen_id__quit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/businesses": {
         parameters: {
             query?: never;
@@ -299,8 +365,28 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Hire an unemployed citizen (owner only) */
+        /**
+         * Accept a citizen's job application (owner only)
+         * @description The citizen must have a pending application here (POST /api/agents/{id}/apply).
+         */
         post: operations["hire_api_businesses__building_id__hire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/businesses/{building_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a citizen's job application (owner only) */
+        post: operations["reject_api_businesses__building_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -335,6 +421,542 @@ export interface paths {
         put?: never;
         /** Buy goods from a business */
         post: operations["buy_api_businesses__building_id__buy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/loans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List loans
+         * @description Filter by a citizen on either side of the loan (lender or borrower) and by status.
+         */
+        get: operations["loans_api_loans_get"];
+        put?: never;
+        /**
+         * Offer a loan
+         * @description Creates an offer only; no money moves until the borrower accepts.
+         *
+         *     Owed = principal + principal * rate_bps // 10000 (flat per loan, integer cents).
+         */
+        post: operations["offer_api_loans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/loans/{loan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one loan */
+        get: operations["loan_api_loans__loan_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/loans/{loan_id}/respond": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept or decline a loan offer (borrower only)
+         * @description Accepting re-checks the lender's funds and moves the principal to the borrower.
+         */
+        post: operations["respond_api_loans__loan_id__respond_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/loans/{loan_id}/repay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Repay part or all of a loan (borrower only)
+         * @description Partial payments are allowed; the amount may not exceed what is still owed.
+         */
+        post: operations["repay_api_loans__loan_id__repay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List lots */
+        get: operations["lots_api_lots_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lots/{plot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one lot */
+        get: operations["lot_api_lots__plot_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lots/{plot_id}/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lease a vacant lot from its owner
+         * @description actor_id becomes the tenant at the owner's current rent, collected every rent period.
+         */
+        post: operations["lease_api_lots__plot_id__lease_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lots/{plot_id}/rent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set the rent (owner only)
+         * @description While leased, each change is limited to 20% of the current rent (at least 100 cents).
+         */
+        patch: operations["rent_api_lots__plot_id__rent_patch"];
+        trace?: never;
+    };
+    "/api/lots/{plot_id}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pay rent (tenant only)
+         * @description Clears all arrears, or pays one period ahead when nothing is owed.
+         */
+        post: operations["pay_api_lots__plot_id__pay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/lots/{plot_id}/evict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Evict a tenant 3+ rent periods behind (owner only)
+         * @description Arrears are written off and the tenant's business on the lot is closed.
+         */
+        post: operations["evict_api_lots__plot_id__evict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read current prices per good
+         * @description Average (integer cents, rounded half up), min, max, and seller count per good.
+         *
+         *     Defaults to the active branch.
+         */
+        get: operations["prices_api_market_prices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/prices/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a good's price series
+         * @description Rebuilt from the branch's first checkpoint plus its saved price-affecting events.
+         *
+         *     One point at the branch start, then one per event that changed the average, min, max,
+         *     or seller count. Defaults to the active branch.
+         */
+        get: operations["history_api_market_prices_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{citizen_id}/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a citizen's pending trade offers
+         * @description Incoming offers are also part of the citizen's observation.
+         */
+        get: operations["agent_offers_api_agents__citizen_id__offers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/trade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Offer a trade to another citizen
+         * @description The offerer (actor_id) must hold what it gives now; nothing moves until accepted.
+         */
+        post: operations["trade_api_market_trade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/trade/{offer_id}/respond": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept or decline a trade offer (recipient only)
+         * @description Accepting rechecks that both sides still hold their goods, then swaps them.
+         */
+        post: operations["respond_api_market_trade__offer_id__respond_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock and regeneration per resource
+         * @description Sorted by kind. Stocks regenerate once per tick up to cap; farms and gatherers draw them.
+         */
+        get: operations["resources_api_resources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List inventions */
+        get: operations["inventions_api_inventions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventions/license-offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List pending license offers
+         * @description Offers expire at the end of the tick they were made in.
+         */
+        get: operations["license_offers_api_inventions_license_offers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventions/{invention_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one invention */
+        get: operations["invention_api_inventions__invention_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventions/{invention_id}/research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Research an invention with money or wage time
+         * @description Money mode spends `amount` (capped at what is left). Time mode forfeits the actor's wage
+         *     for `ticks` days, each counting as progress. At full cost the top contributor owns it.
+         */
+        post: operations["research_api_inventions__invention_id__research_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventions/{invention_id}/license": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Offer a license (invention owner only)
+         * @description Creates an offer; no money moves until the recipient accepts on the same tick.
+         */
+        post: operations["license_invention_api_inventions__invention_id__license_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventions/license-offers/{offer_id}/respond": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept or decline a license offer (recipient only)
+         * @description Accepting re-checks funds and moves the fee from the recipient to the owner.
+         */
+        post: operations["respond_license_api_inventions_license_offers__offer_id__respond_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventions/{invention_id}/adopt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Adopt an invention at a business (business owner with rights)
+         * @description Requires an unlocked invention, ownership or a license, and business cash for the
+         *     adoption cost. The production effect applies from the next production run.
+         */
+        post: operations["adopt_api_inventions__invention_id__adopt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Roles and the permission matrix
+         * @description Roles are derived: a citizen who owns a building is a business_owner.
+         */
+        get: operations["role_matrix_api_roles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{citizen_id}/influence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Influence breakdown for one citizen
+         * @description 0.5 * wealth share + 0.3 * reputation + 0.2 * trust from others, in basis points.
+         */
+        get: operations["agent_influence_api_agents__citizen_id__influence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/votes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Town votes with influence-weighted tallies */
+        get: operations["vote_list_api_votes_get"];
+        put?: never;
+        /**
+         * Propose a town vote
+         * @description One open vote at a time, at most one new vote every 10 days; it closes after 3 days.
+         */
+        post: operations["propose_api_votes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/votes/{vote_id}/ballot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cast or change a ballot */
+        post: operations["ballot_api_votes__vote_id__ballot_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -495,6 +1117,29 @@ export interface paths {
         };
         /** Read one citizen's full state */
         get: operations["agent_api_agents__citizen_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List open job slots
+         * @description Businesses with a free slot, their wage, location, and pending applicants.
+         *
+         *     Apply with POST /api/agents/{id}/apply; the owner answers by hire or reject_application,
+         *     otherwise the next tick resolves the application automatically.
+         */
+        get: operations["jobs_api_jobs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -684,7 +1329,7 @@ export interface components {
             /** Expected Sequence */
             expected_sequence: number;
             /** Action */
-            action: components["schemas"]["Buy-Input"] | components["schemas"]["Sell-Input"] | components["schemas"]["TransferMoney-Input"] | components["schemas"]["SetPrice-Input"] | components["schemas"]["Produce-Input"] | components["schemas"]["Consume-Input"] | components["schemas"]["Communicate-Input"] | components["schemas"]["ConstructBuilding-Input"] | components["schemas"]["UpgradeBuilding-Input"] | components["schemas"]["MoveTo-Input"] | components["schemas"]["AdjustGoals-Input"] | components["schemas"]["FoundBusiness-Input"] | components["schemas"]["CloseBusiness-Input"] | components["schemas"]["SetWage-Input"] | components["schemas"]["Hire-Input"] | components["schemas"]["Fire-Input"] | components["schemas"]["ApplyJob-Input"] | components["schemas"]["QuitJob-Input"] | components["schemas"]["Trade-Input"] | components["schemas"]["RespondTrade-Input"] | components["schemas"]["LeaseLot-Input"] | components["schemas"]["SetRent-Input"] | components["schemas"]["PayRent-Input"] | components["schemas"]["Evict-Input"] | components["schemas"]["Interact-Input"] | components["schemas"]["Research-Input"] | components["schemas"]["LicenseInvention-Input"] | components["schemas"]["AdoptInvention-Input"] | components["schemas"]["Lend-Input"] | components["schemas"]["Repay-Input"] | components["schemas"]["ProposeVote-Input"] | components["schemas"]["CastVote-Input"] | components["schemas"]["GatherResource-Input"];
+            action: components["schemas"]["Buy-Input"] | components["schemas"]["Sell-Input"] | components["schemas"]["TransferMoney-Input"] | components["schemas"]["SetPrice-Input"] | components["schemas"]["Produce-Input"] | components["schemas"]["Consume-Input"] | components["schemas"]["Communicate-Input"] | components["schemas"]["ConstructBuilding-Input"] | components["schemas"]["UpgradeBuilding-Input"] | components["schemas"]["MoveTo-Input"] | components["schemas"]["AdjustGoals-Input"] | components["schemas"]["FoundBusiness-Input"] | components["schemas"]["CloseBusiness-Input"] | components["schemas"]["SetWage-Input"] | components["schemas"]["Hire-Input"] | components["schemas"]["Fire-Input"] | components["schemas"]["ApplyJob-Input"] | components["schemas"]["QuitJob-Input"] | components["schemas"]["Trade-Input"] | components["schemas"]["RespondTrade-Input"] | components["schemas"]["LeaseLot-Input"] | components["schemas"]["SetRent-Input"] | components["schemas"]["PayRent-Input"] | components["schemas"]["Evict-Input"] | components["schemas"]["Interact-Input"] | components["schemas"]["Research-Input"] | components["schemas"]["LicenseInvention-Input"] | components["schemas"]["AdoptInvention-Input"] | components["schemas"]["Lend-Input"] | components["schemas"]["Repay-Input"] | components["schemas"]["ProposeVote-Input"] | components["schemas"]["CastVote-Input"] | components["schemas"]["GatherResource-Input"] | components["schemas"]["RejectApplication-Input"] | components["schemas"]["RespondLoan-Input"] | components["schemas"]["RespondLicense-Input"];
         };
         /**
          * ActionResult
@@ -727,7 +1372,7 @@ export interface components {
              */
             valid: true;
             /** Action */
-            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"];
+            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"] | components["schemas"]["RejectApplication-Output"] | components["schemas"]["RespondLoan-Output"] | components["schemas"]["RespondLicense-Output"];
         };
         /**
          * AdjustGoals
@@ -793,6 +1438,28 @@ export interface components {
             /** Building Id */
             building_id: string;
         };
+        /** AdoptRequest */
+        AdoptRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Building Id */
+            building_id: string;
+        };
+        /** AdoptionPayload */
+        AdoptionPayload: {
+            /** Invention Id */
+            invention_id: string;
+            /** Building Id */
+            building_id: string;
+            /** Cost */
+            cost: number;
+        };
         /**
          * AgentObservation
          * @description Everything one agent may see: its own state plus public facts, never other citizens.
@@ -828,6 +1495,25 @@ export interface components {
             };
             /** Available Actions */
             available_actions: string[];
+            /**
+             * Loans
+             * @description Open loans (offered, active, defaulted) where this agent lends or borrows
+             */
+            loans: components["schemas"]["Loan"][];
+            /**
+             * Incoming Offers
+             * @description Pending trade offers this citizen may accept or decline
+             */
+            incoming_offers: components["schemas"]["TradeOffer"][];
+        };
+        /** AgentOffers */
+        AgentOffers: {
+            /** Citizen Id */
+            citizen_id: string;
+            /** Incoming */
+            incoming: components["schemas"]["TradeOffer"][];
+            /** Outgoing */
+            outgoing: components["schemas"]["TradeOffer"][];
         };
         /** AgentSpoke */
         AgentSpoke: {
@@ -882,6 +1568,17 @@ export interface components {
             /** Building Id */
             building_id: string;
         };
+        /** ApplyJobRequest */
+        ApplyJobRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Business Id */
+            business_id: string;
+            /** Rationale */
+            rationale?: string | null;
+        };
         /** AskRequest */
         AskRequest: {
             /** Question */
@@ -893,6 +1590,34 @@ export interface components {
             answer: string;
             /** Cited Event Ids */
             cited_event_ids: string[];
+        };
+        /** BallotPayload */
+        BallotPayload: {
+            /** Vote Id */
+            vote_id: string;
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "yes" | "no";
+            /** Previous Choice */
+            previous_choice: ("yes" | "no") | null;
+        };
+        /** BallotRequest */
+        BallotRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "yes" | "no";
+            /** Rationale */
+            rationale?: string | null;
         };
         /** BranchMetadata */
         BranchMetadata: {
@@ -1188,6 +1913,17 @@ export interface components {
              * @default 50
              */
             reputation: number;
+            /**
+             * Research Invention Id
+             * @description Invention this citizen forfeits wages for (time mode)
+             */
+            research_invention_id: string | null;
+            /**
+             * Research Until Tick
+             * @description Last day of time-mode research; wages are skipped until then
+             * @default 0
+             */
+            research_until_tick: number;
         };
         /** CitizenMoved */
         CitizenMoved: {
@@ -1234,6 +1970,12 @@ export interface components {
             employed: boolean;
             /** Owned Building Ids */
             owned_building_ids: string[];
+            /**
+             * Influence
+             * @description Basis points (0-10000)
+             * @default 0
+             */
+            influence: number;
         };
         /** CitizenRemoved */
         CitizenRemoved: {
@@ -1410,7 +2152,7 @@ export interface components {
         /** DecisionResult */
         DecisionResult: {
             /** Action */
-            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"];
+            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"] | components["schemas"]["RejectApplication-Output"] | components["schemas"]["RespondLoan-Output"] | components["schemas"]["RespondLicense-Output"];
             result: components["schemas"]["ActionResult"];
         };
         /** EmployeeRequest */
@@ -1598,6 +2340,43 @@ export interface components {
             kind: "farm" | "bakery" | "market";
             /** Capital */
             capital: number;
+        };
+        /** GatherPayload */
+        GatherPayload: {
+            /** Citizen Id */
+            citizen_id: string;
+            /** Building Id */
+            building_id: string;
+            /** Resource */
+            resource: string;
+            /** Requested */
+            requested: number;
+            /**
+             * Quantity
+             * @description Actually moved; less than requested when stock ran low
+             */
+            quantity: number;
+            /** Stock Remaining */
+            stock_remaining: number;
+        };
+        /**
+         * GatherRequest
+         * @description Convenience-route body; the business is the citizen's current employer.
+         */
+        GatherRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "bread" | "wheat";
+            /** Quantity */
+            quantity: number;
+            /** Rationale */
+            rationale?: string | null;
         };
         /** GatherResource */
         "GatherResource-Input": {
@@ -1825,6 +2604,27 @@ export interface components {
             citizen_id: string;
         };
         /**
+         * InfluenceBreakdown
+         * @description All components are basis points (0-10000); see queries.influence for the formula.
+         */
+        InfluenceBreakdown: {
+            /** Citizen Id */
+            citizen_id: string;
+            /**
+             * Wealth
+             * @description Own money plus the cash of businesses owned, in cents
+             */
+            wealth: number;
+            /** Wealth Share */
+            wealth_share: number;
+            /** Reputation */
+            reputation: number;
+            /** Trust From Others */
+            trust_from_others: number;
+            /** Influence */
+            influence: number;
+        };
+        /**
          * Interact
          * @description Bounded relationship change; amount is only used by gift.
          */
@@ -1923,6 +2723,255 @@ export interface components {
         InterventionResult: {
             command: components["schemas"]["PriceIntervention"];
             update: components["schemas"]["WorldUpdate"];
+        };
+        /**
+         * Invention
+         * @description Shared research target. Cost and progress are cents; time research counts lost wages.
+         */
+        Invention: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Cost */
+            cost: number;
+            /**
+             * Progress
+             * @default 0
+             */
+            progress: number;
+            /**
+             * Contributors
+             * @description Citizen ID to cents contributed
+             */
+            contributors: {
+                [key: string]: number;
+            };
+            /**
+             * Unlocked
+             * @default false
+             */
+            unlocked: boolean;
+            /** Owner Id */
+            owner_id: string | null;
+            /**
+             * Licensees
+             * @description Citizen IDs
+             */
+            licensees: string[];
+            /**
+             * Adopters
+             * @description Building IDs
+             */
+            adopters: string[];
+            /**
+             * Adoption Cost
+             * @description Paid once from business cash
+             * @default 1000
+             */
+            adoption_cost: number;
+            effect: components["schemas"]["InventionEffect"];
+        };
+        /** InventionAdopted */
+        InventionAdopted: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "invention_adopted";
+            payload: components["schemas"]["AdoptionPayload"];
+        };
+        /**
+         * InventionEffect
+         * @description Production multiplier for adopting buildings, in percent (140 = +40%, 200 = x2).
+         */
+        InventionEffect: {
+            /**
+             * Building Kind
+             * @enum {string}
+             */
+            building_kind: "farm" | "bakery" | "market";
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "bread" | "wheat";
+            /** Multiplier Pct */
+            multiplier_pct: number;
+        };
+        /** InventionUnlocked */
+        InventionUnlocked: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "invention_unlocked";
+            payload: components["schemas"]["InventionUnlockedPayload"];
+        };
+        /** InventionUnlockedPayload */
+        InventionUnlockedPayload: {
+            /** Invention Id */
+            invention_id: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Released Researcher Ids */
+            released_researcher_ids: string[];
+        };
+        /**
+         * JobApplication
+         * @description A pending request to work at a business. Resolved by the owner or the next daily tick.
+         */
+        JobApplication: {
+            /** Id */
+            id: string;
+            /** Citizen Id */
+            citizen_id: string;
+            /** Building Id */
+            building_id: string;
+            /**
+             * Tick
+             * @description Tick when the citizen applied
+             */
+            tick: number;
+            /**
+             * Sequence
+             * @description World sequence when applied; orders first-come
+             */
+            sequence: number;
+        };
+        /** JobApplicationPayload */
+        JobApplicationPayload: {
+            /** Application Id */
+            application_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+            /** Building Id */
+            building_id: string;
+        };
+        /** JobApplicationResolved */
+        JobApplicationResolved: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "job_application_resolved";
+            payload: components["schemas"]["JobApplicationResolvedPayload"];
+        };
+        /** JobApplicationResolvedPayload */
+        JobApplicationResolvedPayload: {
+            /** Application Id */
+            application_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+            /** Building Id */
+            building_id: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "accepted" | "rejected" | "withdrawn";
+        };
+        /** JobApplied */
+        JobApplied: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "job_applied";
+            payload: components["schemas"]["JobApplicationPayload"];
+        };
+        /**
+         * JobOpening
+         * @description A business with at least one free job slot.
+         */
+        JobOpening: {
+            /** Building Id */
+            building_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "farm" | "bakery" | "market";
+            /** Owner Id */
+            owner_id: string;
+            /** Plot Id */
+            plot_id: string;
+            position: components["schemas"]["Position"];
+            /** Wage */
+            wage: number;
+            /** Free Slots */
+            free_slots: number;
+            /**
+             * Applicant Ids
+             * @description Pending applicants
+             */
+            applicant_ids: string[];
         };
         /** LeaseLot */
         "LeaseLot-Input": {
@@ -2034,6 +3083,539 @@ export interface components {
             /** Fee */
             fee: number;
         };
+        /**
+         * LicenseOffer
+         * @description A pending license; the recipient must accept on the tick it was offered.
+         */
+        LicenseOffer: {
+            /** Id */
+            id: string;
+            /** Invention Id */
+            invention_id: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Recipient Id */
+            recipient_id: string;
+            /** Fee */
+            fee: number;
+            /** Tick */
+            tick: number;
+        };
+        /** LicenseOfferPayload */
+        LicenseOfferPayload: {
+            /** Offer Id */
+            offer_id: string;
+            /** Invention Id */
+            invention_id: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Recipient Id */
+            recipient_id: string;
+            /** Fee */
+            fee: number;
+        };
+        /** LicenseOffered */
+        LicenseOffered: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "license_offered";
+            payload: components["schemas"]["LicenseOfferPayload"];
+        };
+        /** LicenseRequest */
+        LicenseRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Recipient Id */
+            recipient_id: string;
+            /** Fee */
+            fee: number;
+        };
+        /** LicenseResolved */
+        LicenseResolved: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "license_resolved";
+            payload: components["schemas"]["LicenseResolvedPayload"];
+        };
+        /** LicenseResolvedPayload */
+        LicenseResolvedPayload: {
+            /** Offer Id */
+            offer_id: string;
+            /** Invention Id */
+            invention_id: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Recipient Id */
+            recipient_id: string;
+            /** Fee */
+            fee: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "declined" | "expired";
+        };
+        /** LicenseResponseRequest */
+        LicenseResponseRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Accept */
+            accept: boolean;
+        };
+        /**
+         * Loan
+         * @description A loan between two citizens. Interest is flat per loan, in integer cents:
+         *     amount_owed = principal + principal * rate_bps // 10000, fixed when the offer is made.
+         *
+         *     Lifecycle: offered -> active (borrower accepts; principal moves lender -> borrower) or
+         *     declined. Offers still unanswered on due_tick become expired. An active loan not fully
+         *     repaid once tick > due_tick becomes defaulted (penalties apply once); a defaulted loan can
+         *     still be repaid and then becomes repaid.
+         */
+        Loan: {
+            /** Id */
+            id: string;
+            /** Lender Id */
+            lender_id: string;
+            /** Borrower Id */
+            borrower_id: string;
+            /** Principal */
+            principal: number;
+            /** Rate Bps */
+            rate_bps: number;
+            /** Due Tick */
+            due_tick: number;
+            /** Amount Owed */
+            amount_owed: number;
+            /**
+             * Amount Repaid
+             * @default 0
+             */
+            amount_repaid: number;
+            /**
+             * Status
+             * @default offered
+             * @enum {string}
+             */
+            status: "offered" | "active" | "repaid" | "defaulted" | "declined" | "expired";
+            /**
+             * Created Tick
+             * @default 0
+             */
+            created_tick: number;
+        };
+        /** LoanAccepted */
+        LoanAccepted: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "loan_accepted";
+            payload: components["schemas"]["LoanPayload"];
+        };
+        /** LoanDeclined */
+        LoanDeclined: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "loan_declined";
+            payload: components["schemas"]["LoanPayload"];
+        };
+        /** LoanDefaultPayload */
+        LoanDefaultPayload: {
+            /** Loan Id */
+            loan_id: string;
+            /** Lender Id */
+            lender_id: string;
+            /** Borrower Id */
+            borrower_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "offered" | "active" | "repaid" | "defaulted" | "declined" | "expired";
+            /** Principal */
+            principal: number;
+            /** Amount Owed */
+            amount_owed: number;
+            /** Amount Repaid */
+            amount_repaid: number;
+            /**
+             * Amount
+             * @description Cents moved by this event (accept or repay)
+             * @default 0
+             */
+            amount: number;
+            /** Borrower Reputation */
+            borrower_reputation: number;
+            /**
+             * Lender Trust
+             * @description Lender's trust toward the borrower after the penalty
+             */
+            lender_trust: number;
+        };
+        /** LoanDefaulted */
+        LoanDefaulted: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "loan_defaulted";
+            payload: components["schemas"]["LoanDefaultPayload"];
+        };
+        /** LoanExpired */
+        LoanExpired: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "loan_expired";
+            payload: components["schemas"]["LoanPayload"];
+        };
+        /** LoanOfferRequest */
+        LoanOfferRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Borrower Id */
+            borrower_id: string;
+            /** Principal */
+            principal: number;
+            /** Rate Bps */
+            rate_bps: number;
+            /** Due Tick */
+            due_tick: number;
+        };
+        /** LoanOffered */
+        LoanOffered: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "loan_offered";
+            payload: components["schemas"]["LoanPayload"];
+        };
+        /** LoanPayload */
+        LoanPayload: {
+            /** Loan Id */
+            loan_id: string;
+            /** Lender Id */
+            lender_id: string;
+            /** Borrower Id */
+            borrower_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "offered" | "active" | "repaid" | "defaulted" | "declined" | "expired";
+            /** Principal */
+            principal: number;
+            /** Amount Owed */
+            amount_owed: number;
+            /** Amount Repaid */
+            amount_repaid: number;
+            /**
+             * Amount
+             * @description Cents moved by this event (accept or repay)
+             * @default 0
+             */
+            amount: number;
+        };
+        /**
+         * LoanRepaid
+         * @description Any repayment; payload.status is "repaid" once nothing is owed.
+         */
+        LoanRepaid: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "loan_repaid";
+            payload: components["schemas"]["LoanPayload"];
+        };
+        /** LoanRepayRequest */
+        LoanRepayRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Amount */
+            amount: number;
+        };
+        /** LoanResponseRequest */
+        LoanResponseRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Accept */
+            accept: boolean;
+        };
+        /**
+         * LotCommand
+         * @description Convenience-route body. actor_id is the citizen acting (tenant or owner).
+         */
+        LotCommand: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+        };
+        /** LotLeased */
+        LotLeased: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lot_leased";
+            payload: components["schemas"]["LotPayload"];
+        };
+        /** LotPayload */
+        LotPayload: {
+            /** Plot Id */
+            plot_id: string;
+            /** Owner Id */
+            owner_id: string | null;
+            /** Tenant Id */
+            tenant_id: string | null;
+            /** Rent */
+            rent: number;
+            /**
+             * Arrears
+             * @default 0
+             */
+            arrears: number;
+            /**
+             * Missed Periods
+             * @default 0
+             */
+            missed_periods: number;
+            /**
+             * Prepaid Periods
+             * @default 0
+             */
+            prepaid_periods: number;
+        };
+        /**
+         * LotProfile
+         * @description A lot plus derived use: business if a building stands on it, home if leased without
+         *     one, otherwise empty.
+         */
+        LotProfile: {
+            lot: components["schemas"]["Plot"];
+            /**
+             * Use
+             * @enum {string}
+             */
+            use: "home" | "business" | "empty";
+            /** Building Id */
+            building_id: string | null;
+        };
+        /**
+         * MarketPrice
+         * @description One good across every building that lists a price for it. Cents; average rounds half up.
+         */
+        MarketPrice: {
+            /** Resource */
+            resource: string;
+            /** Average */
+            average: number;
+            /** Min */
+            min: number;
+            /** Max */
+            max: number;
+            /** Sellers */
+            sellers: number;
+        };
+        /** MarketPrices */
+        MarketPrices: {
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Prices */
+            prices: components["schemas"]["MarketPrice"][];
+        };
         /** MoveTo */
         "MoveTo-Input": {
             /** Actor Id */
@@ -2110,11 +3692,106 @@ export interface components {
              */
             speed: 1 | 2 | 4;
         };
-        /** Plot */
+        /**
+         * Plot
+         * @description A lot. Unowned lots are town land: anyone may build there, nobody collects rent.
+         */
         Plot: {
             /** Id */
             id: string;
             position: components["schemas"]["Position"];
+            /**
+             * Owner Id
+             * @description Landlord; null for town land
+             */
+            owner_id: string | null;
+            /** Tenant Id */
+            tenant_id: string | null;
+            /**
+             * Rent
+             * @description Cents per rent period
+             * @default 0
+             */
+            rent: number;
+            /**
+             * Arrears
+             * @description Unpaid rent owed by the tenant, in cents
+             * @default 0
+             */
+            arrears: number;
+            /**
+             * Missed Periods
+             * @description Rent periods missed since arrears were last cleared
+             * @default 0
+             */
+            missed_periods: number;
+            /**
+             * Prepaid Periods
+             * @description Future rent periods the tenant already paid
+             * @default 0
+             */
+            prepaid_periods: number;
+        };
+        /**
+         * Policies
+         * @description Town-vote outcomes in force. 0 means no policy for that kind.
+         */
+        Policies: {
+            /**
+             * Market Tax Bps
+             * @description Cut of each buy, shared equally by all citizens
+             * @default 0
+             */
+            market_tax_bps: number;
+            /**
+             * Bread Price Cap
+             * @description Max bread price in cents; 0 = none
+             * @default 0
+             */
+            bread_price_cap: number;
+            /**
+             * Min Wage
+             * @description Min daily wage in cents; 0 = none
+             * @default 0
+             */
+            min_wage: number;
+        };
+        /** PolicyChanged */
+        PolicyChanged: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "policy_changed";
+            payload: components["schemas"]["PolicyPayload"];
+        };
+        /** PolicyPayload */
+        PolicyPayload: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "market_tax" | "bread_price_cap" | "min_wage";
+            /** Old Value */
+            old_value: number;
+            /** New Value */
+            new_value: number;
         };
         /** Position */
         Position: {
@@ -2147,6 +3824,15 @@ export interface components {
              */
             type: "price_changed";
             payload: components["schemas"]["PricePayload"];
+        };
+        /** PriceHistory */
+        PriceHistory: {
+            /** Branch Id */
+            branch_id: string;
+            /** Resource */
+            resource: string;
+            /** Points */
+            points: components["schemas"]["PricePoint"][];
         };
         /** PriceIntervention */
         PriceIntervention: {
@@ -2181,6 +3867,24 @@ export interface components {
             old_price: number;
             /** New Price */
             new_price: number;
+        };
+        /**
+         * PricePoint
+         * @description The market price after the event at this sequence (the branch start for the first).
+         */
+        PricePoint: {
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Average */
+            average: number;
+            /** Min */
+            min: number;
+            /** Max */
+            max: number;
+            /** Sellers */
+            sellers: number;
         };
         /** PriceRequest */
         PriceRequest: {
@@ -2316,6 +4020,62 @@ export interface components {
              */
             type: "quit_job";
         };
+        /** QuitJobRequest */
+        QuitJobRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Rationale */
+            rationale?: string | null;
+        };
+        /** RegenerationPayload */
+        RegenerationPayload: {
+            /** Resource */
+            resource: string;
+            /** Quantity */
+            quantity: number;
+            /** Stock */
+            stock: number;
+        };
+        /**
+         * RejectApplication
+         * @description Owner declines a pending job application; hire accepts one.
+         */
+        "RejectApplication-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "reject_application";
+            /** Building Id */
+            building_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+        };
+        /**
+         * RejectApplication
+         * @description Owner declines a pending job application; hire accepts one.
+         */
+        "RejectApplication-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "reject_application";
+            /** Building Id */
+            building_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+        };
         /** RejectionPayload */
         RejectionPayload: {
             /** Action Type */
@@ -2370,7 +4130,113 @@ export interface components {
             /** Trust */
             trust: number;
         };
-        /** Repay */
+        /** RentChangePayload */
+        RentChangePayload: {
+            /** Plot Id */
+            plot_id: string;
+            /** Old Rent */
+            old_rent: number;
+            /** New Rent */
+            new_rent: number;
+        };
+        /** RentChanged */
+        RentChanged: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "rent_changed";
+            payload: components["schemas"]["RentChangePayload"];
+        };
+        /**
+         * RentCovered
+         * @description Scheduled collection used one prepaid period; no money moved.
+         */
+        RentCovered: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "rent_covered";
+            payload: components["schemas"]["LotPayload"];
+        };
+        /**
+         * RentMissed
+         * @description Scheduled collection failed; arrears and missed_periods are the new totals.
+         */
+        RentMissed: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "rent_missed";
+            payload: components["schemas"]["LotPayload"];
+        };
+        /** RentRequest */
+        RentRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Rent */
+            rent: number;
+        };
+        /**
+         * Repay
+         * @description Borrower only; partial payments allowed, never more than what is still owed.
+         */
         "Repay-Input": {
             /** Actor Id */
             actor_id: string;
@@ -2386,7 +4252,10 @@ export interface components {
             /** Amount */
             amount: number;
         };
-        /** Repay */
+        /**
+         * Repay
+         * @description Borrower only; partial payments allowed, never more than what is still owed.
+         */
         "Repay-Output": {
             /** Actor Id */
             actor_id: string;
@@ -2454,6 +4323,77 @@ export interface components {
             /** Ticks */
             ticks: number | null;
         };
+        /** ResearchContributed */
+        ResearchContributed: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "research_contributed";
+            payload: components["schemas"]["ResearchPayload"];
+        };
+        /** ResearchPayload */
+        ResearchPayload: {
+            /** Invention Id */
+            invention_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "money" | "time";
+            /**
+             * Amount
+             * @description Cents of progress added; 0 when time research starts
+             */
+            amount: number;
+            /** Progress */
+            progress: number;
+            /** Cost */
+            cost: number;
+            /**
+             * Days Left
+             * @default 0
+             */
+            days_left: number;
+        };
+        /** ResearchRequest */
+        ResearchRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "money" | "time";
+            /** Amount */
+            amount?: number | null;
+            /** Ticks */
+            ticks?: number | null;
+        };
         /** ResourceConsumed */
         ResourceConsumed: {
             /** Id */
@@ -2478,6 +4418,31 @@ export interface components {
              */
             type: "resource_consumed";
             payload: components["schemas"]["ResourcePayload"];
+        };
+        /** ResourceGathered */
+        ResourceGathered: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resource_gathered";
+            payload: components["schemas"]["GatherPayload"];
         };
         /** ResourceInventory */
         "ResourceInventory-Input": {
@@ -2513,6 +4478,11 @@ export interface components {
             resource: string;
             /** Quantity */
             quantity: number;
+            /**
+             * Stock Remaining
+             * @description Shared natural stock left after a farm harvest
+             */
+            stock_remaining: number | null;
         };
         /** ResourceProduced */
         ResourceProduced: {
@@ -2538,6 +4508,131 @@ export interface components {
              */
             type: "resource_produced";
             payload: components["schemas"]["ResourcePayload"];
+        };
+        /** ResourceRegenerated */
+        ResourceRegenerated: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resource_regenerated";
+            payload: components["schemas"]["RegenerationPayload"];
+        };
+        /**
+         * ResourceStock
+         * @description A shared natural stock. Farms harvest from it and workers gather from it;
+         *     it regenerates once per tick up to cap. Interventions may edit stock and regen.
+         */
+        ResourceStock: {
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "wheat";
+            /** Stock */
+            stock: number;
+            /**
+             * Regen Per Tick
+             * @default 0
+             */
+            regen_per_tick: number;
+            /**
+             * Cap
+             * @description Regeneration stops here; null = no cap
+             */
+            cap: number | null;
+        };
+        /**
+         * RespondLicense
+         * @description The license recipient accepts (paying the fee) or declines a same-tick offer.
+         */
+        "RespondLicense-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "respond_license";
+            /** Offer Id */
+            offer_id: string;
+            /** Accept */
+            accept: boolean;
+        };
+        /**
+         * RespondLicense
+         * @description The license recipient accepts (paying the fee) or declines a same-tick offer.
+         */
+        "RespondLicense-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "respond_license";
+            /** Offer Id */
+            offer_id: string;
+            /** Accept */
+            accept: boolean;
+        };
+        /**
+         * RespondLoan
+         * @description Borrower accepts or declines a loan offer; accepting moves the principal to them.
+         */
+        "RespondLoan-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "respond_loan";
+            /** Loan Id */
+            loan_id: string;
+            /** Accept */
+            accept: boolean;
+        };
+        /**
+         * RespondLoan
+         * @description Borrower accepts or declines a loan offer; accepting moves the principal to them.
+         */
+        "RespondLoan-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "respond_loan";
+            /** Loan Id */
+            loan_id: string;
+            /** Accept */
+            accept: boolean;
         };
         /** RespondTrade */
         "RespondTrade-Input": {
@@ -2570,6 +4665,49 @@ export interface components {
             offer_id: string;
             /** Accept */
             accept: boolean;
+        };
+        /**
+         * RespondTradeRequest
+         * @description actor_id must be the offer's recipient.
+         */
+        RespondTradeRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Accept */
+            accept: boolean;
+        };
+        /** RoleInfo */
+        RoleInfo: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "commoner" | "business_owner";
+            /** Description */
+            description: string;
+            /** Permissions */
+            permissions: components["schemas"]["RolePermission"][];
+        };
+        /** RolePermission */
+        RolePermission: {
+            /** Action */
+            action: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "any" | "own_business" | "own_lot";
+            /**
+             * Supported
+             * @description False while the engine still rejects it as not_supported
+             */
+            supported: boolean;
         };
         /** Sell */
         "Sell-Input": {
@@ -2746,7 +4884,7 @@ export interface components {
             sequence: number;
             state: components["schemas"]["WorldState"];
             /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"])[];
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"])[];
             /** Rejected Actions */
             rejected_actions: string[];
         };
@@ -2805,6 +4943,73 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** TaxCollected */
+        TaxCollected: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tax_collected";
+            payload: components["schemas"]["TaxPayload"];
+        };
+        /** TaxPayload */
+        TaxPayload: {
+            /** Building Id */
+            building_id: string;
+            /**
+             * Amount
+             * @description Total taken from the seller; equals per_citizen * recipients
+             */
+            amount: number;
+            /** Per Citizen */
+            per_citizen: number;
+            /** Recipient Ids */
+            recipient_ids: string[];
+        };
+        /**
+         * TenantEvicted
+         * @description tenant_id is the evicted tenant; arrears are the written-off debt.
+         */
+        TenantEvicted: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "tenant_evicted";
+            payload: components["schemas"]["LotPayload"];
+        };
         /**
          * Trade
          * @description Offer goods or money to another citizen; the recipient answers with respond_trade.
@@ -2843,6 +5048,31 @@ export interface components {
             give: components["schemas"]["TradeBundle-Output"];
             get: components["schemas"]["TradeBundle-Output"];
         };
+        /** TradeAccepted */
+        TradeAccepted: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "trade_accepted";
+            payload: components["schemas"]["TradeResolutionPayload"];
+        };
         /** TradeBundle */
         "TradeBundle-Input": {
             /**
@@ -2860,6 +5090,157 @@ export interface components {
              */
             money: number;
             goods: components["schemas"]["ResourceInventory-Output"];
+        };
+        /** TradeDeclined */
+        TradeDeclined: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "trade_declined";
+            payload: components["schemas"]["TradeResolutionPayload"];
+        };
+        /** TradeExpired */
+        TradeExpired: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "trade_expired";
+            payload: components["schemas"]["TradeResolutionPayload"];
+        };
+        /**
+         * TradeOffer
+         * @description A pending citizen-to-citizen offer. Resolved offers leave the world; events keep them.
+         */
+        TradeOffer: {
+            /** Id */
+            id: string;
+            /** Offerer Id */
+            offerer_id: string;
+            /** Recipient Id */
+            recipient_id: string;
+            /** @description What the offerer hands over on acceptance */
+            give: components["schemas"]["TradeBundle-Output"];
+            /** @description What the offerer receives on acceptance */
+            get: components["schemas"]["TradeBundle-Output"];
+            /** Created Tick */
+            created_tick: number;
+            /**
+             * Expires Tick
+             * @description Last tick on which the recipient may accept
+             */
+            expires_tick: number;
+            /**
+             * Event Id
+             * @description The trade_offered event
+             */
+            event_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+        };
+        /** TradeOfferPayload */
+        TradeOfferPayload: {
+            /** Offer Id */
+            offer_id: string;
+            /**
+             * Sender Id
+             * @description The offerer
+             */
+            sender_id: string;
+            /** Recipient Id */
+            recipient_id: string;
+            give: components["schemas"]["TradeBundle-Output"];
+            get: components["schemas"]["TradeBundle-Output"];
+            /** Expires Tick */
+            expires_tick: number;
+        };
+        /** TradeOffered */
+        TradeOffered: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "trade_offered";
+            payload: components["schemas"]["TradeOfferPayload"];
+        };
+        /**
+         * TradeRequest
+         * @description actor_id is the offerer.
+         */
+        TradeRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Recipient Id */
+            recipient_id: string;
+            give: components["schemas"]["TradeBundle-Input"];
+            get: components["schemas"]["TradeBundle-Input"];
+        };
+        /** TradeResolutionPayload */
+        TradeResolutionPayload: {
+            /** Offer Id */
+            offer_id: string;
+            /**
+             * Sender Id
+             * @description The offerer
+             */
+            sender_id: string;
+            /** Recipient Id */
+            recipient_id: string;
         };
         /** TransactionCompleted */
         TransactionCompleted: {
@@ -2975,6 +5356,196 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * Vote
+         * @description A town vote. Tally weights are influence basis points, recorded when the vote closes.
+         */
+        Vote: {
+            /** Id */
+            id: string;
+            /** Proposer Id */
+            proposer_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "market_tax" | "bread_price_cap" | "min_wage";
+            /** Value */
+            value: number;
+            /** Rationale */
+            rationale: string | null;
+            /** Opens Tick */
+            opens_tick: number;
+            /** Closes Tick */
+            closes_tick: number;
+            /**
+             * Status
+             * @default open
+             * @enum {string}
+             */
+            status: "open" | "passed" | "failed";
+            /**
+             * Ballots
+             * @description Citizen ID to choice
+             */
+            ballots: {
+                [key: string]: "yes" | "no";
+            };
+            /**
+             * Yes Weight
+             * @default 0
+             */
+            yes_weight: number;
+            /**
+             * No Weight
+             * @default 0
+             */
+            no_weight: number;
+        };
+        /** VoteCast */
+        VoteCast: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "vote_cast";
+            payload: components["schemas"]["BallotPayload"];
+        };
+        /** VoteClosed */
+        VoteClosed: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "vote_closed";
+            payload: components["schemas"]["VoteClosedPayload"];
+        };
+        /** VoteClosedPayload */
+        VoteClosedPayload: {
+            /** Vote Id */
+            vote_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "market_tax" | "bread_price_cap" | "min_wage";
+            /** Value */
+            value: number;
+            /** Passed */
+            passed: boolean;
+            /** Yes Weight */
+            yes_weight: number;
+            /** No Weight */
+            no_weight: number;
+        };
+        /** VoteProposalRequest */
+        VoteProposalRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "market_tax" | "bread_price_cap" | "min_wage";
+            /** Value */
+            value: number;
+            /** Rationale */
+            rationale?: string | null;
+        };
+        /** VoteProposed */
+        VoteProposed: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "vote_proposed";
+            payload: components["schemas"]["VoteProposedPayload"];
+        };
+        /** VoteProposedPayload */
+        VoteProposedPayload: {
+            /** Vote Id */
+            vote_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "market_tax" | "bread_price_cap" | "min_wage";
+            /** Value */
+            value: number;
+            /** Closes Tick */
+            closes_tick: number;
+        };
+        /** VoteTally */
+        VoteTally: {
+            /** Yes Weight */
+            yes_weight: number;
+            /** No Weight */
+            no_weight: number;
+            /**
+             * Yes Share
+             * @description Basis points of the weight cast; passes above 5000
+             */
+            yes_share: number;
+            /** Ballots */
+            ballots: number;
+        };
+        /** VoteView */
+        VoteView: {
+            vote: components["schemas"]["Vote"];
+            tally: components["schemas"]["VoteTally"];
+        };
         /** WageChanged */
         WageChanged: {
             /** Id */
@@ -3058,6 +5629,41 @@ export interface components {
             plots: {
                 [key: string]: components["schemas"]["Plot"];
             };
+            /** Resources */
+            resources: {
+                [key: string]: components["schemas"]["ResourceStock"];
+            };
+            /**
+             * Job Applications
+             * @description Pending job applications by ID
+             */
+            job_applications: {
+                [key: string]: components["schemas"]["JobApplication"];
+            };
+            /** Loans */
+            loans: {
+                [key: string]: components["schemas"]["Loan"];
+            };
+            /**
+             * Trade Offers
+             * @description Pending trade offers by ID
+             */
+            trade_offers: {
+                [key: string]: components["schemas"]["TradeOffer"];
+            };
+            /** Inventions */
+            inventions: {
+                [key: string]: components["schemas"]["Invention"];
+            };
+            /** License Offers */
+            license_offers: {
+                [key: string]: components["schemas"]["LicenseOffer"];
+            };
+            /** Votes */
+            votes: {
+                [key: string]: components["schemas"]["Vote"];
+            };
+            policies: components["schemas"]["Policies"];
         };
         /** WorldUpdate */
         WorldUpdate: {
@@ -3069,7 +5675,7 @@ export interface components {
             sequence: number;
             state: components["schemas"]["WorldState"];
             /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"])[];
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"])[];
         };
     };
     responses: never;
@@ -3418,6 +6024,111 @@ export interface operations {
             };
         };
     };
+    gather_api_agents__citizen_id__gather_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GatherRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_api_agents__citizen_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quit_job_api_agents__citizen_id__quit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuitJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     businesses_api_businesses_get: {
         parameters: {
             query?: {
@@ -3654,6 +6365,41 @@ export interface operations {
             };
         };
     };
+    reject_api_businesses__building_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                building_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     fire_api_businesses__building_id__fire_post: {
         parameters: {
             query?: never;
@@ -3701,6 +6447,930 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PurchaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    loans_api_loans_get: {
+        parameters: {
+            query?: {
+                citizen_id?: string | null;
+                status?: ("offered" | "active" | "repaid" | "defaulted" | "declined" | "expired") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Loan"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    offer_api_loans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoanOfferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    loan_api_loans__loan_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Loan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    respond_api_loans__loan_id__respond_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoanResponseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    repay_api_loans__loan_id__repay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                loan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoanRepayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lots_api_lots_get: {
+        parameters: {
+            query?: {
+                owner?: string | null;
+                tenant?: string | null;
+                use?: ("home" | "business" | "empty") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LotProfile"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lot_api_lots__plot_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LotProfile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lease_api_lots__plot_id__lease_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LotCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rent_api_lots__plot_id__rent_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pay_api_lots__plot_id__pay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LotCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evict_api_lots__plot_id__evict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LotCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    prices_api_market_prices_get: {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketPrices"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_api_market_prices_history_get: {
+        parameters: {
+            query: {
+                good: "bread" | "wheat";
+                branch_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceHistory"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_offers_api_agents__citizen_id__offers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentOffers"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trade_api_market_trade_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TradeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    respond_api_market_trade__offer_id__respond_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RespondTradeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resources_api_resources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceStock"][];
+                };
+            };
+        };
+    };
+    inventions_api_inventions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invention"][];
+                };
+            };
+        };
+    };
+    license_offers_api_inventions_license_offers_get: {
+        parameters: {
+            query?: {
+                recipient?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LicenseOffer"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invention_api_inventions__invention_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invention_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invention"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_api_inventions__invention_id__research_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invention_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    license_invention_api_inventions__invention_id__license_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invention_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LicenseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    respond_license_api_inventions_license_offers__offer_id__respond_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LicenseResponseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    adopt_api_inventions__invention_id__adopt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invention_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdoptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    role_matrix_api_roles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleInfo"][];
+                };
+            };
+        };
+    };
+    agent_influence_api_agents__citizen_id__influence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InfluenceBreakdown"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    vote_list_api_votes_get: {
+        parameters: {
+            query?: {
+                status?: ("open" | "passed" | "failed") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoteView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_api_votes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoteProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ballot_api_votes__vote_id__ballot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                vote_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BallotRequest"];
             };
         };
         responses: {
@@ -3956,6 +7626,38 @@ export interface operations {
             };
         };
     };
+    jobs_api_jobs_get: {
+        parameters: {
+            query?: {
+                kind?: ("farm" | "bakery" | "market") | null;
+                min_wage?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOpening"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     events_api_history_events_get: {
         parameters: {
             query: {
@@ -3975,7 +7677,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"])[];
+                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"])[];
                 };
             };
             /** @description Validation Error */
@@ -4187,7 +7889,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"])[];
+                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"])[];
                 };
             };
             /** @description Validation Error */

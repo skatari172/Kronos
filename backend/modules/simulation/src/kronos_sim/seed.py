@@ -75,6 +75,12 @@ def initial_world(seed: int = 42, branch_id: str = "main") -> WorldState:
             ]
         )
     }
+    # Building plots belong to their building's owner. Elena is also a landlord: Mira rents
+    # plot-5 as her home. plot-3 and plot-4 stay unowned town land, open to anyone.
+    for building in buildings.values():
+        plots[building.plot_id].owner_id = building.owner_id
+    home = plots["plot-5"]
+    home.owner_id, home.tenant_id, home.rent = "citizen-0", "citizen-5", 300
     return WorldState(
         branch_id=branch_id,
         seed=seed,

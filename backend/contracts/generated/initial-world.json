@@ -668,7 +668,9 @@
         "personality": "practical",
         "relationships": [],
         "memories": [],
-        "reputation": 50
+        "reputation": 50,
+        "research_invention_id": null,
+        "research_until_tick": 0
       },
       "citizen-1": {
         "id": "citizen-1",
@@ -698,7 +700,9 @@
         "personality": "practical",
         "relationships": [],
         "memories": [],
-        "reputation": 50
+        "reputation": 50,
+        "research_invention_id": null,
+        "research_until_tick": 0
       },
       "citizen-2": {
         "id": "citizen-2",
@@ -728,7 +732,9 @@
         "personality": "practical",
         "relationships": [],
         "memories": [],
-        "reputation": 50
+        "reputation": 50,
+        "research_invention_id": null,
+        "research_until_tick": 0
       },
       "citizen-3": {
         "id": "citizen-3",
@@ -758,7 +764,9 @@
         "personality": "practical",
         "relationships": [],
         "memories": [],
-        "reputation": 50
+        "reputation": 50,
+        "research_invention_id": null,
+        "research_until_tick": 0
       },
       "citizen-4": {
         "id": "citizen-4",
@@ -788,7 +796,9 @@
         "personality": "practical",
         "relationships": [],
         "memories": [],
-        "reputation": 50
+        "reputation": 50,
+        "research_invention_id": null,
+        "research_until_tick": 0
       },
       "citizen-5": {
         "id": "citizen-5",
@@ -818,7 +828,9 @@
         "personality": "practical",
         "relationships": [],
         "memories": [],
-        "reputation": 50
+        "reputation": 50,
+        "research_invention_id": null,
+        "research_until_tick": 0
       },
       "citizen-6": {
         "id": "citizen-6",
@@ -848,7 +860,9 @@
         "personality": "practical",
         "relationships": [],
         "memories": [],
-        "reputation": 50
+        "reputation": 50,
+        "research_invention_id": null,
+        "research_until_tick": 0
       }
     },
     "buildings": {
@@ -931,43 +945,133 @@
         "position": {
           "x": -4.0,
           "z": -3.0
-        }
+        },
+        "owner_id": "citizen-0",
+        "tenant_id": null,
+        "rent": 0,
+        "arrears": 0,
+        "missed_periods": 0,
+        "prepaid_periods": 0
       },
       "plot-1": {
         "id": "plot-1",
         "position": {
           "x": 0.0,
           "z": -3.0
-        }
+        },
+        "owner_id": "citizen-1",
+        "tenant_id": null,
+        "rent": 0,
+        "arrears": 0,
+        "missed_periods": 0,
+        "prepaid_periods": 0
       },
       "plot-2": {
         "id": "plot-2",
         "position": {
           "x": 4.0,
           "z": -3.0
-        }
+        },
+        "owner_id": "citizen-2",
+        "tenant_id": null,
+        "rent": 0,
+        "arrears": 0,
+        "missed_periods": 0,
+        "prepaid_periods": 0
       },
       "plot-3": {
         "id": "plot-3",
         "position": {
           "x": -4.0,
           "z": 3.0
-        }
+        },
+        "owner_id": null,
+        "tenant_id": null,
+        "rent": 0,
+        "arrears": 0,
+        "missed_periods": 0,
+        "prepaid_periods": 0
       },
       "plot-4": {
         "id": "plot-4",
         "position": {
           "x": 0.0,
           "z": 3.0
-        }
+        },
+        "owner_id": null,
+        "tenant_id": null,
+        "rent": 0,
+        "arrears": 0,
+        "missed_periods": 0,
+        "prepaid_periods": 0
       },
       "plot-5": {
         "id": "plot-5",
         "position": {
           "x": 4.0,
           "z": 3.0
+        },
+        "owner_id": "citizen-0",
+        "tenant_id": "citizen-5",
+        "rent": 300,
+        "arrears": 0,
+        "missed_periods": 0,
+        "prepaid_periods": 0
+      }
+    },
+    "resources": {
+      "wheat": {
+        "kind": "wheat",
+        "stock": 120,
+        "regen_per_tick": 6,
+        "cap": 200
+      }
+    },
+    "job_applications": {},
+    "loans": {},
+    "trade_offers": {},
+    "inventions": {
+      "crop_rotation": {
+        "id": "crop_rotation",
+        "name": "Crop Rotation",
+        "cost": 1500,
+        "progress": 0,
+        "contributors": {},
+        "unlocked": false,
+        "owner_id": null,
+        "licensees": [],
+        "adopters": [],
+        "adoption_cost": 1000,
+        "effect": {
+          "building_kind": "farm",
+          "resource": "wheat",
+          "multiplier_pct": 140
+        }
+      },
+      "water_mill": {
+        "id": "water_mill",
+        "name": "Water Mill",
+        "cost": 2500,
+        "progress": 0,
+        "contributors": {},
+        "unlocked": false,
+        "owner_id": null,
+        "licensees": [],
+        "adopters": [],
+        "adoption_cost": 1500,
+        "effect": {
+          "building_kind": "bakery",
+          "resource": "bread",
+          "multiplier_pct": 200
         }
       }
+    },
+    "license_offers": {},
+    "votes": {},
+    "policies": {
+      "market_tax_bps": 0,
+      "bread_price_cap": 0,
+      "min_wage": 0
     }
   },
   "events": []

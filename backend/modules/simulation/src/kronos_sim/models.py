@@ -88,8 +88,20 @@ class Citizen(Model):
 
 
 class Plot(Model):
+    """A lot. Unowned lots are town land: anyone may build there, nobody collects rent."""
+
     id: str
     position: Position
+    owner_id: str | None = Field(default=None, description="Landlord; null for town land")
+    tenant_id: str | None = None
+    rent: int = Field(default=0, ge=0, le=1000000, description="Cents per rent period")
+    arrears: int = Field(default=0, ge=0, description="Unpaid rent owed by the tenant, in cents")
+    missed_periods: int = Field(
+        default=0, ge=0, description="Rent periods missed since arrears were last cleared"
+    )
+    prepaid_periods: int = Field(
+        default=0, ge=0, le=4, description="Future rent periods the tenant already paid"
+    )
 
 
 class Building(Model):
@@ -268,12 +280,6 @@ class WorldState(Model):
         default_factory=dict, description="Pending job applications by ID"
     )
 
-    @model_validator(mode="after")
-    def _resource_keys(self):
-        if any(key != stock.kind for key, stock in self.resources.items()):
-            raise ValueError("resources must be keyed by kind")
-        return self
-
     loans: dict[str, Loan] = Field(default_factory=dict)
     trade_offers: dict[str, TradeOffer] = Field(
         default_factory=dict, description="Pending trade offers by ID"
@@ -282,6 +288,12 @@ class WorldState(Model):
     license_offers: dict[str, LicenseOffer] = Field(default_factory=dict)
     votes: dict[str, Vote] = Field(default_factory=dict)
     policies: Policies = Field(default_factory=Policies)
+
+    @model_validator(mode="after")
+    def _resource_keys(self):
+        if any(key != stock.kind for key, stock in self.resources.items()):
+            raise ValueError("resources must be keyed by kind")
+        return self
 
 
 class ActionBase(Model):
@@ -1003,6 +1015,53 @@ class TaxCollected(EventBase):
     payload: TaxPayload
 
 
+class LotPayload(Model):
+    plot_id: str
+    owner_id: str | None
+    tenant_id: str | None
+    rent: int
+    arrears: int = 0
+    missed_periods: int = 0
+    prepaid_periods: int = 0
+
+
+class LotLeased(EventBase):
+    type: Literal["lot_leased"] = "lot_leased"
+    payload: LotPayload
+
+
+class RentChangePayload(Model):
+    plot_id: str
+    old_rent: int
+    new_rent: int
+
+
+class RentChanged(EventBase):
+    type: Literal["rent_changed"] = "rent_changed"
+    payload: RentChangePayload
+
+
+class RentMissed(EventBase):
+    """Scheduled collection failed; arrears and missed_periods are the new totals."""
+
+    type: Literal["rent_missed"] = "rent_missed"
+    payload: LotPayload
+
+
+class RentCovered(EventBase):
+    """Scheduled collection used one prepaid period; no money moved."""
+
+    type: Literal["rent_covered"] = "rent_covered"
+    payload: LotPayload
+
+
+class TenantEvicted(EventBase):
+    """tenant_id is the evicted tenant; arrears are the written-off debt."""
+
+    type: Literal["tenant_evicted"] = "tenant_evicted"
+    payload: LotPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -1056,7 +1115,12 @@ SimulationEvent = Annotated[
     | VoteClosed
     | PolicyChanged
     | TaxCollected
-    | InterventionApplied,
+    | InterventionApplied
+    | LotLeased
+    | RentChanged
+    | RentMissed
+    | RentCovered
+    | TenantEvicted,
     Field(discriminator="type"),
 ]
 
@@ -1326,6 +1390,25 @@ class LoanCommand(MutationRequest):
     rationale: str | None = Field(default=None, max_length=300)
 
 
+LotUse = Literal["home", "business", "empty"]
+
+
+class LotProfile(Model):
+    """A lot plus derived use: business if a building stands on it, home if leased without
+    one, otherwise empty."""
+
+    lot: Plot
+    use: LotUse
+    building_id: str | None = None
+
+
+class LotCommand(MutationRequest):
+    """Convenience-route body. actor_id is the citizen acting (tenant or owner)."""
+
+    actor_id: str
+    rationale: str | None = Field(default=None, max_length=300)
+
+
 class JobOpening(Model):
     """A business with at least one free job slot."""
 
@@ -1449,3 +1532,7 @@ class BallotRequest(MutationRequest):
     actor_id: str
     choice: VoteChoice
     rationale: str | None = Field(default=None, max_length=300)
+
+
+class RentRequest(LotCommand):
+    rent: int = Field(ge=0, le=1000000)
