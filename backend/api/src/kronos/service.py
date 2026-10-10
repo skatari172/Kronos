@@ -26,6 +26,8 @@ from kronos_sim.models import (
     FoundBusiness,
     GatherResource,
     GrantIntervention,
+    HeadlessRun,
+    HeadlessRunRequest,
     Hire,
     HungerIntervention,
     InterventionResult,
@@ -110,6 +112,15 @@ def build_provider(config: Settings) -> tuple[LLMProvider, float]:
     )
 
 
+class _NoProvider:
+    """Headless runs never call a model: every decision comes from the utility fallback."""
+
+    source = "fallback"
+
+    async def complete(self, task: str, observation: dict) -> str:
+        raise ProviderError("Headless runs decide with the utility policy")
+
+
 class Service:
     def __init__(self, config: Settings):
         provider, timeout = build_provider(config)  # fail fast, before touching storage
@@ -144,6 +155,13 @@ class Service:
         self.playing = False
         self.speed = 1
         self.error: str | None = None
+        # Background (headless) runs of non-active branches, by branch ID.
+        self.runs: dict[str, HeadlessRun] = {}
+        self.run_tasks: dict[str, asyncio.Task] = {}
+        # Headless citizens decide with the free utility policy only (never a paid model).
+        self.headless_agents = AgentService(
+            _NoProvider(), round_ticks=config.agent_round_ticks, fallback=UtilityPolicy()
+        )
 
     def status(self) -> SimulationStatus:
         return SimulationStatus(
@@ -202,37 +220,58 @@ class Service:
         self.state = result.state
         for outcome in getattr(result, "action_results", []):
             self.actions[outcome.action_id] = outcome
-        await self.broadcast(result)
+        # The transaction is complete. Realtime delivery must not turn a saved outcome
+        # into an HTTP failure; clients can always read the persisted event ledger.
+        try:
+            await self.broadcast(result)
+        except Exception:
+            logger.warning(
+                "World %s:%s committed; realtime broadcast failed",
+                result.branch_id,
+                result.sequence,
+                exc_info=True,
+            )
         return result
 
-    def enqueue(self, action, source="agent", text=None) -> ActionResult:
-        """Caller holds the lock. Runtime attempts never change persisted world state."""
+    def enqueue(self, action, source="agent", text=None, state=None) -> ActionResult:
+        """Caller holds the lock. Runtime attempts never change persisted world state.
+
+        `state` targets another branch (a fork's queued intervention); default: active."""
+        state = state if state is not None else self.state
         self.action_order += 1
         record = ActionResult(
-            action_id=f"action-{self.state.branch_id}:{self.action_session}:{self.action_order:08d}",
-            branch_id=self.state.branch_id,
+            action_id=f"action-{state.branch_id}:{self.action_session}:{self.action_order:08d}",
+            branch_id=state.branch_id,
             status="queued",
             action=action.model_copy(deep=True),
             source=source,
             order=self.action_order,
-            scheduled_tick=self.state.tick + 1,
+            scheduled_tick=state.tick + 1,
             text=text,
-            tick=self.state.tick,
-            sequence=self.state.sequence,
+            tick=state.tick,
+            sequence=state.sequence,
         )
         self.actions[record.action_id] = record
         return record.model_copy(deep=True)
 
-    def pending(self) -> list[ActionResult]:
+    def pending(self, branch_id: str | None = None) -> list[ActionResult]:
+        branch_id = branch_id or self.state.branch_id
         return [
             record.model_copy(deep=True)
             for record in self.actions.values()
-            if record.branch_id == self.state.branch_id and record.status == "queued"
+            if record.branch_id == branch_id and record.status == "queued"
         ]
 
     def _authorize(self, body: ActionRequest, citizen_id: str | None):
         """Caller holds the lock. Request-level checks; failures are HTTP errors, never logged."""
         self.check(body)
+        for ref in getattr(body.action, "causal_refs", []):
+            try:
+                cited = self.store.event(ref)
+            except KeyError:
+                raise HTTPException(422, f"causal_refs: unknown event {ref}") from None
+            if cited.branch_id != self.state.branch_id:
+                raise HTTPException(422, f"causal_refs: {ref} is not on the active branch")
         if citizen_id is not None:
             if citizen_id not in self.state.citizens:
                 raise KeyError("Unknown citizen")
@@ -677,9 +716,19 @@ class Service:
             self.decision_task.cancel()
             with suppress(asyncio.CancelledError):
                 await self.decision_task
+        for branch_id in list(self.run_tasks):  # Shutdown also stops background runs.
+            await self.stop_run(branch_id)
 
-    async def fork(self, snapshot_id: str, name: str):
+    async def fork(self, snapshot_id: str, name: str, intervention: str | None = None):
+        """Caller holds the lock. A new timeline from a snapshot; the original is untouched.
+
+        An intervention is parsed first (a bad one creates nothing) and queued on the fork
+        for its next day, so the fork differs from its parent by exactly that change."""
         original = self.store.restore(snapshot_id)
+        command = None
+        if intervention:
+            citizens = {cid: c.name for cid, c in original.citizens.items()}
+            command = await self.agents.parse(intervention, citizens)
         branch_id = str(uuid4())
         state = Engine(original).fork(branch_id)
         meta = BranchMetadata(
@@ -688,9 +737,81 @@ class Service:
             parent_branch_id=original.branch_id,
             source_snapshot_id=snapshot_id,
             fork_tick=state.tick,
+            seed=state.seed,
+            intervention=intervention,
         )
         self.store.create(state, meta)
+        if command is not None:
+            self.enqueue(command, "player", intervention, state=state)
         return meta
+
+    # --- headless branches ---------------------------------------------------------
+
+    def start_run(self, branch_id: str, request: HeadlessRunRequest) -> HeadlessRun:
+        """Caller holds the lock. Advance a non-active branch in the background."""
+        if branch_id == self.state.branch_id:
+            raise HTTPException(409, "The active branch runs on the clock; pick another branch")
+        if branch_id in self.runs and self.runs[branch_id].status == "running":
+            raise HTTPException(409, "This branch is already running")
+        world = self.store.world(branch_id)  # KeyError -> 404
+        run = HeadlessRun(
+            branch_id=branch_id,
+            status="running",
+            agents=request.agents,
+            ticks_requested=request.ticks,
+            tick=world.tick,
+        )
+        self.runs[branch_id] = run
+        self.run_tasks[branch_id] = asyncio.create_task(self._run(run, world))
+        return run.model_copy()
+
+    async def stop_run(self, branch_id: str) -> HeadlessRun:
+        run = self.runs.get(branch_id)
+        if run is None:
+            raise KeyError("No run for this branch")
+        task = self.run_tasks.get(branch_id)
+        if task is not None and not task.done():
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+        return run.model_copy()
+
+    async def _run(self, run: HeadlessRun, world: WorldState):
+        """Tick a branch like the clock does, without the live lock, broadcast or mirror.
+
+        Each day: that branch's queued actions plus the utility policy's proposals from the
+        previous day, then daily rules; saved through the same store commit."""
+        proposals: list = []
+        try:
+            for _ in range(run.ticks_requested):
+                result = Engine(world).tick(proposals, queued=self.pending(world.branch_id))
+                # Like `commit`: the world and events only; outcomes stay in this session.
+                saved = WorldUpdate(
+                    branch_id=result.branch_id,
+                    tick=result.tick,
+                    sequence=result.sequence,
+                    state=result.state,
+                    events=result.events,
+                )
+                self.store.commit(saved, world.sequence, mirror=False)
+                for outcome in result.action_results:
+                    self.actions[outcome.action_id] = outcome
+                world = result.state
+                run.ticks_done += 1
+                run.tick = world.tick
+                proposals = (
+                    await self.headless_agents.propose(world, result.events)
+                    if run.agents == "utility"
+                    else []
+                )
+                await asyncio.sleep(0)  # Yield so the live branch and API stay responsive.
+            run.status = "done"
+        except asyncio.CancelledError:
+            run.status = "cancelled"
+            raise
+        except Exception as exc:
+            run.status, run.error = "failed", f"{type(exc).__name__}: {exc}"
+            logger.exception("Headless run of %s failed", run.branch_id)
 
     async def loop(self):
         while True:

@@ -3474,6 +3474,7 @@
           "History"
         ],
         "summary": "Read new village events",
+        "description": "Events with sequence greater than `after`, oldest first, matching every filter.\nPage by passing the last returned sequence as `after`.",
         "operationId": "events_after_api_events_get",
         "parameters": [
           {
@@ -3498,6 +3499,115 @@
               "default": 100,
               "title": "Limit"
             }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Event types (repeat to allow several)",
+              "title": "Type"
+            },
+            "description": "Event types (repeat to allow several)"
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Acting citizen ID",
+              "title": "Actor"
+            },
+            "description": "Acting citizen ID"
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Citizen or entity named in the payload",
+              "title": "Target"
+            },
+            "description": "Citizen or entity named in the payload"
+          },
+          {
+            "name": "tick_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tick From"
+            }
+          },
+          {
+            "name": "tick_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tick To"
+            }
+          },
+          {
+            "name": "branch_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Defaults to the active branch",
+              "title": "Branch Id"
+            },
+            "description": "Defaults to the active branch"
           }
         ],
         "responses": {
@@ -3730,6 +3840,75 @@
         }
       }
     },
+    "/api/events/{event_id}/trace": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Follow an event's cause chain",
+        "description": "`back`: what caused this event (its causal_refs, recursively). `forward`: what it\ncaused (events citing it, recursively). Events from the same action are included.",
+        "operationId": "event_trace_api_events__event_id__trace_get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "back",
+                "forward"
+              ],
+              "type": "string",
+              "default": "back",
+              "title": "Direction"
+            }
+          },
+          {
+            "name": "depth",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20,
+              "minimum": 1,
+              "default": 5,
+              "title": "Depth"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventTrace"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/history/snapshots": {
       "get": {
         "tags": [
@@ -3847,6 +4026,7 @@
           "History"
         ],
         "summary": "Fork a saved checkpoint",
+        "description": "Optional `intervention` text is parsed and queued on the fork's next day.",
         "operationId": "fork_api_branches_post",
         "requestBody": {
           "content": {
@@ -3865,6 +4045,136 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BranchMetadata"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/compare": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Compare timelines' metrics day by day",
+        "description": "Per-branch series of bread price, wealth gap (Gini), population, total money and top\ninfluence, including each fork's shared history before it split. Aligned by tick.",
+        "operationId": "compare_api_branches_compare_get",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "maxItems": 4,
+              "description": "Branch IDs",
+              "title": "Ids"
+            },
+            "description": "Branch IDs"
+          },
+          {
+            "name": "stride",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "minimum": 1,
+              "description": "Days between points",
+              "default": 1,
+              "title": "Stride"
+            },
+            "description": "Days between points"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BranchComparison"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/divergence": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Find where two timelines first decided differently",
+        "description": "After the shared history, the first decision (player or citizen action) that\ndiffers, with each timeline's forward cause chain from it.",
+        "operationId": "divergence_api_branches_divergence_get",
+        "parameters": [
+          {
+            "name": "a",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "A"
+            }
+          },
+          {
+            "name": "b",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "B"
+            }
+          },
+          {
+            "name": "depth",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10,
+              "minimum": 1,
+              "description": "Forward cause-chain depth",
+              "default": 3,
+              "title": "Depth"
+            },
+            "description": "Forward cause-chain depth"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Divergence"
                 }
               }
             }
@@ -3949,6 +4259,233 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorldUpdate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/{branch_id}/hashes": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "World hash at the end of every day",
+        "description": "Determinism evidence: the same seed and the same actions give the same hashes, so\ntwo timelines agree up to the first day their hashes differ.",
+        "operationId": "branch_hashes_api_branches__branch_id__hashes_get",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TickHash"
+                  },
+                  "title": "Response Branch Hashes Api Branches  Branch Id  Hashes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/{branch_id}/checkpoints": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Yearly fork points",
+        "description": "The last snapshot of each simulated year (`KRONOS_TICKS_PER_YEAR` days).",
+        "operationId": "branch_checkpoints_api_branches__branch_id__checkpoints_get",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Checkpoint"
+                  },
+                  "title": "Response Branch Checkpoints Api Branches  Branch Id  Checkpoints Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/{branch_id}/run": {
+      "post": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Run a timeline in the background",
+        "description": "Advance a non-active branch `ticks` days at full speed, off screen, while the live\nbranch keeps running. Citizens decide with the free utility policy (or not at all).",
+        "operationId": "run_branch_api_branches__branch_id__run_post",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeadlessRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadlessRun"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Progress of a background run",
+        "operationId": "run_status_api_branches__branch_id__run_get",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadlessRun"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Stop a background run",
+        "operationId": "stop_branch_api_branches__branch_id__run_delete",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadlessRun"
                 }
               }
             }
@@ -5077,6 +5614,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "adjust_goals",
@@ -5114,6 +5660,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "adjust_goals",
@@ -5129,6 +5684,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "changes"
         ],
@@ -5152,6 +5708,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -5195,6 +5760,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "adopt_invention",
@@ -5215,6 +5789,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "invention_id",
           "building_id"
@@ -5755,6 +6330,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "apply_job",
@@ -5792,6 +6376,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "apply_job",
@@ -5808,6 +6401,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id"
         ],
@@ -5974,6 +6568,23 @@
         ],
         "title": "BallotRequest"
       },
+      "BranchComparison": {
+        "properties": {
+          "branches": {
+            "items": {
+              "$ref": "#/components/schemas/BranchSeries"
+            },
+            "type": "array",
+            "title": "Branches"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branches"
+        ],
+        "title": "BranchComparison"
+      },
       "BranchMetadata": {
         "properties": {
           "id": {
@@ -6010,6 +6621,30 @@
             "type": "integer",
             "title": "Fork Tick",
             "default": 0
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed",
+            "description": "The world seed this timeline runs on"
+          },
+          "intervention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention",
+            "description": "Player text queued on this branch when it was forked"
           }
         },
         "additionalProperties": false,
@@ -6019,7 +6654,9 @@
           "name",
           "parent_branch_id",
           "source_snapshot_id",
-          "fork_tick"
+          "fork_tick",
+          "seed",
+          "intervention"
         ],
         "title": "BranchMetadata"
       },
@@ -6034,6 +6671,20 @@
             "maxLength": 60,
             "minLength": 1,
             "title": "Name"
+          },
+          "intervention": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention",
+            "description": "Optional intervention text, parsed and queued for the fork's next day"
           }
         },
         "additionalProperties": false,
@@ -6043,6 +6694,33 @@
           "name"
         ],
         "title": "BranchRequest"
+      },
+      "BranchSeries": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/MetricPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "name",
+          "points"
+        ],
+        "title": "BranchSeries"
       },
       "Building": {
         "properties": {
@@ -6474,6 +7152,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "buy",
@@ -6533,6 +7220,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "buy",
@@ -6568,6 +7264,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id",
           "resource",
@@ -6593,6 +7290,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -6640,6 +7346,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "vote",
@@ -6664,11 +7379,36 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "vote_id",
           "choice"
         ],
         "title": "CastVote"
+      },
+      "Checkpoint": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SnapshotMetadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "year",
+          "tick",
+          "snapshot"
+        ],
+        "title": "Checkpoint",
+        "description": "The last snapshot of a simulated year, for forking from a past year."
       },
       "Citizen": {
         "properties": {
@@ -7233,6 +7973,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "close_business",
@@ -7270,6 +8019,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "close_business",
@@ -7286,6 +8044,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id"
         ],
@@ -7308,6 +8067,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -7353,6 +8121,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "communicate",
@@ -7375,6 +8152,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "recipient_id",
           "message"
@@ -7398,6 +8176,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -7446,6 +8233,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "construct_building",
@@ -7471,6 +8267,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "plot_id",
           "kind"
@@ -7494,6 +8291,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -7527,6 +8333,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "consume",
@@ -7539,6 +8354,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type"
         ],
         "title": "Consume"
@@ -7769,6 +8585,898 @@
         "title": "DeterminedToolCall",
         "description": "The toolkit endpoint determined by the LLM to implement the user query."
       },
+      "Divergence": {
+        "properties": {
+          "a": {
+            "type": "string",
+            "title": "A"
+          },
+          "b": {
+            "type": "string",
+            "title": "B"
+          },
+          "common_sequence": {
+            "type": "integer",
+            "title": "Common Sequence",
+            "description": "Events shared by both histories (ancestry)"
+          },
+          "common_tick": {
+            "type": "integer",
+            "title": "Common Tick"
+          },
+          "tick": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tick",
+            "description": "Day of the first differing decision; null if none"
+          },
+          "decision_a": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PriceChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TransactionCompleted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceProduced"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceConsumed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CitizenMoved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CitizenSpawned"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CitizenRemoved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlotOpened"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuildingConstructed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuildingUpgraded"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuildingRemoved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AgentSpoke"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RelationshipChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ActionRejected"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GoalsChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EmploymentChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WageChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InterventionApplied"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceGathered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceRegenerated"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JobApplied"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JobApplicationResolved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanOffered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanAccepted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanDeclined"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanRepaid"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanExpired"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanDefaulted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeOffered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeAccepted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeDeclined"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeExpired"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResearchContributed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InventionUnlocked"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LicenseOffered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LicenseResolved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InventionAdopted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VoteProposed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VoteCast"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VoteClosed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PolicyChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TaxCollected"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LotLeased"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RentChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RentMissed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RentCovered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TenantEvicted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CitizenInteracted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TickCompleted"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "action_rejected": "#/components/schemas/ActionRejected",
+                    "agent_spoke": "#/components/schemas/AgentSpoke",
+                    "building_constructed": "#/components/schemas/BuildingConstructed",
+                    "building_removed": "#/components/schemas/BuildingRemoved",
+                    "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                    "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                    "citizen_moved": "#/components/schemas/CitizenMoved",
+                    "citizen_removed": "#/components/schemas/CitizenRemoved",
+                    "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                    "employment_changed": "#/components/schemas/EmploymentChanged",
+                    "goals_changed": "#/components/schemas/GoalsChanged",
+                    "intervention_applied": "#/components/schemas/InterventionApplied",
+                    "invention_adopted": "#/components/schemas/InventionAdopted",
+                    "invention_unlocked": "#/components/schemas/InventionUnlocked",
+                    "job_application_resolved": "#/components/schemas/JobApplicationResolved",
+                    "job_applied": "#/components/schemas/JobApplied",
+                    "license_offered": "#/components/schemas/LicenseOffered",
+                    "license_resolved": "#/components/schemas/LicenseResolved",
+                    "loan_accepted": "#/components/schemas/LoanAccepted",
+                    "loan_declined": "#/components/schemas/LoanDeclined",
+                    "loan_defaulted": "#/components/schemas/LoanDefaulted",
+                    "loan_expired": "#/components/schemas/LoanExpired",
+                    "loan_offered": "#/components/schemas/LoanOffered",
+                    "loan_repaid": "#/components/schemas/LoanRepaid",
+                    "lot_leased": "#/components/schemas/LotLeased",
+                    "plot_opened": "#/components/schemas/PlotOpened",
+                    "policy_changed": "#/components/schemas/PolicyChanged",
+                    "price_changed": "#/components/schemas/PriceChanged",
+                    "relationship_changed": "#/components/schemas/RelationshipChanged",
+                    "rent_changed": "#/components/schemas/RentChanged",
+                    "rent_covered": "#/components/schemas/RentCovered",
+                    "rent_missed": "#/components/schemas/RentMissed",
+                    "research_contributed": "#/components/schemas/ResearchContributed",
+                    "resource_consumed": "#/components/schemas/ResourceConsumed",
+                    "resource_gathered": "#/components/schemas/ResourceGathered",
+                    "resource_produced": "#/components/schemas/ResourceProduced",
+                    "resource_regenerated": "#/components/schemas/ResourceRegenerated",
+                    "tax_collected": "#/components/schemas/TaxCollected",
+                    "tenant_evicted": "#/components/schemas/TenantEvicted",
+                    "tick_completed": "#/components/schemas/TickCompleted",
+                    "trade_accepted": "#/components/schemas/TradeAccepted",
+                    "trade_declined": "#/components/schemas/TradeDeclined",
+                    "trade_expired": "#/components/schemas/TradeExpired",
+                    "trade_offered": "#/components/schemas/TradeOffered",
+                    "transaction_completed": "#/components/schemas/TransactionCompleted",
+                    "vote_cast": "#/components/schemas/VoteCast",
+                    "vote_closed": "#/components/schemas/VoteClosed",
+                    "vote_proposed": "#/components/schemas/VoteProposed",
+                    "wage_changed": "#/components/schemas/WageChanged"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision A"
+          },
+          "decision_b": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PriceChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TransactionCompleted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceProduced"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceConsumed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CitizenMoved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CitizenSpawned"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CitizenRemoved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlotOpened"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuildingConstructed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuildingUpgraded"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuildingRemoved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AgentSpoke"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RelationshipChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ActionRejected"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GoalsChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EmploymentChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WageChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InterventionApplied"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceGathered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceRegenerated"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JobApplied"
+                  },
+                  {
+                    "$ref": "#/components/schemas/JobApplicationResolved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanOffered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanAccepted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanDeclined"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanRepaid"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanExpired"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LoanDefaulted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeOffered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeAccepted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeDeclined"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TradeExpired"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResearchContributed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InventionUnlocked"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LicenseOffered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LicenseResolved"
+                  },
+                  {
+                    "$ref": "#/components/schemas/InventionAdopted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VoteProposed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VoteCast"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VoteClosed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PolicyChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TaxCollected"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LotLeased"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RentChanged"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RentMissed"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RentCovered"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TenantEvicted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CitizenInteracted"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TickCompleted"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "action_rejected": "#/components/schemas/ActionRejected",
+                    "agent_spoke": "#/components/schemas/AgentSpoke",
+                    "building_constructed": "#/components/schemas/BuildingConstructed",
+                    "building_removed": "#/components/schemas/BuildingRemoved",
+                    "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                    "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                    "citizen_moved": "#/components/schemas/CitizenMoved",
+                    "citizen_removed": "#/components/schemas/CitizenRemoved",
+                    "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                    "employment_changed": "#/components/schemas/EmploymentChanged",
+                    "goals_changed": "#/components/schemas/GoalsChanged",
+                    "intervention_applied": "#/components/schemas/InterventionApplied",
+                    "invention_adopted": "#/components/schemas/InventionAdopted",
+                    "invention_unlocked": "#/components/schemas/InventionUnlocked",
+                    "job_application_resolved": "#/components/schemas/JobApplicationResolved",
+                    "job_applied": "#/components/schemas/JobApplied",
+                    "license_offered": "#/components/schemas/LicenseOffered",
+                    "license_resolved": "#/components/schemas/LicenseResolved",
+                    "loan_accepted": "#/components/schemas/LoanAccepted",
+                    "loan_declined": "#/components/schemas/LoanDeclined",
+                    "loan_defaulted": "#/components/schemas/LoanDefaulted",
+                    "loan_expired": "#/components/schemas/LoanExpired",
+                    "loan_offered": "#/components/schemas/LoanOffered",
+                    "loan_repaid": "#/components/schemas/LoanRepaid",
+                    "lot_leased": "#/components/schemas/LotLeased",
+                    "plot_opened": "#/components/schemas/PlotOpened",
+                    "policy_changed": "#/components/schemas/PolicyChanged",
+                    "price_changed": "#/components/schemas/PriceChanged",
+                    "relationship_changed": "#/components/schemas/RelationshipChanged",
+                    "rent_changed": "#/components/schemas/RentChanged",
+                    "rent_covered": "#/components/schemas/RentCovered",
+                    "rent_missed": "#/components/schemas/RentMissed",
+                    "research_contributed": "#/components/schemas/ResearchContributed",
+                    "resource_consumed": "#/components/schemas/ResourceConsumed",
+                    "resource_gathered": "#/components/schemas/ResourceGathered",
+                    "resource_produced": "#/components/schemas/ResourceProduced",
+                    "resource_regenerated": "#/components/schemas/ResourceRegenerated",
+                    "tax_collected": "#/components/schemas/TaxCollected",
+                    "tenant_evicted": "#/components/schemas/TenantEvicted",
+                    "tick_completed": "#/components/schemas/TickCompleted",
+                    "trade_accepted": "#/components/schemas/TradeAccepted",
+                    "trade_declined": "#/components/schemas/TradeDeclined",
+                    "trade_expired": "#/components/schemas/TradeExpired",
+                    "trade_offered": "#/components/schemas/TradeOffered",
+                    "transaction_completed": "#/components/schemas/TransactionCompleted",
+                    "vote_cast": "#/components/schemas/VoteCast",
+                    "vote_closed": "#/components/schemas/VoteClosed",
+                    "vote_proposed": "#/components/schemas/VoteProposed",
+                    "wage_changed": "#/components/schemas/WageChanged"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision B"
+          },
+          "chain_a": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PriceChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TransactionCompleted"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceProduced"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceConsumed"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenMoved"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenSpawned"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/PlotOpened"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingConstructed"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingUpgraded"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/AgentSpoke"
+                },
+                {
+                  "$ref": "#/components/schemas/RelationshipChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/ActionRejected"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalsChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/EmploymentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/WageChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/InterventionApplied"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceGathered"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceRegenerated"
+                },
+                {
+                  "$ref": "#/components/schemas/JobApplied"
+                },
+                {
+                  "$ref": "#/components/schemas/JobApplicationResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanAccepted"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanDeclined"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanRepaid"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanExpired"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanDefaulted"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeAccepted"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeDeclined"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeExpired"
+                },
+                {
+                  "$ref": "#/components/schemas/ResearchContributed"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionUnlocked"
+                },
+                {
+                  "$ref": "#/components/schemas/LicenseOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/LicenseResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionAdopted"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteProposed"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteCast"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteClosed"
+                },
+                {
+                  "$ref": "#/components/schemas/PolicyChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TaxCollected"
+                },
+                {
+                  "$ref": "#/components/schemas/LotLeased"
+                },
+                {
+                  "$ref": "#/components/schemas/RentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/RentMissed"
+                },
+                {
+                  "$ref": "#/components/schemas/RentCovered"
+                },
+                {
+                  "$ref": "#/components/schemas/TenantEvicted"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenInteracted"
+                },
+                {
+                  "$ref": "#/components/schemas/TickCompleted"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "action_rejected": "#/components/schemas/ActionRejected",
+                  "agent_spoke": "#/components/schemas/AgentSpoke",
+                  "building_constructed": "#/components/schemas/BuildingConstructed",
+                  "building_removed": "#/components/schemas/BuildingRemoved",
+                  "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                  "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                  "citizen_moved": "#/components/schemas/CitizenMoved",
+                  "citizen_removed": "#/components/schemas/CitizenRemoved",
+                  "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "employment_changed": "#/components/schemas/EmploymentChanged",
+                  "goals_changed": "#/components/schemas/GoalsChanged",
+                  "intervention_applied": "#/components/schemas/InterventionApplied",
+                  "invention_adopted": "#/components/schemas/InventionAdopted",
+                  "invention_unlocked": "#/components/schemas/InventionUnlocked",
+                  "job_application_resolved": "#/components/schemas/JobApplicationResolved",
+                  "job_applied": "#/components/schemas/JobApplied",
+                  "license_offered": "#/components/schemas/LicenseOffered",
+                  "license_resolved": "#/components/schemas/LicenseResolved",
+                  "loan_accepted": "#/components/schemas/LoanAccepted",
+                  "loan_declined": "#/components/schemas/LoanDeclined",
+                  "loan_defaulted": "#/components/schemas/LoanDefaulted",
+                  "loan_expired": "#/components/schemas/LoanExpired",
+                  "loan_offered": "#/components/schemas/LoanOffered",
+                  "loan_repaid": "#/components/schemas/LoanRepaid",
+                  "lot_leased": "#/components/schemas/LotLeased",
+                  "plot_opened": "#/components/schemas/PlotOpened",
+                  "policy_changed": "#/components/schemas/PolicyChanged",
+                  "price_changed": "#/components/schemas/PriceChanged",
+                  "relationship_changed": "#/components/schemas/RelationshipChanged",
+                  "rent_changed": "#/components/schemas/RentChanged",
+                  "rent_covered": "#/components/schemas/RentCovered",
+                  "rent_missed": "#/components/schemas/RentMissed",
+                  "research_contributed": "#/components/schemas/ResearchContributed",
+                  "resource_consumed": "#/components/schemas/ResourceConsumed",
+                  "resource_gathered": "#/components/schemas/ResourceGathered",
+                  "resource_produced": "#/components/schemas/ResourceProduced",
+                  "resource_regenerated": "#/components/schemas/ResourceRegenerated",
+                  "tax_collected": "#/components/schemas/TaxCollected",
+                  "tenant_evicted": "#/components/schemas/TenantEvicted",
+                  "tick_completed": "#/components/schemas/TickCompleted",
+                  "trade_accepted": "#/components/schemas/TradeAccepted",
+                  "trade_declined": "#/components/schemas/TradeDeclined",
+                  "trade_expired": "#/components/schemas/TradeExpired",
+                  "trade_offered": "#/components/schemas/TradeOffered",
+                  "transaction_completed": "#/components/schemas/TransactionCompleted",
+                  "vote_cast": "#/components/schemas/VoteCast",
+                  "vote_closed": "#/components/schemas/VoteClosed",
+                  "vote_proposed": "#/components/schemas/VoteProposed",
+                  "wage_changed": "#/components/schemas/WageChanged"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Chain A"
+          },
+          "chain_b": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PriceChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TransactionCompleted"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceProduced"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceConsumed"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenMoved"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenSpawned"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/PlotOpened"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingConstructed"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingUpgraded"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/AgentSpoke"
+                },
+                {
+                  "$ref": "#/components/schemas/RelationshipChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/ActionRejected"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalsChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/EmploymentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/WageChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/InterventionApplied"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceGathered"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceRegenerated"
+                },
+                {
+                  "$ref": "#/components/schemas/JobApplied"
+                },
+                {
+                  "$ref": "#/components/schemas/JobApplicationResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanAccepted"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanDeclined"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanRepaid"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanExpired"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanDefaulted"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeAccepted"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeDeclined"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeExpired"
+                },
+                {
+                  "$ref": "#/components/schemas/ResearchContributed"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionUnlocked"
+                },
+                {
+                  "$ref": "#/components/schemas/LicenseOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/LicenseResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionAdopted"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteProposed"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteCast"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteClosed"
+                },
+                {
+                  "$ref": "#/components/schemas/PolicyChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TaxCollected"
+                },
+                {
+                  "$ref": "#/components/schemas/LotLeased"
+                },
+                {
+                  "$ref": "#/components/schemas/RentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/RentMissed"
+                },
+                {
+                  "$ref": "#/components/schemas/RentCovered"
+                },
+                {
+                  "$ref": "#/components/schemas/TenantEvicted"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenInteracted"
+                },
+                {
+                  "$ref": "#/components/schemas/TickCompleted"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "action_rejected": "#/components/schemas/ActionRejected",
+                  "agent_spoke": "#/components/schemas/AgentSpoke",
+                  "building_constructed": "#/components/schemas/BuildingConstructed",
+                  "building_removed": "#/components/schemas/BuildingRemoved",
+                  "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                  "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                  "citizen_moved": "#/components/schemas/CitizenMoved",
+                  "citizen_removed": "#/components/schemas/CitizenRemoved",
+                  "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "employment_changed": "#/components/schemas/EmploymentChanged",
+                  "goals_changed": "#/components/schemas/GoalsChanged",
+                  "intervention_applied": "#/components/schemas/InterventionApplied",
+                  "invention_adopted": "#/components/schemas/InventionAdopted",
+                  "invention_unlocked": "#/components/schemas/InventionUnlocked",
+                  "job_application_resolved": "#/components/schemas/JobApplicationResolved",
+                  "job_applied": "#/components/schemas/JobApplied",
+                  "license_offered": "#/components/schemas/LicenseOffered",
+                  "license_resolved": "#/components/schemas/LicenseResolved",
+                  "loan_accepted": "#/components/schemas/LoanAccepted",
+                  "loan_declined": "#/components/schemas/LoanDeclined",
+                  "loan_defaulted": "#/components/schemas/LoanDefaulted",
+                  "loan_expired": "#/components/schemas/LoanExpired",
+                  "loan_offered": "#/components/schemas/LoanOffered",
+                  "loan_repaid": "#/components/schemas/LoanRepaid",
+                  "lot_leased": "#/components/schemas/LotLeased",
+                  "plot_opened": "#/components/schemas/PlotOpened",
+                  "policy_changed": "#/components/schemas/PolicyChanged",
+                  "price_changed": "#/components/schemas/PriceChanged",
+                  "relationship_changed": "#/components/schemas/RelationshipChanged",
+                  "rent_changed": "#/components/schemas/RentChanged",
+                  "rent_covered": "#/components/schemas/RentCovered",
+                  "rent_missed": "#/components/schemas/RentMissed",
+                  "research_contributed": "#/components/schemas/ResearchContributed",
+                  "resource_consumed": "#/components/schemas/ResourceConsumed",
+                  "resource_gathered": "#/components/schemas/ResourceGathered",
+                  "resource_produced": "#/components/schemas/ResourceProduced",
+                  "resource_regenerated": "#/components/schemas/ResourceRegenerated",
+                  "tax_collected": "#/components/schemas/TaxCollected",
+                  "tenant_evicted": "#/components/schemas/TenantEvicted",
+                  "tick_completed": "#/components/schemas/TickCompleted",
+                  "trade_accepted": "#/components/schemas/TradeAccepted",
+                  "trade_declined": "#/components/schemas/TradeDeclined",
+                  "trade_expired": "#/components/schemas/TradeExpired",
+                  "trade_offered": "#/components/schemas/TradeOffered",
+                  "transaction_completed": "#/components/schemas/TransactionCompleted",
+                  "vote_cast": "#/components/schemas/VoteCast",
+                  "vote_closed": "#/components/schemas/VoteClosed",
+                  "vote_proposed": "#/components/schemas/VoteProposed",
+                  "wage_changed": "#/components/schemas/WageChanged"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Chain B"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "a",
+          "b",
+          "common_sequence",
+          "common_tick",
+          "tick",
+          "decision_a",
+          "decision_b",
+          "chain_a",
+          "chain_b"
+        ],
+        "title": "Divergence",
+        "description": "Where two timelines first decided differently, and what followed."
+      },
       "EmployeeRequest": {
         "properties": {
           "branch_id": {
@@ -7971,6 +9679,254 @@
         ],
         "title": "EntityPayload"
       },
+      "EventTrace": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "back",
+              "forward"
+            ],
+            "title": "Direction"
+          },
+          "events": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PriceChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TransactionCompleted"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceProduced"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceConsumed"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenMoved"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenSpawned"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/PlotOpened"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingConstructed"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingUpgraded"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/AgentSpoke"
+                },
+                {
+                  "$ref": "#/components/schemas/RelationshipChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/ActionRejected"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalsChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/EmploymentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/WageChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/InterventionApplied"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceGathered"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceRegenerated"
+                },
+                {
+                  "$ref": "#/components/schemas/JobApplied"
+                },
+                {
+                  "$ref": "#/components/schemas/JobApplicationResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanAccepted"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanDeclined"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanRepaid"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanExpired"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanDefaulted"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeAccepted"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeDeclined"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeExpired"
+                },
+                {
+                  "$ref": "#/components/schemas/ResearchContributed"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionUnlocked"
+                },
+                {
+                  "$ref": "#/components/schemas/LicenseOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/LicenseResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionAdopted"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteProposed"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteCast"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteClosed"
+                },
+                {
+                  "$ref": "#/components/schemas/PolicyChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TaxCollected"
+                },
+                {
+                  "$ref": "#/components/schemas/LotLeased"
+                },
+                {
+                  "$ref": "#/components/schemas/RentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/RentMissed"
+                },
+                {
+                  "$ref": "#/components/schemas/RentCovered"
+                },
+                {
+                  "$ref": "#/components/schemas/TenantEvicted"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenInteracted"
+                },
+                {
+                  "$ref": "#/components/schemas/TickCompleted"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "action_rejected": "#/components/schemas/ActionRejected",
+                  "agent_spoke": "#/components/schemas/AgentSpoke",
+                  "building_constructed": "#/components/schemas/BuildingConstructed",
+                  "building_removed": "#/components/schemas/BuildingRemoved",
+                  "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                  "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                  "citizen_moved": "#/components/schemas/CitizenMoved",
+                  "citizen_removed": "#/components/schemas/CitizenRemoved",
+                  "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "employment_changed": "#/components/schemas/EmploymentChanged",
+                  "goals_changed": "#/components/schemas/GoalsChanged",
+                  "intervention_applied": "#/components/schemas/InterventionApplied",
+                  "invention_adopted": "#/components/schemas/InventionAdopted",
+                  "invention_unlocked": "#/components/schemas/InventionUnlocked",
+                  "job_application_resolved": "#/components/schemas/JobApplicationResolved",
+                  "job_applied": "#/components/schemas/JobApplied",
+                  "license_offered": "#/components/schemas/LicenseOffered",
+                  "license_resolved": "#/components/schemas/LicenseResolved",
+                  "loan_accepted": "#/components/schemas/LoanAccepted",
+                  "loan_declined": "#/components/schemas/LoanDeclined",
+                  "loan_defaulted": "#/components/schemas/LoanDefaulted",
+                  "loan_expired": "#/components/schemas/LoanExpired",
+                  "loan_offered": "#/components/schemas/LoanOffered",
+                  "loan_repaid": "#/components/schemas/LoanRepaid",
+                  "lot_leased": "#/components/schemas/LotLeased",
+                  "plot_opened": "#/components/schemas/PlotOpened",
+                  "policy_changed": "#/components/schemas/PolicyChanged",
+                  "price_changed": "#/components/schemas/PriceChanged",
+                  "relationship_changed": "#/components/schemas/RelationshipChanged",
+                  "rent_changed": "#/components/schemas/RentChanged",
+                  "rent_covered": "#/components/schemas/RentCovered",
+                  "rent_missed": "#/components/schemas/RentMissed",
+                  "research_contributed": "#/components/schemas/ResearchContributed",
+                  "resource_consumed": "#/components/schemas/ResourceConsumed",
+                  "resource_gathered": "#/components/schemas/ResourceGathered",
+                  "resource_produced": "#/components/schemas/ResourceProduced",
+                  "resource_regenerated": "#/components/schemas/ResourceRegenerated",
+                  "tax_collected": "#/components/schemas/TaxCollected",
+                  "tenant_evicted": "#/components/schemas/TenantEvicted",
+                  "tick_completed": "#/components/schemas/TickCompleted",
+                  "trade_accepted": "#/components/schemas/TradeAccepted",
+                  "trade_declined": "#/components/schemas/TradeDeclined",
+                  "trade_expired": "#/components/schemas/TradeExpired",
+                  "trade_offered": "#/components/schemas/TradeOffered",
+                  "transaction_completed": "#/components/schemas/TransactionCompleted",
+                  "vote_cast": "#/components/schemas/VoteCast",
+                  "vote_closed": "#/components/schemas/VoteClosed",
+                  "vote_proposed": "#/components/schemas/VoteProposed",
+                  "wage_changed": "#/components/schemas/WageChanged"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Events",
+            "description": "The start event first, then by depth"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/TraceEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "event_id",
+          "direction",
+          "events",
+          "edges",
+          "truncated"
+        ],
+        "title": "EventTrace"
+      },
       "Evict-Input": {
         "properties": {
           "actor_id": {
@@ -7988,6 +9944,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -8026,6 +9991,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "evict",
@@ -8042,6 +10016,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "plot_id"
         ],
@@ -8064,6 +10039,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -8107,6 +10091,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "fire",
@@ -8127,6 +10120,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id",
           "citizen_id"
@@ -8150,6 +10144,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -8205,6 +10208,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "found_business",
@@ -8235,6 +10247,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "plot_id",
           "kind",
@@ -8408,6 +10421,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "gather_resource",
@@ -8461,6 +10483,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "gather_resource",
@@ -8491,6 +10522,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id",
           "resource",
@@ -8847,6 +10879,96 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HeadlessRun": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "agents": {
+            "type": "string",
+            "enum": [
+              "utility",
+              "none"
+            ],
+            "title": "Agents"
+          },
+          "ticks_requested": {
+            "type": "integer",
+            "title": "Ticks Requested"
+          },
+          "ticks_done": {
+            "type": "integer",
+            "title": "Ticks Done",
+            "default": 0
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick",
+            "description": "The branch's current day"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "status",
+          "agents",
+          "ticks_requested",
+          "ticks_done",
+          "tick",
+          "error"
+        ],
+        "title": "HeadlessRun"
+      },
+      "HeadlessRunRequest": {
+        "properties": {
+          "ticks": {
+            "type": "integer",
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Ticks",
+            "description": "Days to advance in the background"
+          },
+          "agents": {
+            "type": "string",
+            "enum": [
+              "utility",
+              "none"
+            ],
+            "title": "Agents",
+            "description": "`utility`: citizens decide with the free utility policy; `none`: no decisions, only queued actions and daily rules",
+            "default": "utility"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ticks"
+        ],
+        "title": "HeadlessRunRequest"
+      },
       "Hire-Input": {
         "properties": {
           "actor_id": {
@@ -8864,6 +10986,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -8907,6 +11038,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "hire",
@@ -8927,6 +11067,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id",
           "citizen_id"
@@ -9030,6 +11171,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "interact",
@@ -9094,6 +11244,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "interact",
@@ -9135,6 +11294,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "recipient_id",
           "kind",
@@ -10188,6 +12348,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "lease_lot",
@@ -10225,6 +12394,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "lease_lot",
@@ -10241,6 +12419,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "plot_id"
         ],
@@ -10263,6 +12442,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -10321,6 +12509,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "lend",
@@ -10353,6 +12550,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "recipient_id",
           "principal",
@@ -10379,6 +12577,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -10428,6 +12635,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "license_invention",
@@ -10453,6 +12669,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "invention_id",
           "recipient_id",
@@ -11981,6 +14198,56 @@
         ],
         "title": "MarketPrices"
       },
+      "MetricPoint": {
+        "properties": {
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "bread_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bread Price",
+            "description": "Average bread price across bakeries, cents"
+          },
+          "gini_bps": {
+            "type": "integer",
+            "title": "Gini Bps",
+            "description": "Wealth gap: Gini of citizen money, basis points"
+          },
+          "population": {
+            "type": "integer",
+            "title": "Population"
+          },
+          "total_money": {
+            "type": "integer",
+            "title": "Total Money",
+            "description": "Citizen money plus business cash, cents"
+          },
+          "top_influence_bps": {
+            "type": "integer",
+            "title": "Top Influence Bps",
+            "description": "The most influential citizen's influence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tick",
+          "bread_price",
+          "gini_bps",
+          "population",
+          "total_money",
+          "top_influence_bps"
+        ],
+        "title": "MetricPoint"
+      },
       "MoveTo-Input": {
         "properties": {
           "actor_id": {
@@ -11998,6 +14265,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -12036,6 +14312,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "move_to",
@@ -12052,6 +14337,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "plot_id"
         ],
@@ -12095,6 +14381,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "pay_rent",
@@ -12132,6 +14427,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "pay_rent",
@@ -12148,6 +14452,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "plot_id"
         ],
@@ -12836,6 +15141,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "produce",
@@ -12873,6 +15187,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "produce",
@@ -12889,6 +15212,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id"
         ],
@@ -12911,6 +15235,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -12962,6 +15295,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "propose_vote",
@@ -12989,6 +15331,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "kind",
           "value"
@@ -13073,6 +15416,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "quit_job",
@@ -13105,6 +15457,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "quit_job",
@@ -13117,6 +15478,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type"
         ],
         "title": "QuitJob"
@@ -13195,6 +15557,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "reject_application",
@@ -13238,6 +15609,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "reject_application",
@@ -13258,6 +15638,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id",
           "citizen_id"
@@ -13938,6 +16319,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "repay",
@@ -13982,6 +16372,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "repay",
@@ -14003,6 +16402,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "loan_id",
           "amount"
@@ -14027,6 +16427,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -14100,6 +16509,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "research",
@@ -14149,6 +16567,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "invention_id",
           "mode",
@@ -14887,6 +17306,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "respond_license",
@@ -14930,6 +17358,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "respond_license",
@@ -14950,6 +17387,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "offer_id",
           "accept"
@@ -14974,6 +17412,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -15018,6 +17465,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "respond_loan",
@@ -15038,6 +17494,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "loan_id",
           "accept"
@@ -15062,6 +17519,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -15105,6 +17571,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "respond_trade",
@@ -15125,6 +17600,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "offer_id",
           "accept"
@@ -15253,6 +17729,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "sell",
@@ -15306,6 +17791,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "sell",
@@ -15336,6 +17830,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id",
           "resource",
@@ -15360,6 +17855,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -15414,6 +17918,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "set_price",
@@ -15444,6 +17957,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id",
           "resource",
@@ -15468,6 +17982,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -15514,6 +18037,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "set_rent",
@@ -15536,6 +18068,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "plot_id",
           "rent"
@@ -15560,6 +18093,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -15605,6 +18147,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "set_wage",
@@ -15627,6 +18178,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id",
           "wage"
@@ -16342,18 +18894,68 @@
         ],
         "title": "TickCompleted"
       },
+      "TickHash": {
+        "properties": {
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id",
+            "description": "The branch (or ancestor) that recorded this day"
+          },
+          "state_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tick",
+          "sequence",
+          "branch_id",
+          "state_hash"
+        ],
+        "title": "TickHash"
+      },
       "TickPayload": {
         "properties": {
           "actions": {
             "type": "integer",
             "minimum": 0.0,
             "title": "Actions"
+          },
+          "state_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Hash",
+            "description": "SHA-256 of the world after the day (branch ID and sequence excluded); the same seed and the same actions always give the same hash"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "actions"
+          "actions",
+          "state_hash"
         ],
         "title": "TickPayload"
       },
@@ -16709,6 +19311,35 @@
         "title": "ToolParameters",
         "description": "Parameters for any determined toolkit endpoint."
       },
+      "TraceEdge": {
+        "properties": {
+          "from_id": {
+            "type": "string",
+            "title": "From Id"
+          },
+          "to_id": {
+            "type": "string",
+            "title": "To Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "cites",
+              "same_action"
+            ],
+            "title": "Kind"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "from_id",
+          "to_id",
+          "kind"
+        ],
+        "title": "TraceEdge",
+        "description": "`cites`: from_id lists to_id in its causal_refs. `same_action`: both came from one\naction."
+      },
       "Trade-Input": {
         "properties": {
           "actor_id": {
@@ -16726,6 +19357,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -16773,6 +19413,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "trade",
@@ -16795,6 +19444,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "recipient_id",
           "give",
@@ -17504,6 +20154,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "transfer_money",
@@ -17547,6 +20206,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "transfer_money",
@@ -17568,6 +20236,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "recipient_id",
           "amount"
@@ -17591,6 +20260,15 @@
               }
             ],
             "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
           },
           "type": {
             "type": "string",
@@ -17629,6 +20307,15 @@
             ],
             "title": "Rationale"
           },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 5,
+            "title": "Causal Refs",
+            "description": "Event IDs (active branch) this action reacts to; copied onto its events"
+          },
           "type": {
             "type": "string",
             "const": "upgrade_building",
@@ -17645,6 +20332,7 @@
         "required": [
           "actor_id",
           "rationale",
+          "causal_refs",
           "type",
           "building_id"
         ],

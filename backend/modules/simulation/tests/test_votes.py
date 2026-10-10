@@ -220,7 +220,7 @@ def test_policies_also_bind_businesses_founded_later():
 
 def test_vote_ids_are_stable_and_ticks_reproducible():
     state, vid = open_vote(initial_world())
-    assert vid == "vote-main-1"
+    assert vid == "vote-000001"
     assert Engine(state).tick() == Engine(state).tick()
 
 

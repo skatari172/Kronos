@@ -642,7 +642,9 @@ class HistoryStore:
             self._snapshot(db, state)
             self._sync_relational(db, state)
 
-    def commit(self, result: WorldUpdate, expected_sequence: int):
+    def commit(self, result: WorldUpdate, expected_sequence: int, mirror: bool = True):
+        """Save a world and its events atomically. `mirror=False` skips the relational
+        tables, which hold one live world: background (headless) branches must not touch it."""
         state = result.state
         with self.engine.begin() as db:
             current = db.execute(
@@ -691,7 +693,8 @@ class HistoryStore:
                     raise ValueError("Action was missing or already resolved")
             # Every commit is a checkpoint: simple, exact historical reconstruction, no LLM replay.
             self._snapshot(db, state)
-            self._sync_relational(db, state)
+            if mirror:
+                self._sync_relational(db, state)
 
     def enqueue(self, state: WorldState, action, source="agent", text=None) -> ActionResult:
         with self.engine.begin() as db:
@@ -855,6 +858,119 @@ class HistoryStore:
                     if len(found) == limit:
                         break
         return list(reversed(found))
+
+    # Branching, tracing and comparison
+    def branch(self, branch_id: str) -> BranchMetadata:
+        with self.engine.connect() as db:
+            raw = db.execute(
+                select(branches.c.metadata).where(branches.c.id == branch_id)
+            ).scalar_one_or_none()
+        if raw is None:
+            raise KeyError(f"Unknown branch: {branch_id}")
+        return BranchMetadata.model_validate_json(raw)
+
+    def snapshot(self, snapshot_id: str) -> SnapshotMetadata:
+        with self.engine.connect() as db:
+            raw = db.execute(
+                select(snapshots.c.metadata).where(snapshots.c.id == snapshot_id)
+            ).scalar_one_or_none()
+        if raw is None:
+            raise KeyError("Unknown snapshot")
+        return SnapshotMetadata.model_validate_json(raw)
+
+    def event(self, event_id: str) -> SimulationEvent:
+        with self.engine.connect() as db:
+            raw = db.execute(
+                select(events.c.data).where(events.c.id == event_id)
+            ).scalar_one_or_none()
+        if raw is None:
+            raise KeyError("Unknown event")
+        return TypeAdapter(SimulationEvent).validate_json(raw)
+
+    def events_citing(self, branch_id: str, event_id: str) -> list[SimulationEvent]:
+        """Events on a branch whose causal_refs include event_id, oldest first."""
+        query = select(events.c.data).where(
+            events.c.branch_id == branch_id,
+            # Coarse text prefilter; the exact causal_refs check below decides.
+            events.c.data.contains(json.dumps(event_id), autoescape=True),
+        )
+        adapter = TypeAdapter(SimulationEvent)
+        with self.engine.connect() as db:
+            rows = db.execute(query.order_by(events.c.sequence)).scalars()
+            parsed = [adapter.validate_json(raw) for raw in rows]
+        return [e for e in parsed if event_id in e.causal_refs]
+
+    def events_of_action(self, branch_id: str, action_id: str) -> list[SimulationEvent]:
+        query = select(events.c.data).where(
+            events.c.branch_id == branch_id,
+            events.c.data.contains(json.dumps(action_id), autoescape=True),
+        )
+        adapter = TypeAdapter(SimulationEvent)
+        with self.engine.connect() as db:
+            rows = db.execute(query.order_by(events.c.sequence)).scalars()
+            parsed = [adapter.validate_json(raw) for raw in rows]
+        return [e for e in parsed if e.action_id == action_id]
+
+    def events_through(self, branch_id: str, through: int | None = None) -> list[SimulationEvent]:
+        """Every event on one branch up to a sequence (inclusive), oldest first. Unbounded."""
+        query = select(events.c.data).where(events.c.branch_id == branch_id)
+        if through is not None:
+            query = query.where(events.c.sequence <= through)
+        adapter = TypeAdapter(SimulationEvent)
+        with self.engine.connect() as db:
+            rows = db.execute(query.order_by(events.c.sequence)).scalars()
+            return [adapter.validate_json(raw) for raw in rows]
+
+    def filter_events(
+        self,
+        branch_id: str,
+        after: int = 0,
+        limit: int = 100,
+        types: list[str] | None = None,
+        actor: str | None = None,
+        target: str | None = None,
+        tick_from: int | None = None,
+        tick_to: int | None = None,
+    ) -> list[SimulationEvent]:
+        """Events after a sequence matching every given filter, oldest first.
+
+        `target` matches a citizen or entity named in the payload (sender, recipient,
+        subject); the indexed columns (type, actor, tick) are filtered in SQL.
+        """
+        query = select(events.c.data).where(
+            events.c.branch_id == branch_id, events.c.sequence > after
+        )
+        if types:
+            query = query.where(events.c.type.in_(types))
+        if actor is not None:
+            query = query.where(events.c.actor_id == actor)
+        if tick_from is not None:
+            query = query.where(events.c.tick >= tick_from)
+        if tick_to is not None:
+            query = query.where(events.c.tick <= tick_to)
+        if target is not None:
+            query = query.where(events.c.payload.contains(json.dumps(target), autoescape=True))
+        adapter = TypeAdapter(SimulationEvent)
+        found: list[SimulationEvent] = []
+        with self.engine.connect() as db:
+            for raw in db.execute(query.order_by(events.c.sequence)).scalars():
+                event = adapter.validate_json(raw)
+                if target is not None:
+                    payload = event.payload.model_dump()
+                    if target not in {payload.get(k) for k in (*INVOLVEMENT_KEYS, "building_id")}:
+                        continue
+                found.append(event)
+                if len(found) == limit:
+                    break
+        return found
+
+    def update_branch(self, meta: BranchMetadata):
+        with self.engine.begin() as db:
+            db.execute(
+                update(branches)
+                .where(branches.c.id == meta.id)
+                .values(metadata=meta.model_dump_json())
+            )
 
     # Relational Inspection Queries
     def get_world_row(self) -> dict | None:

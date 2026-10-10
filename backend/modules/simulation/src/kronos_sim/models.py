@@ -341,6 +341,11 @@ class WorldState(Model):
 class ActionBase(Model):
     actor_id: str
     rationale: str | None = Field(default=None, max_length=300)
+    causal_refs: list[str] = Field(
+        default_factory=list,
+        max_length=5,
+        description="Event IDs (active branch) this action reacts to; copied onto its events",
+    )
 
 
 class Buy(ActionBase):
@@ -1251,6 +1256,11 @@ class InterventionApplied(EventBase):
 
 class TickPayload(Model):
     actions: int = Field(ge=0)
+    state_hash: str | None = Field(
+        default=None,
+        description="SHA-256 of the world after the day (branch ID and sequence excluded); "
+        "the same seed and the same actions always give the same hash",
+    )
 
 
 class TickCompleted(EventBase):
@@ -1434,11 +1444,105 @@ class BranchMetadata(Model):
     parent_branch_id: str | None = None
     source_snapshot_id: str | None = None
     fork_tick: int = 0
+    seed: int | None = Field(default=None, description="The world seed this timeline runs on")
+    intervention: str | None = Field(
+        default=None, description="Player text queued on this branch when it was forked"
+    )
 
 
 class BranchRequest(Model):
     snapshot_id: str
     name: str = Field(min_length=1, max_length=60)
+    intervention: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        description="Optional intervention text, parsed and queued for the fork's next day",
+    )
+
+
+class TraceEdge(Model):
+    """`cites`: from_id lists to_id in its causal_refs. `same_action`: both came from one
+    action."""
+
+    from_id: str
+    to_id: str
+    kind: Literal["cites", "same_action"]
+
+
+class EventTrace(Model):
+    event_id: str
+    direction: Literal["back", "forward"]
+    events: list["SimulationEvent"] = Field(description="The start event first, then by depth")
+    edges: list[TraceEdge] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class TickHash(Model):
+    tick: int
+    sequence: int
+    branch_id: str = Field(description="The branch (or ancestor) that recorded this day")
+    state_hash: str | None
+
+
+class Checkpoint(Model):
+    """The last snapshot of a simulated year, for forking from a past year."""
+
+    year: int
+    tick: int
+    snapshot: SnapshotMetadata
+
+
+class MetricPoint(Model):
+    tick: int
+    bread_price: int | None = Field(description="Average bread price across bakeries, cents")
+    gini_bps: int = Field(description="Wealth gap: Gini of citizen money, basis points")
+    population: int
+    total_money: int = Field(description="Citizen money plus business cash, cents")
+    top_influence_bps: int = Field(description="The most influential citizen's influence")
+
+
+class BranchSeries(Model):
+    branch_id: str
+    name: str
+    points: list[MetricPoint]
+
+
+class BranchComparison(Model):
+    branches: list[BranchSeries]
+
+
+class Divergence(Model):
+    """Where two timelines first decided differently, and what followed."""
+
+    a: str
+    b: str
+    common_sequence: int = Field(description="Events shared by both histories (ancestry)")
+    common_tick: int
+    tick: int | None = Field(description="Day of the first differing decision; null if none")
+    decision_a: "SimulationEvent | None" = None
+    decision_b: "SimulationEvent | None" = None
+    chain_a: list["SimulationEvent"] = Field(default_factory=list)
+    chain_b: list["SimulationEvent"] = Field(default_factory=list)
+
+
+class HeadlessRunRequest(Model):
+    ticks: int = Field(ge=1, le=365, description="Days to advance in the background")
+    agents: Literal["utility", "none"] = Field(
+        default="utility",
+        description="`utility`: citizens decide with the free utility policy; `none`: no "
+        "decisions, only queued actions and daily rules",
+    )
+
+
+class HeadlessRun(Model):
+    branch_id: str
+    status: Literal["running", "done", "failed", "cancelled"]
+    agents: Literal["utility", "none"]
+    ticks_requested: int
+    ticks_done: int = 0
+    tick: int = Field(description="The branch's current day")
+    error: str | None = None
 
 
 class MutationRequest(Model):
@@ -1864,3 +1968,5 @@ AgentObservation.model_rebuild()
 
 SimulationTickResult.model_rebuild()
 InterventionResult.model_rebuild()
+EventTrace.model_rebuild()
+Divergence.model_rebuild()

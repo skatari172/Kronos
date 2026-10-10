@@ -224,9 +224,9 @@ def test_spawn_citizen_through_engine(client):
     response = resolve(client, client.post("/api/agents", json=body))
     assert response.status_code == 201
     result = response.json()
-    assert result["citizen_id"] == "citizen-main-1"
+    assert result["citizen_id"] == "citizen-000001"
     assert result["update"]["events"][0]["type"] == "citizen_spawned"
-    nico = client.get("/api/agents/citizen-main-1").json()
+    nico = client.get("/api/agents/citizen-000001").json()
     assert nico["citizen"]["money"] == 0 and nico["role"] == "commoner"
     assert resolve(client, client.post("/api/agents", json=body)).status_code == 409
     bad = resolve(
