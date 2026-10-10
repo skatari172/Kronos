@@ -2,6 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
 import { Group, MathUtils, Vector3 } from "three";
+import { activityCue } from "../api/format";
 import type { Building, Citizen } from "../api/types";
 import { coins } from "../api/format";
 import { usePresentation, useWorld } from "../stores/world";
@@ -62,6 +63,17 @@ function EntityRenderer({
   town,
 }: Visual & { done: () => void; portal: LabelPortal; town: Town }) {
   const group = useRef<Group>(null);
+  const ring = useRef<import("three").Mesh>(null);
+  const events = useWorld((s) => s.events);
+  const historical = useWorld((s) => s.historical);
+  const cue = historical ? undefined : activityCue(events, entity.value.id);
+  const lastCue = useRef(cue?.id);
+  const pulse = useRef(0);
+  useEffect(() => {
+    if (cue?.id && cue.id !== lastCue.current) pulse.current = 1;
+    lastCue.current = cue?.id;
+  }, [cue?.id]);
+  const size = useRef(fresh ? 0.01 : 1);
   const body = useRef<Group>(null);
   const size = useRef<Spring>({ value: fresh ? 0 : 1, velocity: 0 });
   const motion = useRef<Motion>({ speed: 0, pose: "idle" });
@@ -124,6 +136,19 @@ function EntityRenderer({
       }
     }
     group.current.position.copy(p);
+    pulse.current = Math.max(0, pulse.current - dt);
+    if (ring.current) {
+      ring.current.visible = pulse.current > 0;
+      ring.current.scale.setScalar(1 + (1 - pulse.current) * 0.8);
+    }
+    size.current = MathUtils.damp(
+      size.current,
+      leaving ? 0 : 1 + (level - 1) * 0.14,
+      5,
+      dt,
+    );
+    group.current.scale.setScalar(size.current);
+    if (leaving && size.current < 0.02) done();
     // New villagers pop in; departing ones shrink away.
     if (leaving)
       size.current.value = MathUtils.damp(size.current.value, 0, 7, dt);
@@ -185,6 +210,27 @@ function EntityRenderer({
           )}
           {selected && <Selection radius={0.32} />}
         </>
+      )}
+      <mesh
+        ref={ring}
+        visible={false}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.04, 0]}
+      >
+        <ringGeometry
+          args={[isBuilding ? 1.65 : 0.38, isBuilding ? 1.74 : 0.47, 32]}
+        />
+        <meshBasicMaterial
+          color={cue?.type === "action_rejected" ? "#c58364" : "#81ba88"}
+        />
+      </mesh>
+      {selected && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+          <ringGeometry
+            args={[isBuilding ? 1.6 : 0.35, isBuilding ? 1.66 : 0.42, 40]}
+          />
+          <meshBasicMaterial color="#e9bd72" />
+        </mesh>
       )}
     </group>
   );
@@ -252,6 +298,15 @@ function Entities({ portal, town }: { portal: LabelPortal; town: Town }) {
 function ResponsiveCamera() {
   const camera = useThree((state) => state.camera);
   const width = useThree((state) => state.size.width);
+  const plots = useWorld((s) => s.update!.state.plots);
+  const span = Math.max(
+    23,
+    ...Object.values(plots).map((p) => Math.abs(p.position.z) * 2 + 8),
+  );
+  useEffect(() => {
+    camera.zoom = Math.min(44, width / span);
+    camera.updateProjectionMatrix();
+  }, [camera, width, span]);
   const height = useThree((state) => state.size.height);
   useEffect(() => {
     camera.zoom = MathUtils.clamp(Math.min(width / 37, height / 21), 10, 90);
@@ -263,6 +318,16 @@ function ResponsiveCamera() {
 /** `autoRotate` slowly circles the town (time-lapse mode). */
 export function Village({ autoRotate = false }: { autoRotate?: boolean }) {
   const epoch = useWorld((s) => s.epoch);
+  const plots = useWorld((s) => s.update!.state.plots);
+  const plotList = Object.values(plots);
+  const extentX = Math.max(
+    8.5,
+    ...plotList.map((p) => Math.abs(p.position.x) + 3),
+  );
+  const extentZ = Math.max(
+    7,
+    ...plotList.map((p) => Math.abs(p.position.z) + 3),
+  );
   const town = useTown();
   const [labelElement, setLabelElement] = useState<HTMLDivElement | null>(null);
   const portal = useMemo(() => ({ current: labelElement! }), [labelElement]);
@@ -296,6 +361,62 @@ export function Village({ autoRotate = false }: { autoRotate?: boolean }) {
             shadow-normalBias={0.02}
           />
           <Suspense fallback={null}>
+            <RoundedBox
+              args={[extentX * 2, 0.6, extentZ * 2]}
+              position={[0, -0.35, 0]}
+              radius={0.35}
+              receiveShadow
+            >
+              <meshStandardMaterial color="#83966b" />
+            </RoundedBox>
+            <mesh
+              rotation={[-Math.PI / 2, 0, 0]}
+              position={[0, 0.08, 0]}
+              receiveShadow
+            >
+              <planeGeometry args={[16, 1.5]} />
+              <meshStandardMaterial color="#c5b390" />
+            </mesh>
+            {[-4, 0, 4].map((x) => (
+              <mesh
+                key={x}
+                rotation={[-Math.PI / 2, 0, 0]}
+                position={[x, 0.09, 0]}
+                receiveShadow
+              >
+                <planeGeometry args={[1.1, 7]} />
+                <meshStandardMaterial color="#c5b390" />
+              </mesh>
+            ))}
+            {plotList.map((plot) => (
+              <mesh
+                key={plot.id}
+                rotation={[-Math.PI / 2, 0, 0]}
+                position={[plot.position.x, 0.07, plot.position.z]}
+              >
+                <planeGeometry args={[2.7, 2.4]} />
+                <meshStandardMaterial color="#92a47b" />
+              </mesh>
+            ))}
+            {[
+              [-7, -5],
+              [-6, 5],
+              [7, -5],
+              [7, 4],
+              [-7, 2],
+              [3, 6],
+              [-2, -6],
+            ].map(([x, z], i) => (
+              <Tree key={i} x={x} z={z} scale={0.8 + (i % 3) * 0.15} />
+            ))}
+            <Entities key={epoch} portal={portal} />
+            <ContactShadows
+              position={[0, -0.02, 0]}
+              opacity={0.2}
+              scale={25}
+              blur={2}
+              far={5}
+            />
             <Ground key={`ground:${epoch}`} portal={portal} town={town} />
             <Entities key={epoch} portal={portal} town={town} />
           </Suspense>

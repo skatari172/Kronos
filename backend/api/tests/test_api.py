@@ -21,15 +21,15 @@ def test_vertical_slice_persistence_websocket_and_fork(tmp_path):
                 },
             )
             assert response.status_code == 200
-            changed = response.json()["update"]
-            assert changed["state"]["buildings"]["bakery"]["prices"]["bread"] == 700
-            assert socket.receive_json()["sequence"] == changed["sequence"]
+            assert response.json()["result"]["status"] == "queued"
+            assert client.get("/api/world").json() == initial
             tick = client.post(
-                "/api/simulation/tick",
-                json={"branch_id": "main", "expected_sequence": changed["sequence"]},
+                "/api/simulation/tick", json={"branch_id": "main", "expected_sequence": 0}
             )
             assert tick.status_code == 200
-            assert socket.receive_json()["tick"] == 1
+            changed = socket.receive_json()
+            assert changed["state"]["buildings"]["bakery"]["prices"]["bread"] == 700
+            assert changed["tick"] == 1
         fork = client.post(
             "/api/branches", json={"snapshot_id": snapshot["id"], "name": "Alternate"}
         )
@@ -74,6 +74,12 @@ def test_rejects_stale_and_unsupported_requests(tmp_path):
                         "kind": "bakery",
                     },
                 },
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/api/simulation/tick", json={"branch_id": "main", "expected_sequence": 0}
             ).status_code
             == 200
         )

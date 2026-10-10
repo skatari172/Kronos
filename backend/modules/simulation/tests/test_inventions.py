@@ -192,7 +192,9 @@ def test_license_decline_expiry_and_funds_recheck():
     declined = Engine(offered).apply(respond.model_copy(update={"accept": False}))
     assert declined.events[0].payload.status == "declined"
     assert declined.state.inventions["crop_rotation"].licensees == []
-    later = Engine(offered).tick()
+    first_day = Engine(offered).tick()
+    assert oid in first_day.state.license_offers
+    later = Engine(first_day.state).tick()
     expired = [e for e in later.events if e.type == "license_resolved"]
     assert [e.payload.status for e in expired] == ["expired"]
     assert later.state.license_offers == {}
@@ -263,3 +265,17 @@ def test_worlds_saved_before_inventions_still_load():
     state = WorldState.model_validate(data)
     assert state.inventions == {} and state.license_offers == {}
     assert Engine(state).tick().tick == 1
+
+
+def test_queued_time_research_forfeits_exactly_the_requested_number_of_days():
+    action = Research(actor_id="citizen-3", invention_id="crop_rotation", mode="time", ticks=2)
+    first = Engine(initial_world()).tick([action]).state
+    assert first.citizens["citizen-3"].money == 950
+    assert first.inventions["crop_rotation"].progress == 0  # Research starts next day.
+    second = Engine(first).tick().state
+    third = Engine(second).tick().state
+    assert third.citizens["citizen-3"].money == 950
+    assert third.inventions["crop_rotation"].progress == 300
+    assert third.citizens["citizen-3"].research_invention_id is None
+    fourth = Engine(third).tick().state
+    assert fourth.citizens["citizen-3"].money == 1100

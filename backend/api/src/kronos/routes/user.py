@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter
 from kronos_sim import models as m
-from kronos_sim.engine import Engine
 
 from kronos.dependencies import ServiceDependency
 
@@ -15,6 +14,8 @@ router = APIRouter(prefix="/api", tags=["User tools"])
     summary="Apply a natural-language intervention",
 )
 async def intervene(body: m.InterventionRequest, service: ServiceDependency):
+    """Parse supported text and queue it for the next authoritative tick."""
+    return await service.intervene(body)
     """Parse supported text, validate the current version, then persist and broadcast."""
     citizens = {cid: c.name for cid, c in service.state.citizens.items()}
     command = await service.agents.parse(body.text, citizens)
@@ -24,7 +25,7 @@ async def intervene(body: m.InterventionRequest, service: ServiceDependency):
         return m.InterventionResult(command=command, update=result)
 
 
-@router.post("/actions", response_model=m.WorldUpdate, summary="Execute a player-directed action")
+@router.post("/actions", response_model=m.ActionResult, summary="Queue a player-directed action")
 async def action(body: m.ActionRequest, service: ServiceDependency):
     """Buy, sell, transfer, price, produce, consume, communicate, build, upgrade, or move.
 

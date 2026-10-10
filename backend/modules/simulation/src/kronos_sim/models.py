@@ -98,6 +98,7 @@ class Citizen(Model):
     research_invention_id: str | None = Field(
         default=None, description="Invention this citizen forfeits wages for (time mode)"
     )
+    research_start_tick: int = Field(default=0, ge=0)
     research_until_tick: int = Field(
         default=0, ge=0, description="Last day of time-mode research; wages are skipped until then"
     )
@@ -713,6 +714,11 @@ class CitizenRemoved(EventBase):
     payload: EntityPayload
 
 
+class PlotOpened(EventBase):
+    type: Literal["plot_opened"] = "plot_opened"
+    payload: EntityPayload
+
+
 class BuildingConstructed(EventBase):
     type: Literal["building_constructed"] = "building_constructed"
     payload: EntityPayload
@@ -1254,6 +1260,15 @@ class InterventionApplied(EventBase):
     payload: InterventionPayload
 
 
+class TickPayload(Model):
+    actions: int = Field(ge=0)
+
+
+class TickCompleted(EventBase):
+    type: Literal["tick_completed"] = "tick_completed"
+    payload: TickPayload
+
+
 SimulationEvent = Annotated[
     PriceChanged
     | TransactionCompleted
@@ -1262,6 +1277,7 @@ SimulationEvent = Annotated[
     | CitizenMoved
     | CitizenSpawned
     | CitizenRemoved
+    | PlotOpened
     | BuildingConstructed
     | BuildingUpgraded
     | BuildingRemoved
@@ -1303,7 +1319,8 @@ SimulationEvent = Annotated[
     | RentMissed
     | RentCovered
     | TenantEvicted
-    | CitizenInteracted,
+    | CitizenInteracted
+    | TickCompleted,
     Field(discriminator="type"),
 ]
 
@@ -1318,6 +1335,7 @@ class WorldUpdate(Model):
 
 class SimulationTickResult(WorldUpdate):
     rejected_actions: list[str] = Field(default_factory=list)
+    action_results: list["ActionResult"] = Field(default_factory=list)
 
 
 class EventPage(Model):
@@ -1338,6 +1356,8 @@ class InterventionRequest(Model):
 
 
 class InterventionResult(Model):
+    command: PriceIntervention
+    result: "ActionResult"
     command: Intervention
     update: WorldUpdate
 
@@ -1409,8 +1429,10 @@ class AgentObservation(Model):
     role: Role
     wealth_tier: WealthTier
     bread_prices: dict[str, int]
+    bread_stock: dict[str, int] = Field(default_factory=dict)
     neighbors: dict[str, str] = Field(default_factory=dict, description="Citizen ID to name")
     available_actions: list[str] = Field(default_factory=list)
+    recent_events: list[SimulationEvent] = Field(default_factory=list)
     loans: list[Loan] = Field(
         default_factory=list,
         description="Open loans (offered, active, defaulted) where this agent lends or borrows",
@@ -1438,15 +1460,20 @@ class ActionValidationResult(Model):
 
 
 class ActionResult(Model):
-    """Outcome of an agent action. Rule rejections are logged events, not HTTP errors.
+    """Proposal and session outcome. Queuing does not change the world version.
 
-    Request problems (stale sequence, unknown citizen, malformed body) still fail with HTTP codes.
-    sequence is the world version after this result; send it as the next expected_sequence.
+    scheduled_tick is the earliest execution day; sequence is the last committed world
+    version at submission or resolution. Gameplay preconditions are checked at execution.
     """
 
     action_id: str
     branch_id: str
-    status: Literal["applied", "rejected"]
+    status: Literal["queued", "applied", "rejected"]
+    action: AgentAction | PriceIntervention
+    source: Literal["agent", "player", "backend"] = "agent"
+    order: int = Field(ge=1)
+    scheduled_tick: int = Field(ge=1)
+    text: str | None = None
     tick: int
     sequence: int
     event_ids: list[str] = Field(default_factory=list)
@@ -1777,3 +1804,6 @@ class InteractRequest(MutationRequest):
 
 
 AgentObservation.model_rebuild()
+
+SimulationTickResult.model_rebuild()
+InterventionResult.model_rebuild()

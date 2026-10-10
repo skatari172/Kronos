@@ -1,6 +1,6 @@
 import { Activity, ArrowUpRight } from "lucide-react";
-import type { SimulationEvent } from "../api/types";
 import { useWorld } from "../stores/world";
+import { describeEvent } from "../api/format";
 import { coins } from "../api/format";
 const INTERACTIONS: Record<string, string> = {
   befriend: "Two citizens become friendlier",
@@ -117,8 +117,14 @@ function describe(event: SimulationEvent) {
 }
 export function EventLedger() {
   const events = useWorld((s) => s.events);
+  const world = useWorld((s) => s.update?.state);
   const important = events
-    .filter((e) => e.type !== "citizen_moved" && e.type !== "resource_consumed")
+    .filter(
+      (e) =>
+        e.type !== "citizen_moved" &&
+        e.type !== "resource_consumed" &&
+        e.type !== "tick_completed",
+    )
     .slice(-40)
     .reverse();
   return (
@@ -148,7 +154,7 @@ export function EventLedger() {
                   <small>
                     DAY {e.tick + 1} <span>#{e.sequence}</span>
                   </small>
-                  <p>{describe(e)}</p>
+                  <p>{describeEvent(e, world)}</p>
                 </div>
                 <ArrowUpRight size={13} />
               </summary>

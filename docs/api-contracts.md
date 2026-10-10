@@ -11,6 +11,8 @@ Canonical Pydantic models live in `backend/modules/simulation/src/kronos_sim/mod
 | `POST /api/simulation/play`              | Start shared loop at speed 1, 2, or 4                      |
 | `POST /api/simulation/pause`             | Pause shared loop                                          |
 | `GET /api/simulation/status`             | Playback state and any loop failure                        |
+| `POST /api/interventions`                | Parse and queue supported free text                        |
+| `POST /api/actions`                      | Queue a structured engine action                           |
 | `POST /api/interventions`                | Parse and commit supported free text                       |
 | `POST /api/actions`                      | Validate and commit a structured engine action             |
 | `GET /api/events?after=…&limit=…`        | Active-branch events after a sequence, ascending, paged    |
@@ -24,6 +26,7 @@ Canonical Pydantic models live in `backend/modules/simulation/src/kronos_sim/mod
 | `GET /api/branches/{id}/world`           | Read branch head                                           |
 | `WS /ws/world`                           | Initial snapshot then committed full-state updates         |
 
+Tick, play, action, and intervention requests include `branch_id` and `expected_sequence`. Stale commands return **409**; reload the current world and reconsider the command. Malformed requests, dry-run rule failures, and invalid provider output return **422**. Gameplay rule failures become session `rejected` action results and durable Events during execution. Unknown snapshots/branches return **404**.
 The v1 core endpoints are `GET /api/world`, `WS /ws/world`, simulation status/play/pause/tick, `POST /api/actions`, `POST /api/interventions`, `GET /api/events`, and `GET /api/jobs`. New villages, history, branches, and the agent routes are beyond v1 core and already implemented. Poll `GET /api/events?after=<sequence>` to catch up on the ledger; `/api/history/events` remains for branch-scoped queries.
 
 Tick, play, action, and intervention requests include `branch_id` and `expected_sequence`. Stale commands return **409**; reload the current world and reconsider the command. Unsupported/invalid actions and provider output return **422**. Unknown snapshots/branches return **404**.
@@ -36,7 +39,7 @@ Tick, play, action, and intervention requests include `branch_id` and `expected_
 }
 ```
 
-The result contains a structured `modify_price` command and committed world update. Example: a bakery priced at 500 cents becomes 700 cents. The browser indicates all-bakery scope before submission. The API serves a local trusted session, not an authenticated public service. Action `actor_id` is not an authentication mechanism.
+The result contains a structured `modify_price` command and a queued `result` (`ActionResult`). Advance the clock to execute it. Example: a bakery priced at 500 cents becomes 700 cents. The browser indicates all-bakery scope before submission. The API serves a local trusted session, not an authenticated public service. Action `actor_id` is not an authentication mechanism.
 
 Create a new world with `POST /api/simulations`, then activate the returned branch ID. State saves automatically on each commit; no misleading save endpoint is needed. Historical restore is read-only; continuing from the past requires a fork.
 
@@ -52,9 +55,9 @@ Run `make backend` and open **http://localhost:8000/docs**. Operations are group
 | World         | `world.py`                                        | `GET /api/world`, plus the WebSocket handler at `/ws/world`                 |
 | History       | `history.py`                                      | Event queries, checkpoints, forks, branch activation and state              |
 
-`main.py` sets up the application, lifecycle, errors, and routers. `dependencies.py` supplies the shared session to route handlers. Existing endpoint URLs and payloads remain compatible, so frontend transport does not need changes. WebSocket routes are documented here but do not appear as Swagger HTTP operations.
+`main.py` sets up the application, lifecycle, errors, and routers. `dependencies.py` supplies the shared session to route handlers. Endpoint URLs and request payloads are preserved. Action responses now acknowledge queuing; gameplay state is delivered after the next committed tick. WebSocket routes are documented here but do not appear as Swagger HTTP operations.
 
-These groups describe intended callers; the local prototype has no authentication. A browser may still call backend clock controls. Agent path identity checks prevent accidental mismatched proposals, but do not authenticate the caller. Call origin is not added to persisted events in this change; `actor_id` remains the citizen performing an action.
+These groups describe intended callers; the local prototype has no authentication. A browser may still call backend clock controls. Agent path identity checks prevent accidental mismatched proposals, but do not authenticate the caller. Call origin is recorded on the runtime attempt as `source`; `actor_id` remains the citizen performing an action.
 
 ### Agent tools
 
@@ -62,7 +65,7 @@ These groups describe intended callers; the local prototype has no authenticatio
 | ------------------------------------------------ | ------------------------------------------------------------------------------ |
 | `GET /api/agents/{citizen_id}/observation`       | Personal citizen state, public bakery prices, and current branch/tick/sequence |
 | `POST /api/agents/{citizen_id}/actions/validate` | Dry-run an action through the engine without saving or broadcasting            |
-| `POST /api/agents/{citizen_id}/actions`          | Validate and commit an action whose actor matches the route citizen            |
+| `POST /api/agents/{citizen_id}/actions`          | Queue an action whose actor matches the route citizen                          |
 
 Example: submit the following to `/api/agents/citizen-1/actions/validate`, then to `/api/agents/citizen-1/actions` to execute it. Replace the branch/version with those from the observation:
 
@@ -81,10 +84,18 @@ Example: submit the following to `/api/agents/citizen-1/actions/validate`, then 
 }
 ```
 
-Successful validation returns `valid: true`, the action, branch, and original sequence. Invalid actions return 422. Validation does not reserve the action; execution must still match the current sequence, or it returns 409. Both validation and execution return 404 for an unknown route citizen and 422 if `actor_id` differs from that citizen. The engine additionally checks business ownership, money, stock, and other preconditions.
+Successful dry-run validation returns `valid: true`, the action, branch, and original sequence. It reserves nothing. Submission checks request version and route identity, then returns an `ActionResult` with `status: "queued"`, original `action`, `source`, stable `action_id`, admission `order`, and `scheduled_tick`. Submission does not advance the world sequence, so several proposals may share one observation version. Unknown route citizens return 404; actor/path mismatches return 422.
+
+`GET /api/actions/{action_id}` reads a queued/applied/rejected attempt in this API session. Attempts disappear on restart; committed outcomes remain in Events, available via `GET /api/events?after=<sequence>&limit=100`. After execution it includes the resulting tick/world sequence, associated event IDs, and any stable rejection code/message. Rejected gameplay actions are HTTP 200 outcomes, including through player and backend routes. Events and full world state arrive together over the existing WebSocket envelope. `POST /api/simulation/tick` also returns `action_results` and the existing `rejected_actions` summary.
 
 ### Backend automation
 
-`POST /api/backend/actions` accepts the same `ActionRequest` as `/api/actions`. It has no elevated powers or bypasses. All three execution routes call `Service.execute_action`, which takes the mutation lock, checks version/identity, evaluates through `Engine`, saves, and broadcasts. In-process jobs may call that service method directly without HTTP; do not hold `service.lock` when calling it because it acquires the lock itself. The existing clock loop continues to use the engine's daily tick flow.
+`POST /api/backend/actions` and `/api/actions` accept the same `ActionRequest`; all action and convenience endpoints enter `Service.execute_action` / `submit_agent_action`. They confer no elevated rights. The engine performs current ownership, cash, stock, timing, and precondition checks when the next tick drains the queue. A player intervention uses that same queue with a typed `modify_price` command.
 
-Each action route accepts the same typed vocabulary: buy, sell, transfer_money, set_price, produce, consume, communicate, construct_building, upgrade_building, and move_to. Select the action's `type` and matching fields in Swagger. Adding a rule belongs in the simulation module, while adding a caller-specific endpoint belongs in the matching route file.
+`POST /api/agents/{id}/decide` observes, awaits the provider outside the world lock, and queues its structured output for the next available tick. A branch activation during deliberation returns 409. The automatic post-tick strategy loop uses the same runtime queue. `GET /observation` includes up to eight relevant recent committed events; other citizens' money and private goals remain hidden.
+
+The vocabulary preserves the existing 36 engine actions covering trade, production, business ownership, jobs, goals, relationships, lots/rent, loans, research, licenses/adoption, and votes. Select a type and its fields in Swagger; add new rules in the simulation module and regenerate contracts.
+
+### Existing databases
+
+This update does not change database-owned schema, entity fields or persistence helpers. The owner's existing initialization still includes a legacy `actions` table, but the v1 service does not use it. Runtime submissions do not survive restarts; committed world state, Events and checkpoints do. See [Simulation engine](simulation-engine.md#database-dependencies--handoff) for starvation state and other database-owner dependencies. Existing legacy queued rows in other installations need coordinated disposition before upgrade; the inspected development ledger was empty.

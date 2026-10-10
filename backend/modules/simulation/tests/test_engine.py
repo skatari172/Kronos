@@ -28,9 +28,18 @@ def test_tick_is_seeded_ordered_and_does_not_mutate_input():
 def test_higher_price_changes_affordability_without_scripted_outcome():
     state = initial_world()
     state.citizens["citizen-6"].inventory.bread = 0
-    original = Engine(state).tick()
+    purchase = Buy(
+        actor_id="citizen-6",
+        building_id="bakery",
+        resource="bread",
+        quantity=1,
+        max_unit_price=1000,
+    )
+    original = Engine(state).tick([purchase])
     changed = Engine(state).intervene(PriceIntervention(percent=40), "Increase bread price by 40%")
     assert changed.state.buildings["bakery"].prices["bread"] == 700
+    assert changed.state.citizens == state.citizens
+    expensive = Engine(changed.state).tick([purchase])
     assert holdings(changed.state.citizens) == holdings(state.citizens)
     assert changed.state.citizens["citizen-1"].memories == [
         "Bread at Hearth & Grain went from 500 to 700 cents"
@@ -161,7 +170,7 @@ def test_rejections_carry_stable_codes(action, code):
     assert error.value.code == code
 
 
-def test_reject_logs_event_and_memory_without_other_changes():
+def test_reject_logs_event_without_mutating_citizens():
     state = initial_world()
     action = SetPrice(
         actor_id="citizen-6", building_id="bakery", resource="bread", price=1, rationale="Cheaper"
@@ -172,7 +181,7 @@ def test_reject_logs_event_and_memory_without_other_changes():
     assert [e.type for e in result.events] == ["action_rejected"]
     assert result.events[0].payload.code == "not_owner"
     assert result.events[0].rationale == "Cheaper"
-    assert result.state.citizens["citizen-6"].memories[-1].startswith("Rejected set_price")
+    assert result.state.citizens == state.citizens
     assert result.state.buildings == state.buildings
     assert result.state.rng_state == state.rng_state
     assert result.sequence == state.sequence + 1
@@ -679,6 +688,16 @@ def test_unanswered_applications_resolve_on_the_next_tick():
     ]
 
 
+def test_closing_business_immediately_rejects_pending_applications():
+    from kronos_sim.models import CloseBusiness
+
+    state = apply_job(initial_world(), "citizen-5", "market").state
+    closed = Engine(state).apply(CloseBusiness(actor_id="citizen-2", building_id="market"))
+    assert closed.state.job_applications == {}
+    event = next(e for e in closed.events if e.type == "job_application_resolved")
+    assert event.payload.outcome == "rejected" and event.actor_id == "citizen-2"
+    following = Engine(closed.state).tick()
+    assert not any(e.type == "job_application_resolved" for e in following.events)
 def test_applications_to_vanished_businesses_are_withdrawn():
     state = apply_job(initial_world(), "citizen-5", "market").state
     del state.buildings["market"]  # Gone without _close (e.g. an older saved world).

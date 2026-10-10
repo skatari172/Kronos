@@ -39,6 +39,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+            await app.state.service.stop_decisions()
             app.state.service.store.close()
 
     app = FastAPI(

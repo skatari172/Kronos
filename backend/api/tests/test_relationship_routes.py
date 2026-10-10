@@ -4,10 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 from kronos.config import Settings
 from kronos.main import create_app
+from route_helpers import resolve
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, route_only):
     with TestClient(
         create_app(Settings(database_url=f"sqlite:///{tmp_path / 'relationships.db'}"))
     ) as client:
@@ -16,7 +17,7 @@ def client(tmp_path):
 
 def interact(client, actor, sequence, **fields):
     body = {"branch_id": "main", "expected_sequence": sequence, **fields}
-    return client.post(f"/api/agents/{actor}/interact", json=body)
+    return resolve(client, client.post(f"/api/agents/{actor}/interact", json=body))
 
 
 def test_interact_round_trip(client):
@@ -33,7 +34,7 @@ def test_interact_round_trip(client):
 
     pair = client.get("/api/relationships/citizen-0/citizen-6").json()
     assert pair["b_to_a"]["trust"] == 15
-    assert pair["a_to_b"]["trust"] == 0 and pair["a_to_b"]["last_interaction_tick"] == 0
+    assert pair["a_to_b"]["trust"] == 0 and pair["a_to_b"]["last_interaction_tick"] == 1
     assert client.get("/api/relationships/citizen-0/nobody").status_code == 404
     assert client.get("/api/agents/nobody/relationships").status_code == 404
 
@@ -44,7 +45,7 @@ def test_interact_round_trip(client):
     again = interact(
         client, "citizen-0", ally["sequence"], target_id="citizen-6", kind="insult"
     ).json()
-    assert again["error"] == "rate_limited"
+    assert again["status"] == "applied"  # A later tick permits another interaction.
     observation = client.get("/api/agents/citizen-6/observation").json()
     assert [t["citizen_id"] for t in observation["ties"]] == ["citizen-0"]
 

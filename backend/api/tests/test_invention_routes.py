@@ -4,10 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 from kronos.config import Settings
 from kronos.main import create_app
+from route_helpers import resolve
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, route_only):
     with TestClient(
         create_app(Settings(database_url=f"sqlite:///{tmp_path / 'inventions.db'}"))
     ) as client:
@@ -31,7 +32,7 @@ def test_research_license_and_adopt_through_routes(client):
 
     def post(path, body):
         nonlocal seq
-        result = client.post(f"/api/inventions{path}", json=body).json()
+        result = resolve(client, client.post(f"/api/inventions{path}", json=body)).json()
         seq = result["sequence"]
         return result
 
@@ -43,7 +44,10 @@ def test_research_license_and_adopt_through_routes(client):
     assert invention["unlocked"] and invention["owner_id"] == "citizen-0"
     timed = post("/water_mill/research", command("citizen-3", seq, mode="time", ticks=3))
     assert timed["status"] == "applied"
-    assert client.get("/api/agents/citizen-3").json()["citizen"]["research_until_tick"] == 3
+    assert (
+        client.get("/api/agents/citizen-3").json()["citizen"]["research_until_tick"]
+        == timed["tick"] + 3
+    )
 
     offer = post(
         "/crop_rotation/license",
@@ -63,4 +67,7 @@ def test_research_license_and_adopt_through_routes(client):
 
 def test_research_request_validates_mode_fields(client):
     bad = command("citizen-0", 0, mode="money", ticks=3)
-    assert client.post("/api/inventions/water_mill/research", json=bad).status_code == 422
+    assert (
+        resolve(client, client.post("/api/inventions/water_mill/research", json=bad)).status_code
+        == 422
+    )

@@ -27,9 +27,15 @@ def profile(state: m.WorldState, citizen_id: str) -> m.CitizenProfile:
     )
 
 
-def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
+def observe(
+    state: m.WorldState, citizen_id: str, events: list[m.SimulationEvent] | None = None
+) -> m.AgentObservation:
     """The single observation builder for routes, /decide, and the tick loop."""
     view = profile(state, citizen_id)
+    bakeries = sorted(
+        (b for b in state.buildings.values() if b.kind == "bakery"),
+        key=lambda b: (b.prices["bread"], b.id),
+    )[:12]
     return m.AgentObservation(
         branch_id=state.branch_id,
         tick=state.tick,
@@ -37,21 +43,33 @@ def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
         citizen=view.citizen,
         role=view.role,
         wealth_tier=view.wealth_tier,
-        bread_prices={
-            b.id: b.prices["bread"] for b in state.buildings.values() if b.kind == "bakery"
-        },
+        bread_prices={b.id: b.prices["bread"] for b in bakeries},
+        bread_stock={b.id: b.inventory.bread for b in bakeries},
         neighbors={
             c.id: c.name
-            for c in sorted(state.citizens.values(), key=lambda c: c.id)
-            if c.id != citizen_id
+            for c in sorted(
+                (c for c in state.citizens.values() if c.id != citizen_id), key=lambda c: c.id
+            )[:12]
         },
         available_actions=list(SUPPORTED_ACTIONS),
+        recent_events=[
+            event.model_copy(deep=True)
+            for event in (events or [])
+            if (
+                event.actor_id == citizen_id
+                or citizen_id
+                in {
+                    event.payload.model_dump().get(key)
+                    for key in ("sender_id", "recipient_id", "entity_id", "citizen_id")
+                }
+            )
+        ][-8:],
         loans=[
             loan
             for loan in loans(state, citizen_id)
             if loan.status in ("offered", "active", "defaulted")
-        ],
-        incoming_offers=offers(state, citizen_id).incoming,
+        ][:8],
+        incoming_offers=offers(state, citizen_id).incoming[:8],
         ties=strongest_ties(state, citizen_id),
         open_jobs=job_openings(state),
         businesses=[

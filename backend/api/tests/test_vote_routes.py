@@ -4,10 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 from kronos.config import Settings
 from kronos.main import create_app
+from route_helpers import resolve
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, route_only):
     with TestClient(
         create_app(Settings(database_url=f"sqlite:///{tmp_path / 'votes.db'}"))
     ) as client:
@@ -30,23 +31,33 @@ def test_roles_and_influence_reads(client):
 
 
 def test_propose_ballot_and_tally_through_routes(client):
-    proposed = client.post(
-        "/api/votes",
-        json=body("citizen-6", 0, kind="min_wage", value=300, rationale="Bread costs too much"),
+    proposed = resolve(
+        client,
+        client.post(
+            "/api/votes",
+            json=body("citizen-6", 0, kind="min_wage", value=300, rationale="Bread costs too much"),
+        ),
     ).json()
     assert proposed["status"] == "applied"
     [view] = client.get("/api/votes?status=open").json()
     vote_id = view["vote"]["id"]
     assert view["vote"]["proposer_id"] == "citizen-6" and view["tally"]["ballots"] == 0
-    cast = client.post(
-        f"/api/votes/{vote_id}/ballot", json=body("citizen-1", proposed["sequence"], choice="yes")
+    cast = resolve(
+        client,
+        client.post(
+            f"/api/votes/{vote_id}/ballot",
+            json=body("citizen-1", proposed["sequence"], choice="yes"),
+        ),
     ).json()
     assert cast["status"] == "applied"
     tally = client.get("/api/votes?status=open").json()[0]["tally"]
     influence = client.get("/api/agents/citizen-1/influence").json()["influence"]
     assert tally == {"yes_weight": influence, "no_weight": 0, "yes_share": 10000, "ballots": 1}
-    again = client.post(
-        "/api/votes", json=body("citizen-0", cast["sequence"], kind="market_tax", value=500)
+    again = resolve(
+        client,
+        client.post(
+            "/api/votes", json=body("citizen-0", cast["sequence"], kind="market_tax", value=500)
+        ),
     ).json()
     assert (again["status"], again["error"]) == ("rejected", "bad_params")
     assert client.get("/api/votes?status=passed").json() == []

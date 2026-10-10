@@ -4,18 +4,18 @@
 
 1. Start `make backend` and `make frontend`, open localhost:5173. The badge reads WORLD CONNECTED.
 2. Click Hearth & Grain to inspect the 5.00-coin bread price.
-3. Select the +40% suggestion and submit it. The label and inspector become 7.00, and the chronicle records the intervention and price event.
+3. Select the +40% suggestion and submit it. The UI confirms it is queued. Advance one day: the label and inspector become 7.00, and the chronicle records the intervention and price event.
 4. Step twice. Initial citizens start with one loaf, so the second day of consumption exposes affordability differences. Finn has 5.50 coins and no employer; he cannot buy a 7.00-coin loaf. There is no scripted riot or predetermined narrative.
 5. Open a ledger row to see its typed payload, version, and causal references.
-6. Advance to the third tick for one mock neighbor conversation, stored memories, and increased familiarity.
+6. After the third tick, eligible mock agents queue next-day decisions. Advance again to see purchases or conversations, their stated rationales, and recorded relationships.
 
 ## Construction and alternate history
 
-1. While paused, click Build a bakery. Marcus spends 50 coins, a free plot becomes occupied, and a new structure grows into view.
+1. While paused, click Build a bakery, then advance a day. Marcus spends 50 coins, a free plot becomes occupied, and a new structure grows into view.
 2. Move the historical checkpoint slider to origin. Playback pauses and the scene replaces its current state without replaying animations.
 3. Click Fork here. The new branch starts from that checkpoint with the same RNG state and stable entity IDs.
 4. Apply a different price change and step. Switch to Original timeline to see the preserved original state.
-5. Restart the API. It recovers the active branch and latest committed world from SQLite.
+5. Restart the API. It recovers the active branch, latest committed world, and pending actions from SQLite.
 
 ## Offline visual fallback
 
