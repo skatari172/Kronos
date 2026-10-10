@@ -62,3 +62,28 @@ def business_profile(state: m.WorldState, building_id: str) -> m.BusinessProfile
 
 def resource_stocks(state: m.WorldState) -> list[m.ResourceStock]:
     return [state.resources[kind].model_copy() for kind in sorted(state.resources)]
+
+
+def job_openings(state: m.WorldState) -> list[m.JobOpening]:
+    """Businesses with at least one free slot, in building ID order."""
+    applications = sorted(state.job_applications.values(), key=lambda a: a.sequence)
+    openings = []
+    for building_id in sorted(state.buildings):
+        view = business_profile(state, building_id)
+        if view.free_slots < 1:
+            continue
+        building = view.building
+        openings.append(
+            m.JobOpening(
+                building_id=building.id,
+                name=building.name,
+                kind=building.kind,
+                owner_id=building.owner_id,
+                plot_id=building.plot_id,
+                position=building.position,
+                wage=building.wage,
+                free_slots=view.free_slots,
+                applicant_ids=[a.citizen_id for a in applications if a.building_id == building.id],
+            )
+        )
+    return openings

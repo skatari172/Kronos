@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from kronos_sim import models as m
-from kronos_sim.queries import profile
+from kronos_sim.queries import job_openings, profile
 
 from kronos.dependencies import ServiceDependency
 
@@ -43,6 +43,18 @@ async def agents(
 async def agent(citizen_id: str, service: ServiceDependency):
     async with service.lock:
         return profile(service.state, citizen_id)
+
+
+@router.get("/api/jobs", response_model=list[m.JobOpening], summary="List open job slots")
+async def jobs(service: ServiceDependency, kind: m.BuildingKind | None = None, min_wage: int = 0):
+    """Businesses with a free slot, their wage, location, and pending applicants.
+
+    Apply with POST /api/agents/{id}/apply; the owner answers by hire or reject_application,
+    otherwise the next tick resolves the application automatically.
+    """
+    async with service.lock:
+        openings = job_openings(service.state)
+    return [o for o in openings if (kind is None or o.kind == kind) and o.wage >= min_wage]
 
 
 @router.websocket("/ws/world")

@@ -29,6 +29,9 @@ SUPPORTED_ACTIONS = (
     "hire",
     "fire",
     "gather_resource",
+    "apply_job",
+    "quit_job",
+    "reject_application",
 )
 MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
 BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
@@ -132,6 +135,7 @@ class Engine:
             m.SetWage,
             m.Hire,
             m.Fire,
+            m.RejectApplication,
         )
         if isinstance(action, owner_only):
             if building.owner_id != actor.id:
@@ -314,11 +318,12 @@ class Engine:
                 raise InvalidAction("unknown_entity", "Unknown citizen")
             if worker.employer_id in s.buildings:
                 raise InvalidAction("already_employed", f"{worker.name} already has a job")
-            staff = [c for c in s.citizens.values() if c.employer_id == building.id]
-            if len(staff) >= building.job_slots:
+            application = self._application(worker.id, building.id)
+            if application is None:
+                raise InvalidAction("bad_params", f"{worker.name} has not applied here")
+            if self._free_slots(building) < 1:
                 raise InvalidAction("no_free_slot", "No free job slot")
-            worker.employer_id = building.id
-            emit("employment_changed", dict(citizen_id=worker.id, building_id=building.id))
+            self._hire(application, actor.id, action.rationale)
         elif isinstance(action, m.Fire):
             worker = s.citizens.get(action.citizen_id)
             if worker is None:
@@ -377,6 +382,39 @@ class Engine:
                     stock_remaining=field.stock,
                 ),
             )
+        elif isinstance(action, m.ApplyJob):
+            if actor.employer_id in s.buildings:
+                raise InvalidAction("already_employed", "Quit your current job before applying")
+            if self._application(actor.id, building.id) is not None:
+                raise InvalidAction("bad_params", f"Already applied to {building.name}")
+            if self._free_slots(building) < 1:
+                raise InvalidAction("no_free_slot", f"{building.name} has no free job slot")
+            aid = f"application-{s.branch_id}-{s.sequence + 1}"
+            s.job_applications[aid] = m.JobApplication(
+                id=aid,
+                citizen_id=actor.id,
+                building_id=building.id,
+                tick=s.tick,
+                sequence=s.sequence,
+            )
+            emit(
+                "job_applied",
+                dict(application_id=aid, citizen_id=actor.id, building_id=building.id),
+            )
+        elif isinstance(action, m.QuitJob):
+            employer = s.buildings.get(actor.employer_id)
+            if employer is None:
+                raise InvalidAction("bad_params", "You do not have a job to quit")
+            actor.employer_id = None
+            emit(
+                "employment_changed",
+                dict(citizen_id=actor.id, building_id=None, previous_building_id=employer.id),
+            )
+        elif isinstance(action, m.RejectApplication):
+            application = self._application(action.citizen_id, building.id)
+            if application is None:
+                raise InvalidAction("bad_params", "No pending application from that citizen")
+            self._resolve(application, "rejected", actor.id, action.rationale)
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
@@ -399,6 +437,82 @@ class Engine:
                 self.emit(
                     "resource_regenerated", dict(resource=kind, quantity=grown, stock=stock.stock)
                 )
+
+    def _application(self, citizen_id: str, building_id: str) -> m.JobApplication | None:
+        return next(
+            (
+                a
+                for a in self.state.job_applications.values()
+                if a.citizen_id == citizen_id and a.building_id == building_id
+            ),
+            None,
+        )
+
+    def _free_slots(self, building: m.Building) -> int:
+        staff = sum(1 for c in self.state.citizens.values() if c.employer_id == building.id)
+        return building.job_slots - staff
+
+    def _resolve(self, application: m.JobApplication, outcome: str, actor_id, rationale):
+        """Close one pending application and tell the applicant how it ended."""
+        s = self.state
+        del s.job_applications[application.id]
+        applicant = s.citizens.get(application.citizen_id)
+        building = s.buildings.get(application.building_id)
+        if applicant is not None and outcome != "withdrawn":
+            name = building.name if building else application.building_id
+            note = (
+                f"Hired by {name}" if outcome == "accepted" else f"{name} rejected my application"
+            )
+            applicant.memories = (applicant.memories + [note])[-8:]
+        self.emit(
+            "job_application_resolved",
+            dict(
+                application_id=application.id,
+                citizen_id=application.citizen_id,
+                building_id=application.building_id,
+                outcome=outcome,
+            ),
+            actor_id,
+            rationale,
+        )
+
+    def _hire(self, application: m.JobApplication, actor_id, rationale):
+        """Accept an application; the new employee's other applications are withdrawn."""
+        s = self.state
+        self._resolve(application, "accepted", actor_id, rationale)
+        s.citizens[application.citizen_id].employer_id = application.building_id
+        self.emit(
+            "employment_changed",
+            dict(citizen_id=application.citizen_id, building_id=application.building_id),
+            actor_id,
+            rationale,
+        )
+        for other in sorted(s.job_applications.values(), key=lambda a: a.sequence):
+            if other.citizen_id == application.citizen_id:
+                self._resolve(other, "withdrawn", None, "Applicant took another job")
+
+    def _resolve_job_applications(self):
+        """Daily fallback for applications the owner left unanswered since the last tick.
+
+        First come, first served: an applicant who is still unemployed is hired while the
+        business has a free slot and cash for one day's wage; otherwise the application is
+        rejected. Applications whose citizen or business is gone, or whose applicant already
+        found work, are withdrawn.
+        """
+        s = self.state
+        for application in sorted(s.job_applications.values(), key=lambda a: a.sequence):
+            if application.id not in s.job_applications:
+                continue  # Withdrawn by an earlier hire this tick.
+            applicant = s.citizens.get(application.citizen_id)
+            building = s.buildings.get(application.building_id)
+            if applicant is None or building is None or applicant.employer_id in s.buildings:
+                self._resolve(application, "withdrawn", None, "Application no longer valid")
+            elif self._free_slots(building) < 1:
+                self._resolve(application, "rejected", building.owner_id, "No free job slot")
+            elif building.cash < building.wage:
+                self._resolve(application, "rejected", building.owner_id, "Cannot afford wage")
+            else:
+                self._hire(application, building.owner_id, "Free slot and wage covered")
 
     def _close(self, building: m.Building, actor_id: str | None, rationale: str | None):
         """Remove a business: cash and goods go to the owner, employees are released."""
@@ -559,6 +673,7 @@ class Engine:
             if building.unpaid_days >= BANKRUPTCY_DAYS:
                 tx._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
         tx._regenerate_resources()
+        tx._resolve_job_applications()
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:
