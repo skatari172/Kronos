@@ -159,3 +159,60 @@ def test_planned_actions_parse_but_are_rejected_until_implemented(payload):
 def test_planned_action_schemas_reject_bad_params(payload):
     with pytest.raises(ValidationError):
         ACTION.validate_python({"actor_id": "citizen-0", **payload})
+
+
+@pytest.mark.parametrize(
+    "action,code",
+    [
+        (
+            Buy(
+                actor_id="citizen-6",
+                building_id="bakery",
+                resource="bread",
+                quantity=20,
+                max_unit_price=500,
+            ),
+            "out_of_stock",
+        ),
+        (
+            Buy(
+                actor_id="citizen-6",
+                building_id="bakery",
+                resource="bread",
+                quantity=2,
+                max_unit_price=500,
+            ),
+            "insufficient_funds",
+        ),
+        (
+            SetPrice(actor_id="citizen-6", building_id="bakery", resource="bread", price=1),
+            "not_owner",
+        ),
+        (ConstructBuilding(actor_id="citizen-1", plot_id="plot-0", kind="bakery"), "lot_occupied"),
+        (
+            ConstructBuilding(actor_id="citizen-1", plot_id="nowhere", kind="bakery"),
+            "unknown_entity",
+        ),
+    ],
+)
+def test_rejections_carry_stable_codes(action, code):
+    with pytest.raises(InvalidAction) as error:
+        Engine(initial_world()).apply(action)
+    assert error.value.code == code
+
+
+def test_reject_logs_event_and_memory_without_other_changes():
+    state = initial_world()
+    action = SetPrice(
+        actor_id="citizen-6", building_id="bakery", resource="bread", price=1, rationale="Cheaper"
+    )
+    with pytest.raises(InvalidAction) as error:
+        Engine(state).apply(action)
+    result = Engine(state).reject(action, error.value)
+    assert [e.type for e in result.events] == ["action_rejected"]
+    assert result.events[0].payload.code == "not_owner"
+    assert result.events[0].rationale == "Cheaper"
+    assert result.state.citizens["citizen-6"].memories[-1].startswith("Rejected set_price")
+    assert result.state.buildings == state.buildings
+    assert result.state.rng_state == state.rng_state
+    assert result.sequence == state.sequence + 1

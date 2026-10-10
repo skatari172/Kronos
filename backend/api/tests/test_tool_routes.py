@@ -56,14 +56,14 @@ def test_agent_validation_does_not_save_or_advance_rng(client):
     expected = Engine(WorldState.model_validate(before["state"])).apply(action)
     response = client.post("/api/agents/citizen-0/actions", json=body)
     assert response.status_code == 200
-    assert response.json()["state"] == expected.state.model_dump(mode="json")
+    assert response.json()["status"] == "applied"
+    assert client.get("/api/world").json()["state"] == expected.state.model_dump(mode="json")
 
 
 @pytest.mark.parametrize(
     "path",
     [
         "/api/actions",
-        "/api/agents/citizen-1/actions",
         "/api/backend/actions",
     ],
 )
@@ -127,3 +127,68 @@ def test_backend_clock_and_creation_routes_remain_compatible(client):
     assert branch.status_code == 201
     assert client.get("/api/world").json()["branch_id"] == "main"
     assert client.get(f"/api/branches/{branch.json()['id']}/world").status_code == 200
+
+
+def construct(plot_id, expected_sequence=0):
+    return {
+        "branch_id": "main",
+        "expected_sequence": expected_sequence,
+        "action": {
+            "type": "construct_building",
+            "actor_id": "citizen-1",
+            "plot_id": plot_id,
+            "kind": "bakery",
+            "rationale": "More bread",
+        },
+    }
+
+
+def test_agent_action_returns_result_and_broadcasts(client):
+    with client.websocket_connect("/ws/world") as socket:
+        socket.receive_json()
+        response = client.post("/api/agents/citizen-1/actions", json=construct("plot-3"))
+        assert response.status_code == 200
+        result = response.json()
+        update = socket.receive_json()
+    assert result["status"] == "applied"
+    assert result["action_id"] == "action-main:0"
+    assert result["error"] is None and result["message"] is None
+    assert result["sequence"] == update["sequence"] == 1
+    assert result["event_ids"] == [e["id"] for e in update["events"]]
+    assert update["state"]["citizens"]["citizen-1"]["money"] == 17000
+
+
+def test_agent_rule_rejection_is_logged_and_remembered(client):
+    response = client.post("/api/agents/citizen-1/actions", json=construct("plot-0"))
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "rejected"
+    assert result["error"] == "lot_occupied"
+    assert result["sequence"] == 1
+    events = client.get("/api/history/events?branch_id=main").json()
+    assert [e["id"] for e in events] == result["event_ids"]
+    assert events[0]["type"] == "action_rejected"
+    assert events[0]["actor_id"] == "citizen-1"
+    assert events[0]["rationale"] == "More bread"
+    assert events[0]["payload"] == {
+        "action_type": "construct_building",
+        "code": "lot_occupied",
+        "message": "Construction needs a vacant plot",
+    }
+    world = client.get("/api/world").json()
+    assert world["state"]["citizens"]["citizen-1"]["memories"] == [
+        "Rejected construct_building: Construction needs a vacant plot"
+    ]
+    assert len(world["state"]["buildings"]) == 3
+    # The rejection advanced the version, so the old sequence is now stale.
+    stale = client.post("/api/agents/citizen-1/actions", json=construct("plot-3"))
+    assert stale.status_code == 409
+    fresh = client.post("/api/agents/citizen-1/actions", json=construct("plot-3", 1))
+    assert fresh.json()["status"] == "applied"
+
+
+def test_other_callers_report_error_codes_without_logging(client):
+    response = client.post("/api/actions", json=construct("plot-0"))
+    assert response.status_code == 422
+    assert response.json()["code"] == "lot_occupied"
+    assert client.get("/api/history/events?branch_id=main").json() == []
