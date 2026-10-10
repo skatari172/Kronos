@@ -1,7 +1,15 @@
 import json
 import random
 
-from kronos_sim.models import Building, Citizen, Plot, Position, ResourceInventory, WorldState
+from kronos_sim.models import (
+    Building,
+    Citizen,
+    Plot,
+    Position,
+    ResourceInventory,
+    WorldState,
+    default_resources,
+)
 
 
 def initial_world(seed: int = 42, branch_id: str = "main") -> WorldState:
@@ -48,5 +56,7 @@ def initial_world(seed: int = 42, branch_id: str = "main") -> WorldState:
         citizens=citizens,
         buildings=buildings,
         plots=plots,
+        # Shared wheat field: about one farm's harvest plus room for gathering each day.
+        resources=default_resources(),
         rng_state=json.loads(json.dumps(random.Random(seed).getstate())),
     )

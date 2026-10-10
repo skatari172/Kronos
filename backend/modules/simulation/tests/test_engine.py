@@ -130,7 +130,6 @@ def test_long_run_invariants_and_reproducibility():
         {"type": "repay", "loan_id": "loan-1", "amount": 1000},
         {"type": "propose_vote", "kind": "min_wage", "value": 200},
         {"type": "vote", "vote_id": "vote-1", "choice": "yes"},
-        {"type": "gather_resource", "building_id": "farm", "resource": "wheat", "quantity": 2},
     ],
 )
 def test_planned_actions_parse_but_are_rejected_until_implemented(payload):
@@ -360,3 +359,82 @@ def test_business_goes_bankrupt_after_three_unpaid_days():
     removed = next(e for e in result.events if e.type == "building_removed")
     assert removed.actor_id is None and removed.rationale.startswith("Bankrupt")
     assert all(b.unpaid_days == 0 for b in result.state.buildings.values())
+
+
+def test_old_worlds_load_with_default_resources():
+    from kronos_sim.models import WorldState
+
+    data = initial_world().model_dump()
+    del data["resources"]
+    state = WorldState.model_validate(data)
+    assert state.resources["wheat"].stock == 120
+    data["resources"] = {"grain": state.resources["wheat"].model_dump()}
+    with pytest.raises(ValidationError):
+        WorldState.model_validate(data)
+
+
+def test_farm_harvest_draws_from_shared_stock_and_regenerates():
+    state = initial_world()
+    result = Engine(state).tick()
+    produced = next(e for e in result.events if e.type == "resource_produced")
+    harvested = produced.payload.quantity
+    assert produced.payload.stock_remaining == 120 - harvested
+    regen = next(e for e in result.events if e.type == "resource_regenerated")
+    assert (regen.payload.quantity, regen.payload.stock) == (6, 126 - harvested)
+    assert result.state.resources["wheat"].stock == 126 - harvested
+    # Regeneration is bounded by the cap.
+    state.resources["wheat"].stock = 199
+    assert Engine(state).tick().state.resources["wheat"].stock == 200
+
+
+def test_farm_harvest_is_limited_by_stock_without_changing_rng():
+    state = initial_world()
+    normal = Engine(state).tick()
+    state.resources["wheat"].stock = 1
+    state.resources["wheat"].regen_per_tick = 0
+    scarce = Engine(state).tick()
+    produced = next(e for e in scarce.events if e.type == "resource_produced")
+    assert (produced.payload.quantity, produced.payload.stock_remaining) == (1, 0)
+    assert scarce.state.rng_state == normal.state.rng_state
+    empty = Engine(scarce.state).tick()
+    assert not any(
+        e.type == "resource_produced" and e.payload.entity_id == "farm" for e in empty.events
+    )
+    assert empty.state.resources["wheat"].stock == 0
+
+
+def test_gathering_moves_stock_into_the_employer():
+    from kronos_sim.models import GatherResource
+
+    state = initial_world()
+    action = GatherResource(
+        actor_id="citizen-3", building_id="farm", resource="wheat", quantity=5, rationale="Harvest"
+    )
+    result = Engine(state).apply(action)
+    assert result.state.resources["wheat"].stock == 115
+    assert result.state.buildings["farm"].inventory.wheat == 17
+    event = result.events[0]
+    assert event.type == "resource_gathered" and event.actor_id == "citizen-3"
+    payload = event.payload
+    assert (payload.requested, payload.quantity, payload.stock_remaining) == (5, 5, 115)
+    assert result.state.rng_state == state.rng_state
+    # Partial gathers take whatever is left.
+    state.resources["wheat"].stock = 3
+    partial = Engine(state).apply(action)
+    assert partial.events[0].payload.quantity == 3
+    assert partial.state.resources["wheat"].stock == 0
+    with pytest.raises(InvalidAction) as error:
+        Engine(partial.state).apply(action)
+    assert error.value.code == "out_of_stock"
+    bakery = GatherResource(
+        actor_id="citizen-1", building_id="bakery", resource="wheat", quantity=1
+    )
+    for bad in [
+        action.model_copy(update={"actor_id": "citizen-5"}),  # unemployed
+        action.model_copy(update={"actor_id": "citizen-1"}),  # works at the bakery
+        action.model_copy(update={"resource": "bread"}),  # no natural bread stock
+        bakery,  # wheat is not gathered at a bakery
+    ]:
+        with pytest.raises(InvalidAction) as error:
+            Engine(initial_world()).apply(bad)
+        assert error.value.code == "bad_params"

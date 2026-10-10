@@ -371,3 +371,24 @@ def test_buy_route_maps_to_buy_action(client):
     assert (
         client.post("/api/businesses/bakery/buy", json={**body, "quantity": 0}).status_code == 422
     )
+
+
+def test_resources_and_gather_route(client):
+    assert client.get("/api/resources").json() == [
+        {"kind": "wheat", "stock": 120, "regen_per_tick": 6, "cap": 200}
+    ]
+    body = {**mutation(), "resource": "wheat", "quantity": 4, "rationale": "Bring in the harvest"}
+    result = client.post("/api/agents/citizen-3/gather", json=body).json()
+    assert result["status"] == "applied"
+    assert client.get("/api/resources").json()[0]["stock"] == 116
+    assert client.get("/api/businesses/farm").json()["building"]["inventory"]["wheat"] == 16
+    event = client.get("/api/agents/citizen-3/history").json()[-1]
+    assert event["type"] == "resource_gathered" and event["payload"]["quantity"] == 4
+    unemployed = client.post(
+        "/api/agents/citizen-5/gather", json={**body, **mutation(result["sequence"])}
+    ).json()
+    assert (unemployed["status"], unemployed["error"]) == ("rejected", "bad_params")
+    assert client.post("/api/agents/missing/gather", json=body).status_code == 404
+    assert client.post(
+        "/api/agents/citizen-3/gather", json={**body, "quantity": 0}
+    ).status_code == (422)
