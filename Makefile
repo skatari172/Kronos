@@ -4,9 +4,9 @@ PNPM ?= $(shell command -v pnpm 2>/dev/null || echo $(CURDIR)/.tools/node/node_m
 export PATH := $(dir $(PNPM)):$(PATH)
 export UV_CACHE_DIR ?= $(CURDIR)/.cache/uv
 
-.PHONY: help install backend frontend test lint format build contracts check reset
+.PHONY: help install backend frontend test lint format build contracts check reset db-init
 help:
-	@echo 'make install | backend | frontend | test | lint | format | build | contracts | check | reset'
+	@echo 'make install | backend | frontend | test | lint | format | build | contracts | check | reset | db-init'
 install:
 	./scripts/bootstrap.sh
 	$(UV) sync --frozen
@@ -35,3 +35,6 @@ contracts:
 check: test lint build
 reset:
 	$(UV) run python scripts/reset_data.py
+db-init:
+	$(UV) run python scripts/init_db.py
+
