@@ -385,4 +385,3 @@ For current failures, use section 3 and rerun the relevant checks; historical sy
 - **2026-10-10 — origin/main merge and branch conflict resolution:** Merged latest `origin/main` (commits up to `8772db7` including branching, event tracing, and durable persistence) into `simulation-engine-nick`. Resolved conflicts in `service.py`, `history.py` (fixed syntax error from duplicated handler signature in upstream merge), binary conflict in `backend/database/kronos.db` (preserved authoritative database via `--theirs`), and regenerated contracts.
 - **Validation performed:** 386 Python tests passed (`uv run pytest -q`), 30 frontend tests passed (`vitest`), `make lint` passed, and `pnpm build` (`tsc -b && vite build`) passed with exit code 0 (`make check` completely clean).
 - **Outstanding:** None. All backend and frontend tests pass cleanly with zero merge conflicts.
-

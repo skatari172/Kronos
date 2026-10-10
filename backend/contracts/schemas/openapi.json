@@ -8542,8 +8542,16 @@
         "properties": {
           "endpoint": {
             "type": "string",
+            "enum": [
+              "/api/interventions",
+              "/api/actions",
+              "/api/agents",
+              "/api/simulation/tick",
+              "/api/simulation/play",
+              "/api/simulation/pause"
+            ],
             "title": "Endpoint",
-            "description": "The API endpoint to call, e.g. /api/interventions, /api/actions, /api/agents"
+            "description": "The toolkit API endpoint to call, e.g. /api/interventions, /api/actions"
           },
           "method": {
             "type": "string",
