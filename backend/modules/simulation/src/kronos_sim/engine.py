@@ -28,9 +28,18 @@ SUPPORTED_ACTIONS = (
     "set_wage",
     "hire",
     "fire",
+    "lease_lot",
+    "set_rent",
+    "pay_rent",
+    "evict",
 )
 MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
 BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
+RENT_PERIOD_DAYS = 7  # Rent is collected on every tick divisible by this.
+MAX_RENT_CHANGE_PERCENT = 20  # Per set_rent while a lot is leased.
+MIN_RENT_STEP = 100  # Cents; lets a leased lot at zero (or tiny) rent still change.
+EVICTION_PERIODS = 3  # Missed rent periods before the owner may evict.
+MAX_PREPAID_PERIODS = 4  # How far ahead a tenant may pay.
 
 
 class InvalidAction(ValueError):
@@ -43,6 +52,24 @@ class InvalidAction(ValueError):
 
 def _tuples(value):
     return tuple(_tuples(v) for v in value) if isinstance(value, list) else value
+
+
+def _lot_payload(plot: m.Plot) -> dict:
+    return dict(
+        plot_id=plot.id,
+        owner_id=plot.owner_id,
+        tenant_id=plot.tenant_id,
+        rent=plot.rent,
+        arrears=plot.arrears,
+        missed_periods=plot.missed_periods,
+        prepaid_periods=plot.prepaid_periods,
+    )
+
+
+def _check_build_rights(plot: m.Plot, citizen_id: str):
+    """Town land is open to anyone; a private lot needs its owner or tenant."""
+    if plot.owner_id is not None and citizen_id not in (plot.owner_id, plot.tenant_id):
+        raise InvalidAction("not_owner", "This lot belongs to someone else; lease it first")
 
 
 class Engine:
@@ -134,6 +161,14 @@ class Engine:
 
         def emit(kind, payload):
             return self.emit(kind, payload, actor.id, action.rationale)
+
+        plot = None
+        if isinstance(action, (m.LeaseLot, m.SetRent, m.PayRent, m.Evict)):
+            plot = s.plots.get(action.plot_id)
+            if plot is None:
+                raise InvalidAction("unknown_entity", "Unknown lot")
+            if isinstance(action, (m.SetRent, m.Evict)) and plot.owner_id != actor.id:
+                raise InvalidAction("not_owner", "Only the lot owner may perform this action")
 
         if isinstance(action, (m.Buy, m.Sell)):
             price = building.prices.get(action.resource)
@@ -242,6 +277,7 @@ class Engine:
                 raise InvalidAction("unknown_entity", "Unknown plot")
             if any(b.plot_id == action.plot_id for b in s.buildings.values()):
                 raise InvalidAction("lot_occupied", "Construction needs a vacant plot")
+            _check_build_rights(plot, actor.id)
             if actor.money < 5000:
                 raise InvalidAction("insufficient_funds", "Construction costs 50 coins")
             actor.money -= 5000
@@ -270,6 +306,7 @@ class Engine:
                 raise InvalidAction("unknown_entity", "Unknown plot")
             if any(b.plot_id == plot.id for b in s.buildings.values()):
                 raise InvalidAction("lot_occupied", "A business needs a vacant plot")
+            _check_build_rights(plot, actor.id)
             if action.capital < MIN_CAPITAL:
                 raise InvalidAction("bad_params", f"Capital must be at least {MIN_CAPITAL} cents")
             if actor.money < action.capital:
@@ -343,9 +380,104 @@ class Engine:
                 "goals_changed",
                 dict(citizen_id=actor.id, old=old.model_dump(), new=new.model_dump()),
             )
+        elif isinstance(action, m.LeaseLot):
+            if plot.owner_id is None:
+                raise InvalidAction("bad_params", "Town land has no landlord to lease from")
+            if plot.owner_id == actor.id:
+                raise InvalidAction("bad_params", "You already own this lot")
+            if plot.tenant_id is not None:
+                raise InvalidAction("lot_occupied", "The lot is already leased")
+            if any(b.plot_id == plot.id for b in s.buildings.values()):
+                raise InvalidAction("lot_occupied", "A building already stands on this lot")
+            if actor.money < plot.rent:
+                raise InvalidAction("insufficient_funds", "Cannot afford one period of rent")
+            plot.tenant_id = actor.id
+            plot.arrears = plot.missed_periods = plot.prepaid_periods = 0
+            emit("lot_leased", _lot_payload(plot))
+        elif isinstance(action, m.SetRent):
+            old = plot.rent
+            if action.rent == old:
+                raise InvalidAction("bad_params", "Rent would not change")
+            limit = max(old * MAX_RENT_CHANGE_PERCENT // 100, MIN_RENT_STEP)
+            if plot.tenant_id is not None and abs(action.rent - old) > limit:
+                raise InvalidAction(
+                    "bad_params",
+                    f"Rent may change by at most {MAX_RENT_CHANGE_PERCENT}% ({limit} cents)",
+                )
+            plot.rent = action.rent
+            emit("rent_changed", dict(plot_id=plot.id, old_rent=old, new_rent=action.rent))
+        elif isinstance(action, m.PayRent):
+            if plot.tenant_id != actor.id:
+                raise InvalidAction("bad_params", "You do not lease this lot")
+            if plot.owner_id not in s.citizens:
+                raise InvalidAction("unknown_entity", "The landlord no longer exists")
+            if plot.arrears:
+                amount = plot.arrears
+            elif plot.rent == 0:
+                raise InvalidAction("bad_params", "This lot has no rent to pay")
+            elif plot.prepaid_periods >= MAX_PREPAID_PERIODS:
+                raise InvalidAction(
+                    "bad_params", f"Rent is already paid {MAX_PREPAID_PERIODS} periods ahead"
+                )
+            else:
+                amount = plot.rent
+            if actor.money < amount:
+                raise InvalidAction("insufficient_funds", "Insufficient funds for rent")
+            if plot.arrears:
+                plot.arrears = plot.missed_periods = 0
+            else:
+                plot.prepaid_periods += 1
+            self._pay_rent(plot, actor, amount, actor.id, action.rationale)
+        elif isinstance(action, m.Evict):
+            if plot.tenant_id is None:
+                raise InvalidAction("bad_params", "The lot has no tenant")
+            if plot.missed_periods < EVICTION_PERIODS:
+                raise InvalidAction(
+                    "bad_params",
+                    f"Eviction needs {EVICTION_PERIODS} missed rent periods "
+                    f"({plot.missed_periods} so far)",
+                )
+            evicted = _lot_payload(plot)
+            for building in sorted(s.buildings.values(), key=lambda b: b.id):
+                if building.plot_id == plot.id and building.owner_id == plot.tenant_id:
+                    self._close(building, actor.id, action.rationale)
+            plot.tenant_id = None
+            plot.arrears = plot.missed_periods = plot.prepaid_periods = 0
+            emit("tenant_evicted", evicted)
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
+
+    def _pay_rent(self, plot: m.Plot, tenant: m.Citizen, amount: int, actor_id, rationale):
+        """Move rent from tenant to owner; money is conserved."""
+        owner = self.state.citizens[plot.owner_id]
+        tenant.money -= amount
+        owner.money += amount
+        self.emit(
+            "transaction_completed",
+            dict(sender_id=tenant.id, recipient_id=plot.owner_id, amount=amount),
+            actor_id,
+            rationale,
+        )
+
+    def _collect_rent(self):
+        """Every RENT_PERIOD_DAYS: each tenant pays from prepaid periods or money, else falls
+        into arrears. Lots are processed in ID order; free (rent 0) leases are skipped."""
+        if self.state.tick % RENT_PERIOD_DAYS:
+            return
+        for plot in sorted(self.state.plots.values(), key=lambda p: p.id):
+            tenant = self.state.citizens.get(plot.tenant_id)
+            if tenant is None or plot.owner_id not in self.state.citizens or plot.rent == 0:
+                continue
+            if plot.prepaid_periods:
+                plot.prepaid_periods -= 1
+                self.emit("rent_covered", _lot_payload(plot), tenant.id)
+            elif tenant.money >= plot.rent:
+                self._pay_rent(plot, tenant, plot.rent, tenant.id, "Scheduled rent")
+            else:
+                plot.arrears += plot.rent
+                plot.missed_periods += 1
+                self.emit("rent_missed", _lot_payload(plot), tenant.id)
 
     def _close(self, building: m.Building, actor_id: str | None, rationale: str | None):
         """Remove a business: cash and goods go to the owner, employees are released."""
@@ -505,6 +637,7 @@ class Engine:
             building.unpaid_days = building.unpaid_days + 1 if building.id in missed_payroll else 0
             if building.unpaid_days >= BANKRUPTCY_DAYS:
                 tx._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
+        tx._collect_rent()
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:

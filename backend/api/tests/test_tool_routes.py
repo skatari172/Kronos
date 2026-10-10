@@ -371,3 +371,44 @@ def test_buy_route_maps_to_buy_action(client):
     assert (
         client.post("/api/businesses/bakery/buy", json={**body, "quantity": 0}).status_code == 422
     )
+
+
+def test_lot_reads(client):
+    listing = client.get("/api/lots").json()
+    assert [lot["lot"]["id"] for lot in listing] == [f"plot-{i}" for i in range(6)]
+    assert [lot["use"] for lot in listing] == ["business"] * 3 + ["empty", "empty", "home"]
+    home = client.get("/api/lots/plot-5").json()
+    assert (home["lot"]["owner_id"], home["lot"]["tenant_id"], home["lot"]["rent"]) == (
+        "citizen-0",
+        "citizen-5",
+        300,
+    )
+    assert [lot["lot"]["id"] for lot in client.get("/api/lots?owner=citizen-0").json()] == [
+        "plot-0",
+        "plot-5",
+    ]
+    assert [lot["lot"]["id"] for lot in client.get("/api/lots?use=home").json()] == ["plot-5"]
+    assert client.get("/api/lots?tenant=citizen-5").json()[0]["lot"]["id"] == "plot-5"
+    assert client.get("/api/lots/missing").status_code == 404
+
+
+def test_rent_routes_map_to_lot_actions(client):
+    raised = client.patch("/api/lots/plot-5/rent", json=command("citizen-0", rent=360)).json()
+    assert raised["status"] == "applied"
+    seq = raised["sequence"]
+    too_far = client.patch("/api/lots/plot-5/rent", json=command("citizen-0", seq, rent=1000))
+    assert (too_far.json()["status"], too_far.json()["error"]) == ("rejected", "bad_params")
+    seq = too_far.json()["sequence"]
+    paid = client.post("/api/lots/plot-5/pay", json=command("citizen-5", seq)).json()
+    assert paid["status"] == "applied"
+    assert client.get("/api/lots/plot-5").json()["lot"]["prepaid_periods"] == 1
+    assert client.get("/api/agents/citizen-5").json()["citizen"]["money"] == 6000 - 360
+    seq = paid["sequence"]
+    evict = client.post("/api/lots/plot-5/evict", json=command("citizen-0", seq)).json()
+    assert (evict["status"], evict["error"]) == ("rejected", "bad_params")
+    seq = evict["sequence"]
+    lease = client.post("/api/lots/plot-5/lease", json=command("citizen-6", seq)).json()
+    assert (lease["status"], lease["error"]) == ("rejected", "lot_occupied")
+    assert client.patch(
+        "/api/lots/plot-5/rent", json=command("citizen-0", rent=-1)
+    ).status_code == (422)

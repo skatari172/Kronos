@@ -39,6 +39,13 @@ world state ──observe()──▶ AgentObservation ──AgentService.decide(
   - Hunger rises by 20.
   - A citizen with no bread buys one from the cheapest bakery, and eats if hunger ≥ 20 (−30 hunger).
   - Citizens walk to a random plot.
+  - Every 7th tick (`RENT_PERIOD_DAYS`) each tenant pays rent to the lot owner, in lot ID order. A prepaid period is used first (`rent_covered`); a tenant who can't pay falls into arrears (`rent_missed`).
+
+### Lots (`Plot`)
+
+- `owner_id` (null = town land anyone may build on), `tenant_id`, `rent` (cents per period), `arrears`, `missed_periods`, `prepaid_periods`. Derived `use`: `business` (a building stands there), `home` (leased, no building) or `empty`.
+- Founding or constructing on a lot with an owner needs the owner or the tenant, else `not_owner`.
+- `lease_lot`: owned, vacant, unleased lot (`lot_occupied`), not your own, and you can afford one period. `set_rent`: owner only; while leased, at most ±20% (minimum step 100 cents); vacant lots are priced freely. `pay_rent`: clears all arrears, or prepays one period (up to 4). `evict`: owner only, tenant 3+ periods behind; arrears are written off and the tenant's business on the lot closes.
 
 ### Citizen data the AI layer uses
 
@@ -55,8 +62,8 @@ world state ──observe()──▶ AgentObservation ──AgentService.decide(
 
 ### Actions
 
-- **`AgentAction` has 33 types.** The engine runs the 16 in `engine.SUPPORTED_ACTIONS`: `buy`, `sell`, `transfer_money`, `set_price`, `produce`, `consume`, `communicate`, `construct_building`, `upgrade_building`, `move_to`, `adjust_goals`, `found_business`, `close_business`, `set_wage`, `hire`, `fire`.
-- **The other 17 are schemas only.** These are the planned job applications, trade, lots, loans, inventions and votes actions. They are rejected with `not_supported`.
+- **`AgentAction` has 33 types.** The engine runs the 20 in `engine.SUPPORTED_ACTIONS`: `buy`, `sell`, `transfer_money`, `set_price`, `produce`, `consume`, `communicate`, `construct_building`, `upgrade_building`, `move_to`, `adjust_goals`, `found_business`, `close_business`, `set_wage`, `hire`, `fire`, `lease_lot`, `set_rent`, `pay_rent`, `evict`.
+- **The other 13 are schemas only.** These are the planned job applications, trade, loans, inventions and votes actions. They are rejected with `not_supported`.
 - **Error codes:** `ActionErrorCode` in `models.py` (`insufficient_funds`, `not_owner`, `out_of_stock`, `lot_occupied`, `unknown_entity`, …).
 
 ### Providers
@@ -81,6 +88,7 @@ world state ──observe()──▶ AgentObservation ──AgentService.decide(
 | `PATCH /api/agents/{id}/goals`                                                                                                | Bounded goal-weight change                                                                                |
 | `GET /api/agents/{id}/history`, `GET /api/actions/{action_id}`                                                                | The citizen's events; an earlier action's result                                                          |
 | `GET /api/businesses`, `/{id}`; `POST /api/businesses`, `/{id}/close`, `/hire`, `/fire`, `/buy`; `PATCH /{id}/price`, `/wage` | Business reads and owner/buyer convenience routes. Body `actor_id` is the acting citizen → `ActionResult` |
+| `GET /api/lots` (filters `owner`, `tenant`, `use`), `/{id}`; `POST /api/lots/{id}/lease`, `/pay`, `/evict`; `PATCH /{id}/rent` | Lot reads and tenant/owner convenience routes. Body `actor_id` is the acting citizen → `ActionResult` |
 
 ### Extending
 
