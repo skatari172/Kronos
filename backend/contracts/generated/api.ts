@@ -2624,9 +2624,10 @@ export interface components {
         DeterminedToolCall: {
             /**
              * Endpoint
-             * @description The API endpoint to call, e.g. /api/interventions, /api/actions, /api/agents
+             * @description The toolkit API endpoint to call, e.g. /api/interventions, /api/actions
+             * @enum {string}
              */
-            endpoint: string;
+            endpoint: "/api/interventions" | "/api/actions" | "/api/agents" | "/api/simulation/tick" | "/api/simulation/play" | "/api/simulation/pause";
             /**
              * Method
              * @description HTTP method

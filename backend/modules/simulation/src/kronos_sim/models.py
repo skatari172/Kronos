@@ -1386,11 +1386,21 @@ class ToolParameters(Model):
         return {k: v for k, v in self.model_dump().items() if v is not None}
 
 
+ToolkitEndpoint = Literal[
+    "/api/interventions",
+    "/api/actions",
+    "/api/agents",
+    "/api/simulation/tick",
+    "/api/simulation/play",
+    "/api/simulation/pause",
+]
+
+
 class DeterminedToolCall(Model):
     """The toolkit endpoint determined by the LLM to implement the user query."""
 
-    endpoint: str = Field(
-        description="The API endpoint to call, e.g. /api/interventions, /api/actions, /api/agents"
+    endpoint: ToolkitEndpoint = Field(
+        description="The toolkit API endpoint to call, e.g. /api/interventions, /api/actions"
     )
     method: Literal["POST", "PATCH", "GET", "DELETE"] = Field(
         default="POST", description="HTTP method"
