@@ -38,8 +38,68 @@ function describe(event: SimulationEvent) {
       return "A citizen rethinks what matters most";
     case "action_rejected":
       return `A plan fell through · ${event.payload.message}`;
-    default:
+    case "job_applied":
+      return "A citizen applies for a job";
+    case "job_application_resolved":
+      return `Job application ${event.payload.outcome}`;
+    case "resource_gathered":
+      return `${event.payload.quantity} ${event.payload.resource} gathered`;
+    case "resource_regenerated":
+      return `The ${event.payload.resource} field regrows`;
+    case "trade_offered":
+      return "A trade is offered";
+    case "trade_accepted":
+      return "A trade is agreed";
+    case "trade_declined":
+      return "A trade is turned down";
+    case "trade_expired":
+      return "A trade offer lapses";
+    case "loan_offered":
+      return "A loan is offered";
+    case "loan_accepted":
+      return "A loan is taken";
+    case "loan_declined":
+      return "A loan is refused";
+    case "loan_repaid":
+      return "A debt is paid down";
+    case "loan_expired":
+      return "A loan offer lapses";
+    case "loan_defaulted":
+      return "A borrower defaults";
+    case "lot_leased":
+      return "A lot is leased";
+    case "rent_changed":
+      return `Rent: ${coins(event.payload.old_rent)} → ${coins(event.payload.new_rent)} coins`;
+    case "rent_covered":
+      return "Prepaid rent covers this period";
+    case "rent_missed":
+      return "A tenant misses rent";
+    case "tenant_evicted":
+      return "A tenant is evicted";
+    case "research_contributed":
+      return "Research moves forward";
+    case "invention_unlocked":
+      return "A new invention is unlocked";
+    case "license_offered":
+      return "An invention license is offered";
+    case "license_resolved":
+      return `License offer ${event.payload.status}`;
+    case "invention_adopted":
+      return "A business adopts an invention";
+    case "vote_proposed":
+      return "A town vote is proposed";
+    case "vote_cast":
+      return "A ballot is cast";
+    case "vote_closed":
+      return "The town vote closes";
+    case "policy_changed":
+      return "Town policy changes";
+    case "tax_collected":
+      return `${coins(event.payload.amount)} coins of market tax shared out`;
+    case "building_removed":
       return "A building is removed";
+    default:
+      return "Something happens in the village";
   }
 }
 export function EventLedger() {
