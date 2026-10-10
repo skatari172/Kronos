@@ -305,6 +305,7 @@ class AgentService:
             raise ProviderError("Answer cited events outside the citizen's history")
         return result
 
+
     def scheduled(self, world: WorldState) -> list[str]:
         """Citizens whose slot falls on the coming day, in stable ID order.
 

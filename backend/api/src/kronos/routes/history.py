@@ -29,6 +29,30 @@ async def events_after(
     return service.store.list_events_after(service.state.branch_id, after, limit)
 
 
+@router.get("/events", response_model=m.EventPage, summary="Page through the event log")
+async def event_log(
+    service: ServiceDependency,
+    after: int = Query(0, ge=0, description="Return events with a sequence greater than this"),
+    limit: int = Query(100, ge=1, le=500),
+    branch_id: str | None = None,
+):
+    """Events oldest first. Pass the returned `next_after` as `after` to read the next page.
+
+    Defaults to the active branch.
+    """
+    branch_id = branch_id or service.state.branch_id
+    if branch_id != service.state.branch_id:
+        service.store.world(branch_id)  # KeyError -> 404 for an unknown branch
+    found = service.store.list_events_after(branch_id, after, limit + 1)
+    page = found[:limit]
+    return m.EventPage(
+        branch_id=branch_id,
+        events=page,
+        next_after=page[-1].sequence if page else after,
+        has_more=len(found) > limit,
+    )
+
+
 @router.get(
     "/history/snapshots", response_model=list[m.SnapshotMetadata], summary="List saved checkpoints"
 )

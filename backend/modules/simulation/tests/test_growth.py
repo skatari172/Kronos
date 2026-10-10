@@ -210,3 +210,5 @@ def test_landlord_cannot_count_another_tenants_home_as_their_own():
     engine._growth_rules()
     assert engine.state.plots["plot-4"].tenant_id == worker.id
     assert engine.state.plots["plot-3"].tenant_id == "citizen-6"
+
+
