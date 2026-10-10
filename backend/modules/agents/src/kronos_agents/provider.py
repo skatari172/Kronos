@@ -1,52 +1,160 @@
 import asyncio
 import json
+import logging
 import re
-from typing import Protocol
+import zlib
+from typing import NamedTuple, Protocol
 
 from kronos_sim.models import (
     AgentAction,
     AgentObservation,
     AskResult,
-    PriceIntervention,
+    Intervention,
+    ProposalSource,
     SimulationEvent,
     WorldState,
 )
 from kronos_sim.queries import observe
 from pydantic import TypeAdapter, ValidationError
 
+logger = logging.getLogger(__name__)
+
 
 class ProviderError(ValueError):
     pass
+
+
+class FallbackPolicy(Protocol):
+    """Deterministic chooser used when the provider fails (see `kronos_agents.fallback`)."""
+
+    def choose(self, observation: AgentObservation) -> AgentAction: ...
+
+
+class Proposal(NamedTuple):
+    action: AgentAction
+    source: ProposalSource
 
 
 class LLMProvider(Protocol):
     async def complete(self, task: str, observation: dict) -> str: ...
 
 
+SUPPORTED_INTERVENTIONS = (
+    "Supported: 'Increase bread price by 40%' / 'Decrease bread price by 10%'; "
+    "'Set wages to 2 coins' / 'Raise wages by 20%' / 'Cut wages by 10%'; "
+    "'Give 5 coins to everyone' / 'Give 50 cents to Ada' / 'Take 3 coins from Ada'; "
+    "'Harvest boom' / 'Drought' / 'Add 40 wheat' / 'Remove 20 wheat' / "
+    "'Set wheat regrowth to 3'; 'Feast' / 'Famine' / 'Reduce hunger by 20 for Ada'; "
+    "'Set minimum wage to 2 coins' / 'Cap bread price at 6 coins' / "
+    "'Set market tax to 5%' / 'Remove the market tax'."
+)
+BOOM_WHEAT = 50  # "Harvest boom" adds this much wheat to the village stock; "Drought" removes it.
+FEAST_HUNGER = 30  # "Feast" lowers everyone's hunger by this; "Famine" raises it.
+_MONEY = r"(\d{1,7})\s*(coins?|cents?)"
+_EVERYONE = {"everyone", "everybody", "all", "all citizens", "the village", "the town"}
+_UP = {"increase", "raise", "add"}
+_POLICY_NAMES = {
+    "minimum wage": "min_wage",
+    "min wage": "min_wage",
+    "bread price cap": "bread_price_cap",
+    "bread cap": "bread_price_cap",
+    "market tax": "market_tax",
+    "tax": "market_tax",
+}
+
+
+def _cents(amount: str, unit: str) -> int:
+    return int(amount) * (1 if unit.lower().startswith("cent") else 100)
+
+
+def _citizen(target: str | None, citizens: dict[str, str] | None) -> str | None:
+    """None for everyone, else the citizen ID named by ID or (case-insensitive) name."""
+    if target is None or target.lower() in _EVERYONE:
+        return None
+    citizens = citizens or {}
+    if target in citizens:
+        return target
+    for cid in sorted(citizens):
+        if citizens[cid].lower() == target.lower():
+            return cid
+    raise ProviderError(f"Unknown citizen '{target}'. {SUPPORTED_INTERVENTIONS}")
+
+
+def mock_intervention(text: str, citizens: dict[str, str] | None = None) -> dict:
+    """The mock's regex grammar: one intervention command (as JSON data) or ProviderError."""
+    t = re.sub(r"\s+", " ", text).strip().rstrip(".!").strip()
+
+    def match(pattern):
+        return re.fullmatch(pattern, t, re.IGNORECASE)
+
+    if m := match(
+        r"(increase|raise|decrease|reduce|lower|cut) (?:the )?(?:price of bread|"
+        r"bread prices?) by (\d{1,3}) ?%"
+    ):
+        sign = 1 if m[1].lower() in _UP else -1
+        return {
+            "type": "modify_price",
+            "resource": "bread",
+            "scope": "all_bakeries",
+            "percent": sign * int(m[2]),
+        }
+    if m := match(r"set (?:all )?wages to " + _MONEY):
+        return {"type": "set_wage", "scope": "all_businesses", "wage": _cents(m[1], m[2])}
+    if m := match(r"(increase|raise|decrease|reduce|lower|cut) (?:all )?wages by (\d{1,3}) ?%"):
+        sign = 1 if m[1].lower() in _UP else -1
+        return {"type": "set_wage", "scope": "all_businesses", "percent": sign * int(m[2])}
+    if m := match(r"(give|grant|pay) " + _MONEY + r" to (.+)"):
+        return {
+            "type": "grant_money",
+            "amount": _cents(m[2], m[3]),
+            "citizen_id": _citizen(m[4], citizens),
+        }
+    if m := match(r"(take|remove|confiscate) " + _MONEY + r" from (.+)"):
+        return {
+            "type": "grant_money",
+            "amount": -_cents(m[2], m[3]),
+            "citizen_id": _citizen(m[4], citizens),
+        }
+    if match(r"(?:a )?(?:harvest boom|bumper harvest)"):
+        return {"type": "adjust_resource", "resource": "wheat", "stock_change": BOOM_WHEAT}
+    if match(r"(?:a )?drought"):
+        return {"type": "adjust_resource", "resource": "wheat", "stock_change": -BOOM_WHEAT}
+    if m := match(r"(add|remove) (\d{1,5}) wheat(?: (?:to|from) (?:the )?(?:fields?|stock))?"):
+        sign = 1 if m[1].lower() in _UP else -1
+        return {"type": "adjust_resource", "resource": "wheat", "stock_change": sign * int(m[2])}
+    if m := match(r"set (?:the )?wheat (?:regrowth|regen(?:eration)?) to (\d{1,4})(?: per day)?"):
+        return {"type": "adjust_resource", "resource": "wheat", "regen_per_tick": int(m[1])}
+    if m := match(r"(?:(?:hold|throw) )?(?:a )?(feast|famine)"):
+        sign = 1 if m[1].lower() == "famine" else -1
+        return {"type": "adjust_hunger", "change": sign * FEAST_HUNGER, "citizen_id": None}
+    if m := match(
+        r"(increase|raise|decrease|reduce|lower) (?:the )?hunger by (\d{1,3})(?: for (.+))?"
+    ):
+        sign = 1 if m[1].lower() in _UP else -1
+        return {
+            "type": "adjust_hunger",
+            "change": sign * int(m[2]),
+            "citizen_id": _citizen(m[3], citizens),
+        }
+    if m := match(r"set (?:the )?(minimum wage|min wage) to " + _MONEY):
+        return {"type": "set_policy", "kind": "min_wage", "value": _cents(m[2], m[3])}
+    if m := match(r"cap (?:the )?bread prices? at " + _MONEY):
+        return {"type": "set_policy", "kind": "bread_price_cap", "value": _cents(m[1], m[2])}
+    if m := match(r"set (?:the )?(?:market )?tax to (\d{1,3}) ?%"):
+        return {"type": "set_policy", "kind": "market_tax", "value": int(m[1]) * 100}
+    if m := match(r"(?:remove|lift|abolish) (?:the )?(" + "|".join(_POLICY_NAMES) + ")"):
+        return {"type": "set_policy", "kind": _POLICY_NAMES[m[1].lower()], "value": 0}
+    raise ProviderError(SUPPORTED_INTERVENTIONS)
+
+
 class MockProvider:
     """Narrow, honest grammar; no paid service or invented interpretation."""
 
+    source = "mock"  # Proposal source recorded in history; real providers default to "llm".
+
     async def complete(self, task: str, observation: dict) -> str:
         if task == "intervention":
-            match = re.fullmatch(
-                r"\s*(increase|decrease|reduce)\s+(?:the\s+)?(?:price\s+of\s+bread|"
-                r"bread\s+prices?)\s+by\s+(\d{1,3})\s*%[.!]?\s*",
-                observation["text"],
-                re.IGNORECASE,
-            )
-            if not match:
-                raise ProviderError(
-                    "Supported: 'Increase bread price by 40%' or decrease by a percent."
-                )
-            percent = int(match[2]) * (1 if match[1].lower() == "increase" else -1)
-            return json.dumps(
-                {
-                    "type": "modify_price",
-                    "percent": percent,
-                    "resource": "bread",
-                    "scope": "all_bakeries",
-                }
-            )
+            return json.dumps(mock_intervention(observation["text"], observation.get("citizens")))
         if task == "ask":
             return json.dumps(self._answer(observation))
         return json.dumps(self._decide(observation))
@@ -107,8 +215,18 @@ class MockProvider:
 
 
 class AgentService:
-    def __init__(self, provider: LLMProvider, timeout: float = 3, retries: int = 1):
+    def __init__(
+        self,
+        provider: LLMProvider,
+        timeout: float = 3,
+        retries: int = 1,
+        round_ticks: int = 3,
+        fallback: FallbackPolicy | None = None,
+    ):
         self.provider, self.timeout, self.retries = provider, timeout, min(max(retries, 0), 2)
+        self.round_ticks = max(round_ticks, 1)
+        # Used when the provider fails; None keeps the old behavior (ProviderError propagates).
+        self.fallback = fallback
 
     async def _validated(self, task, observation, adapter):
         for attempt in range(self.retries + 1):
@@ -123,17 +241,39 @@ class AgentService:
                 if attempt == self.retries:
                     raise ProviderError("Provider returned invalid output or timed out") from exc
 
-    async def parse(self, text: str) -> PriceIntervention:
-        return await self._validated("intervention", {"text": text}, TypeAdapter(PriceIntervention))
+    async def parse(self, text: str, citizens: dict[str, str] | None = None) -> Intervention:
+        """Turn player text into one validated intervention command.
+
+        `citizens` (ID to name) lets a provider resolve "give 5 coins to Ada" to an ID.
+        """
+        observation = {"text": text, "citizens": dict(sorted((citizens or {}).items()))}
+        return await self._validated("intervention", observation, TypeAdapter(Intervention))
 
     async def decide(self, observation: AgentObservation) -> AgentAction:
         """One proposal for the observed citizen. The engine still decides if it is valid."""
-        action = await self._validated(
-            "decision", observation.model_dump(mode="json"), TypeAdapter(AgentAction)
-        )
-        if action.actor_id != observation.citizen.id:
-            raise ProviderError("Provider proposed an action for a different citizen")
-        return action
+        return (await self.proposal(observation)).action
+
+    async def proposal(self, observation: AgentObservation) -> Proposal:
+        """Like `decide`, plus who chose: the provider (`llm`/`mock`) or the `fallback`.
+
+        A provider error, timeout, invalid output or a proposal for another citizen engages
+        the fallback policy when one is configured. The source is prefixed to the rationale
+        ("[fallback] safety: ...") so event history shows it without a schema change.
+        """
+        try:
+            action = await self._validated(
+                "decision", observation.model_dump(mode="json"), TypeAdapter(AgentAction)
+            )
+            if action.actor_id != observation.citizen.id:
+                raise ProviderError("Provider proposed an action for a different citizen")
+            source: ProposalSource = getattr(self.provider, "source", "llm")
+        except ProviderError as exc:
+            if self.fallback is None:
+                raise
+            logger.info("Fallback policy for %s: %s", observation.citizen.id, exc)
+            action, source = self.fallback.choose(observation), "fallback"
+        rationale = f"[{source}] {action.rationale or ''}".strip()[:300]
+        return Proposal(action.model_copy(update={"rationale": rationale}), source)
 
     async def ask(
         self, question: str, observation: AgentObservation, events: list[SimulationEvent]
@@ -170,3 +310,35 @@ class AgentService:
             *(self.decide(observation) for observation in selected), return_exceptions=True
         )
         return [outcome for outcome in outcomes if not isinstance(outcome, BaseException)]
+    def scheduled(self, world: WorldState) -> list[str]:
+        """Citizens whose slot falls on the coming day, in stable ID order.
+
+        Each citizen decides once per round of `round_ticks` days, on day
+        `crc32(citizen_id) % round_ticks` of the round. The slot depends only on the ID,
+        so citizens arriving or leaving never shift anyone else's turn.
+        """
+        rounds = max(self.round_ticks, 1)
+        due = (world.tick + 1) % rounds
+        return [c for c in sorted(world.citizens) if decision_slot(c, rounds) == due]
+
+    async def propose(self, world: WorldState) -> list[AgentAction]:
+        """One strategic proposal per scheduled citizen; routine mechanics never call an LLM.
+
+        Calls run concurrently and fail independently: a citizen whose provider call fails
+        is skipped for this round. Nothing here touches the world's seeded RNG.
+        """
+
+        async def one(citizen_id: str) -> AgentAction | None:
+            try:
+                return await self.decide(observe(world, citizen_id))
+            except Exception as exc:  # One citizen's failure never stops others.
+                logger.warning("Skipping %s's decision this round: %s", citizen_id, exc)
+                return None
+
+        actions = await asyncio.gather(*(one(c) for c in self.scheduled(world)))
+        return [action for action in actions if action is not None]
+
+
+def decision_slot(citizen_id: str, round_ticks: int) -> int:
+    """Stable (process-independent) day within a round on which a citizen decides."""
+    return zlib.crc32(citizen_id.encode()) % max(round_ticks, 1)

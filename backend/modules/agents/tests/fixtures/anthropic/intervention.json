@@ -1,0 +1,21 @@
+{
+  "id": "msg_01KronosIntervention",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-opus-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"result\": {\"type\": \"modify_price\", \"resource\": \"bread\", \"scope\": \"all_bakeries\", \"percent\": 40}}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "stop_details": null,
+  "usage": {
+    "input_tokens": 412,
+    "output_tokens": 96,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 2950
+  }
+}

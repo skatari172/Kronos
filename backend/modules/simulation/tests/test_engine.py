@@ -4,6 +4,13 @@ from kronos_sim.models import Buy, ConstructBuilding, PriceIntervention, SetPric
 from kronos_sim.seed import initial_world
 from pydantic import ValidationError
 
+MEMORY_FIELDS = {"memories", "memory_summary", "memory_tally"}
+
+
+def holdings(citizens):
+    """Citizens without their memories: what an event may not change when nothing moves."""
+    return {cid: c.model_dump(exclude=MEMORY_FIELDS) for cid, c in citizens.items()}
+
 
 def test_tick_is_seeded_ordered_and_does_not_mutate_input():
     state = initial_world()
@@ -33,6 +40,11 @@ def test_higher_price_changes_affordability_without_scripted_outcome():
     assert changed.state.buildings["bakery"].prices["bread"] == 700
     assert changed.state.citizens == state.citizens
     expensive = Engine(changed.state).tick([purchase])
+    assert holdings(changed.state.citizens) == holdings(state.citizens)
+    assert changed.state.citizens["citizen-1"].memories == [
+        "Bread at Hearth & Grain went from 500 to 700 cents"
+    ]
+    expensive = Engine(changed.state).tick()
     assert original.state.citizens["citizen-6"].money == 50
     assert expensive.state.citizens["citizen-6"].money == 550
     assert (
@@ -287,7 +299,7 @@ def test_hiring_firing_and_wages():
     )
     assert hired.state.citizens["citizen-5"].employer_id == "market"
     assert [e.type for e in hired.events] == ["job_application_resolved", "employment_changed"]
-    assert hired.state.job_applications == {}
+    assert hired.state.job_applications["application-main-1"].status == "hired"
     raised = Engine(hired.state).apply(
         SetWage(actor_id="citizen-2", building_id="market", wage=400)
     )
@@ -619,7 +631,8 @@ def test_owner_rejects_an_application():
         Engine(state).apply(reject.model_copy(update={"actor_id": "citizen-0"}))
     assert error.value.code == "not_owner"
     result = Engine(state).apply(reject)
-    assert result.state.job_applications == {}
+    assert _pending(result.state) == {}
+    assert result.state.job_applications["application-main-1"].status == "rejected"
     assert result.state.citizens["citizen-5"].employer_id is None
     assert result.events[0].payload.outcome == "rejected"
     assert result.state.citizens["citizen-5"].memories[-1] == (
@@ -638,7 +651,10 @@ def test_hire_withdraws_the_applicants_other_applications():
     result = Engine(state).apply(
         Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
     )
-    assert result.state.job_applications == {}
+    assert {a.building_id: a.status for a in result.state.job_applications.values()} == {
+        "farm": "rejected",
+        "market": "hired",
+    }
     assert [(e.type, getattr(e.payload, "outcome", None)) for e in result.events] == [
         ("job_application_resolved", "accepted"),
         ("employment_changed", None),
@@ -657,7 +673,7 @@ def test_unanswered_applications_resolve_on_the_next_tick():
     first, second = Engine(state).tick(), Engine(state).tick()
     assert first == second
     after = first.state
-    assert after.job_applications == {}
+    assert _pending(after) == {}
     assert after.citizens["citizen-6"].employer_id == "market"  # First come, first served.
     assert after.citizens["citizen-5"].employer_id is None
     resolved = [
@@ -682,6 +698,18 @@ def test_closing_business_immediately_rejects_pending_applications():
     assert event.payload.outcome == "rejected" and event.actor_id == "citizen-2"
     following = Engine(closed.state).tick()
     assert not any(e.type == "job_application_resolved" for e in following.events)
+def test_applications_to_vanished_businesses_are_withdrawn():
+    state = apply_job(initial_world(), "citizen-5", "market").state
+    del state.buildings["market"]  # Gone without _close (e.g. an older saved world).
+    result = Engine(state).tick()
+    assert _pending(result.state) == {}
+    assert result.state.job_applications["application-main-1"].status == "rejected"
+    event = next(e for e in result.events if e.type == "job_application_resolved")
+    assert event.payload.outcome == "withdrawn" and event.actor_id is None
+
+
+def _pending(state):
+    return {k: a for k, a in state.job_applications.items() if a.status == "pending"}
 
 
 def test_worlds_saved_before_job_applications_still_load():
@@ -727,7 +755,10 @@ def test_trade_offer_is_pending_until_accepted_and_swap_conserves_goods():
     )
     assert offered.events[0].type == "trade_offered"
     assert offer.event_id == offered.events[0].id
-    assert offered.state.citizens == state.citizens  # Nothing moves on offer.
+    assert holdings(offered.state.citizens) == holdings(state.citizens)  # Nothing moves.
+    assert offered.state.citizens["citizen-6"].memories == [
+        "Elena offered me a trade (offer-main-1)"
+    ]
     assert [o.id for o in observe(offered.state, "citizen-6").incoming_offers] == [offer_id]
     assert observe(offered.state, "citizen-0").incoming_offers == []
     assert [o.id for o in offers(offered.state, "citizen-0").outgoing] == [offer_id]
@@ -824,7 +855,7 @@ def test_offers_expire_after_ttl_days():
     assert result.state.trade_offers == {}
     expired = [e for e in result.events if e.type == "trade_expired"]
     assert len(expired) == 1 and expired[0].actor_id is None
-    assert result.state.citizens["citizen-0"].memories[-1] == "Trade offer-main-1 with Finn expired"
+    assert "Trade offer-main-1 with Finn expired" in result.state.citizens["citizen-0"].memories
 
 
 def test_old_worlds_without_offers_still_load():
@@ -910,3 +941,21 @@ def test_eviction_closes_the_tenants_business_on_the_lot():
     assert not any(b.plot_id == "plot-5" for b in result.state.buildings.values())
     assert result.state.citizens["citizen-5"].money == 6000
     assert [e.type for e in result.events][-2:] == ["building_removed", "tenant_evicted"]
+
+
+def test_rejected_tick_proposal_is_logged_and_remembered_without_side_effects():
+    state = initial_world()
+    bad = TransferMoney(actor_id="citizen-6", recipient_id="citizen-0", amount=10**9)
+    plain, with_bad = Engine(state).tick(), Engine(state).tick([bad])
+    assert with_bad.rejected_actions == ["Insufficient funds"]
+    assert with_bad.state.rng_state == plain.state.rng_state
+    assert with_bad.state.citizens["citizen-6"].money == plain.state.citizens["citizen-6"].money
+    rejection = with_bad.events[-1]
+    assert rejection.type == "action_rejected" and rejection.actor_id == "citizen-6"
+    assert rejection.payload.code == "insufficient_funds"
+    assert rejection.action_id == f"action-main:{plain.sequence}"
+    memories = with_bad.state.citizens["citizen-6"].memories
+    assert memories[-1] == "Rejected transfer_money: Insufficient funds"
+    # A proposal from an unknown citizen has nobody to remember it; the day still runs.
+    ghost = TransferMoney(actor_id="nobody", recipient_id="citizen-0", amount=1)
+    assert Engine(state).tick([ghost]).state == plain.state

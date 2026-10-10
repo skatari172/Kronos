@@ -1,20 +1,58 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import {
-  ContactShadows,
-  Html,
-  OrbitControls,
-  RoundedBox,
-} from "@react-three/drei";
+import { Html, OrbitControls } from "@react-three/drei";
 import { Group, MathUtils, Vector3 } from "three";
 import { activityCue } from "../api/format";
 import type { Building, Citizen } from "../api/types";
+import { coins } from "../api/format";
 import { usePresentation, useWorld } from "../stores/world";
+import { characterModel, hash } from "./assets";
+import { BuildingLife } from "./BuildingLife";
+import { Ground } from "./Ground";
+import { joinCrowd, keepApart } from "./crowd";
+import { CharacterModel, type Motion } from "./Models";
+import { preloadModels } from "./preload";
+import { useTown } from "./progress";
+import { startRoutine, startSpot, stepRoutine } from "./routine";
+import { stepSpring, type Spring } from "./spring";
+import { Selection, type LabelPortal } from "./Selection";
+import type { Town } from "./town";
+
+preloadModels();
 
 type Entity =
   { kind: "building"; value: Building } | { kind: "citizen"; value: Citizen };
-type LabelPortal = { current: HTMLDivElement };
 type Visual = { entity: Entity; leaving: boolean; fresh: boolean };
+
+const CAMERA: [number, number, number] = [14, 14, 16];
+const FACING_VIEWER = Math.atan2(CAMERA[0], CAMERA[2]);
+const KIND_NAMES: Record<Building["kind"], string> = {
+  farm: "Farm",
+  bakery: "Bakery",
+  market: "Market",
+};
+
+function BuildingLabel({
+  building,
+  portal,
+}: {
+  building: Building;
+  portal: LabelPortal;
+}) {
+  const details = [
+    KIND_NAMES[building.kind],
+    `Level ${building.level}`,
+    building.kind === "bakery" ? `${coins(building.prices.bread)} / loaf` : "",
+  ].filter(Boolean);
+  return (
+    <Html portal={portal} zIndexRange={[10, 0]} center position={[0, 2.9, 0]}>
+      <span className="scene-label selected">
+        {building.name}
+        <span>{details.join(" · ")}</span>
+      </span>
+    </Html>
+  );
+}
 
 function EntityRenderer({
   entity,
@@ -22,7 +60,8 @@ function EntityRenderer({
   fresh,
   done,
   portal,
-}: Visual & { done: () => void; portal: LabelPortal }) {
+  town,
+}: Visual & { done: () => void; portal: LabelPortal; town: Town }) {
   const group = useRef<Group>(null);
   const ring = useRef<import("three").Mesh>(null);
   const events = useWorld((s) => s.events);
@@ -35,30 +74,67 @@ function EntityRenderer({
     lastCue.current = cue?.id;
   }, [cue?.id]);
   const size = useRef(fresh ? 0.01 : 1);
+  const body = useRef<Group>(null);
+  const size = useRef<Spring>({ value: fresh ? 0 : 1, velocity: 0 });
+  const motion = useRef<Motion>({ speed: 0, pose: "idle" });
   const selected = usePresentation((s) => s.selectedId === entity.value.id);
   const select = usePresentation((s) => s.select);
-  const position = useRef(
-    new Vector3(entity.value.position.x, 0, entity.value.position.z),
-  );
-  const target = new Vector3(
-    entity.value.position.x,
-    0,
-    entity.value.position.z,
-  );
-  const isBuilding = entity.kind === "building";
-  const level = isBuilding ? entity.value.level : 1;
+  const seed = hash(entity.value.id);
+  const home = new Vector3(entity.value.position.x, 0, entity.value.position.z);
+  // Villagers begin spread across the town rather than on the main street.
+  const [start] = useState(() => {
+    if (entity.kind !== "citizen") return home;
+    const lane = ((seed % 5) - 2) * 0.13;
+    const spot = startSpot(
+      entity.value,
+      useWorld.getState().update!.state,
+      town,
+      lane,
+    );
+    return new Vector3(spot.x, 0, spot.z);
+  });
+  const position = useRef(start.clone());
+  const routine = useRef(startRoutine(town, start, seed));
+  const townRef = useRef(town);
+  useEffect(() => {
+    townRef.current = town;
+  }, [town]);
+  useEffect(() => {
+    if (entity.kind !== "citizen" || leaving) return;
+    return joinCrowd(entity.value.id, position.current);
+  }, [entity.kind, entity.value.id, leaving]);
+
   useFrame((_, dt) => {
     if (!group.current) return;
-    // Waypoint route uses the central lane; per-frame transforms stay outside React/Zustand.
     const p = position.current;
-    const waypoint =
-      Math.abs(p.x - target.x) > 0.04 && Math.abs(p.z) > 0.04
-        ? new Vector3(p.x, 0, 0)
-        : Math.abs(p.x - target.x) > 0.04
-          ? new Vector3(target.x, 0, 0)
-          : target;
-    if (isBuilding) p.copy(target);
-    else p.lerp(waypoint, 1 - Math.exp(-3 * dt));
+    if (entity.kind === "building") {
+      group.current.position.copy(home);
+      return;
+    }
+    if (!leaving) {
+      const { speed, heading } = stepRoutine(
+        routine.current,
+        p,
+        Math.min(dt, 0.1),
+        entity.value,
+        useWorld.getState().update!.state,
+        townRef.current,
+      );
+      // Step around anyone already standing here.
+      keepApart(entity.value.id, p, seed);
+      motion.current.speed = speed;
+      motion.current.pose = routine.current.pose;
+      // Face the road while walking; turn more gently into a break.
+      if (body.current) {
+        const turn =
+          MathUtils.euclideanModulo(
+            heading - body.current.rotation.y + Math.PI,
+            Math.PI * 2,
+          ) - Math.PI;
+        body.current.rotation.y +=
+          turn * (1 - Math.exp((speed ? -12 : -4) * dt));
+      }
+    }
     group.current.position.copy(p);
     pulse.current = Math.max(0, pulse.current - dt);
     if (ring.current) {
@@ -73,120 +149,66 @@ function EntityRenderer({
     );
     group.current.scale.setScalar(size.current);
     if (leaving && size.current < 0.02) done();
+    // New villagers pop in; departing ones shrink away.
+    if (leaving)
+      size.current.value = MathUtils.damp(size.current.value, 0, 7, dt);
+    else stepSpring(size.current, 1, dt);
+    group.current.scale.setScalar(Math.max(0.0001, size.current.value));
+    if (leaving && size.current.value < 0.02) done();
   });
-  const color = isBuilding
-    ? { farm: "#d8b476", bakery: "#e8c6a2", market: "#b3c8b1" }[
-        entity.value.kind
-      ]
-    : "#f0c79a";
+
   return (
     <group
       ref={group}
-      position={[target.x, 0, target.z]}
+      position={[start.x, 0, start.z]}
+      scale={
+        entity.kind === "building" ? 1 : Math.max(0.0001, size.current.value)
+      }
       onClick={(e) => {
         e.stopPropagation();
         if (!leaving) select(entity.value.id);
       }}
     >
-      {isBuilding ? (
+      {entity.kind === "building" ? (
         <>
-          <RoundedBox
-            args={[2.1, 1.6, 1.65]}
-            position={[0, 0.9, 0]}
-            radius={0.05}
-            castShadow
-            receiveShadow
-          >
-            <meshStandardMaterial color={color} roughness={0.9} />
-          </RoundedBox>
-          <mesh
-            position={[0, 2.05, 0]}
-            rotation={[0, Math.PI / 4, 0]}
-            castShadow
-          >
-            <coneGeometry args={[1.85, 1.1, 4]} />
-            <meshStandardMaterial
-              color={entity.value.kind === "bakery" ? "#a35a42" : "#546d59"}
+          <Suspense fallback={null}>
+            <BuildingLife
+              building={entity.value}
+              fresh={fresh}
+              leaving={leaving}
+              onGone={done}
             />
-          </mesh>
-          <mesh position={[0, 0.52, 0.84]}>
-            <boxGeometry args={[0.45, 0.9, 0.06]} />
-            <meshStandardMaterial color="#514137" />
-          </mesh>
-          {[-0.65, 0.65].map((x) => (
-            <mesh key={x} position={[x, 1.08, 0.85]}>
-              <boxGeometry args={[0.32, 0.4, 0.06]} />
-              <meshStandardMaterial
-                color="#ffc575"
-                emissive="#e8a34d"
-                emissiveIntensity={0.3}
-              />
-            </mesh>
-          ))}
-          {entity.value.kind === "farm" &&
-            Array.from({ length: 12 }, (_, i) => (
-              <mesh
-                key={i}
-                position={[
-                  (i % 4) * 0.45 - 0.7,
-                  0.25,
-                  -1.3 - Math.floor(i / 4) * 0.35,
-                ]}
-              >
-                <boxGeometry args={[0.12, 0.45, 0.12]} />
-                <meshStandardMaterial color="#d6b45e" />
-              </mesh>
-            ))}
-          <Html
-            portal={portal}
-            zIndexRange={[10, 0]}
-            center
-            position={[0, 3.0, 0]}
-          >
-            <button
-              className={`scene-label ${selected ? "selected" : ""}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                select(entity.value.id);
-              }}
-            >
-              {entity.value.name}
-              {entity.value.kind === "bakery" && (
-                <span>
-                  {(entity.value.prices.bread / 100).toFixed(2)} / loaf
-                </span>
-              )}
-            </button>
-          </Html>
+          </Suspense>
+          {selected && (
+            <BuildingLabel building={entity.value} portal={portal} />
+          )}
+          {selected && <Selection radius={1.7} />}
         </>
       ) : (
         <>
-          <mesh position={[0, 0.52, 0]} castShadow>
-            <capsuleGeometry args={[0.17, 0.36, 4, 8]} />
-            <meshStandardMaterial
-              color={
-                ["#819bca", "#c58364", "#d8b95d"][entity.value.name.length % 3]
-              }
-            />
-          </mesh>
-          <mesh position={[0, 0.96, 0]} castShadow>
-            <sphereGeometry args={[0.18, 12, 12]} />
-            <meshStandardMaterial color={color} />
-          </mesh>
-          <mesh position={[0, 1.1, 0]}>
-            <coneGeometry args={[0.25, 0.16, 8]} />
-            <meshStandardMaterial color="#6b5a3c" />
-          </mesh>
+          <group ref={body} rotation={[0, FACING_VIEWER, 0]}>
+            <Suspense fallback={null}>
+              <CharacterModel
+                url={characterModel(entity.value)}
+                motion={motion}
+                phase={(seed % 97) / 97}
+              />
+            </Suspense>
+          </group>
           {selected && (
             <Html
               portal={portal}
               zIndexRange={[10, 0]}
               center
-              position={[0, 1.6, 0]}
+              position={[0, 1.25, 0]}
             >
-              <span className="scene-label">{entity.value.name}</span>
+              <span className="scene-label selected">
+                {entity.value.name}
+                <span>{entity.value.occupation}</span>
+              </span>
             </Html>
           )}
+          {selected && <Selection radius={0.32} />}
         </>
       )}
       <mesh
@@ -214,7 +236,7 @@ function EntityRenderer({
   );
 }
 
-function Entities({ portal }: { portal: LabelPortal }) {
+function Entities({ portal, town }: { portal: LabelPortal; town: Town }) {
   const world = useWorld((s) => s.update!.state);
   const [visuals, setVisuals] = useState<Record<string, Visual>>(() =>
     Object.fromEntries([
@@ -259,6 +281,7 @@ function Entities({ portal }: { portal: LabelPortal }) {
     <EntityRenderer
       key={id}
       portal={portal}
+      town={town}
       {...visual}
       done={() =>
         setVisuals((previous) => {
@@ -270,25 +293,6 @@ function Entities({ portal }: { portal: LabelPortal }) {
       }
     />
   ));
-}
-
-function Tree({ x, z, scale = 1 }: { x: number; z: number; scale?: number }) {
-  return (
-    <group position={[x, 0, z]} scale={scale}>
-      <mesh position={[0, 0.65, 0]} castShadow>
-        <cylinderGeometry args={[0.12, 0.16, 1.3, 6]} />
-        <meshStandardMaterial color="#665440" />
-      </mesh>
-      <mesh position={[0, 1.6, 0]} castShadow>
-        <icosahedronGeometry args={[0.85, 0]} />
-        <meshStandardMaterial color="#4e7659" />
-      </mesh>
-      <mesh position={[0.25, 2.1, 0]} castShadow>
-        <icosahedronGeometry args={[0.6, 0]} />
-        <meshStandardMaterial color="#6b9169" />
-      </mesh>
-    </group>
-  );
 }
 
 function ResponsiveCamera() {
@@ -303,10 +307,16 @@ function ResponsiveCamera() {
     camera.zoom = Math.min(44, width / span);
     camera.updateProjectionMatrix();
   }, [camera, width, span]);
+  const height = useThree((state) => state.size.height);
+  useEffect(() => {
+    camera.zoom = MathUtils.clamp(Math.min(width / 37, height / 21), 10, 90);
+    camera.updateProjectionMatrix();
+  }, [camera, width, height]);
   return null;
 }
 
-export function Village() {
+/** `autoRotate` slowly circles the town (time-lapse mode). */
+export function Village({ autoRotate = false }: { autoRotate?: boolean }) {
   const epoch = useWorld((s) => s.epoch);
   const plots = useWorld((s) => s.update!.state.plots);
   const plotList = Object.values(plots);
@@ -318,6 +328,7 @@ export function Village() {
     7,
     ...plotList.map((p) => Math.abs(p.position.z) + 3),
   );
+  const town = useTown();
   const [labelElement, setLabelElement] = useState<HTMLDivElement | null>(null);
   const portal = useMemo(() => ({ current: labelElement! }), [labelElement]);
   return (
@@ -326,27 +337,28 @@ export function Village() {
       {labelElement && (
         <Canvas
           shadows
+          flat
           orthographic
-          camera={{ position: [14, 14, 16], zoom: 44, near: 0.1, far: 100 }}
+          camera={{ position: CAMERA, zoom: 40, near: 0.1, far: 100 }}
           onPointerMissed={(event) => {
             if ((event.target as HTMLElement).tagName === "CANVAS")
               usePresentation.getState().select(null);
           }}
         >
           <ResponsiveCamera />
-          <color attach="background" args={["#b7c5b1"]} />
-          <fog attach="fog" args={["#b7c5b1", 28, 65]} />
-          <ambientLight intensity={1.1} />
+          <hemisphereLight args={["#ffffff", "#c9cbbd", 1.05]} />
           <directionalLight
             castShadow
-            position={[-8, 15, 6]}
-            intensity={2.2}
-            shadow-mapSize={[2048, 2048]}
-            shadow-camera-left={-14}
-            shadow-camera-right={14}
-            shadow-camera-top={14}
-            shadow-camera-bottom={-14}
-            shadow-bias={-0.001}
+            color="#fff1dc"
+            position={[-12, 20, 9]}
+            intensity={1.55}
+            shadow-mapSize={[4096, 4096]}
+            shadow-camera-left={-24}
+            shadow-camera-right={24}
+            shadow-camera-top={24}
+            shadow-camera-bottom={-24}
+            shadow-bias={-0.0005}
+            shadow-normalBias={0.02}
           />
           <Suspense fallback={null}>
             <RoundedBox
@@ -405,11 +417,15 @@ export function Village() {
               blur={2}
               far={5}
             />
+            <Ground key={`ground:${epoch}`} portal={portal} town={town} />
+            <Entities key={epoch} portal={portal} town={town} />
           </Suspense>
           <OrbitControls
             makeDefault
-            minZoom={12}
-            maxZoom={85}
+            autoRotate={autoRotate}
+            autoRotateSpeed={0.6}
+            minZoom={8}
+            maxZoom={260}
             minPolarAngle={0.4}
             maxPolarAngle={1.2}
             enablePan={false}

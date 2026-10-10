@@ -71,6 +71,12 @@ def observe(
         ][:8],
         incoming_offers=offers(state, citizen_id).incoming[:8],
         ties=strongest_ties(state, citizen_id),
+        open_jobs=job_openings(state),
+        businesses=[
+            business_profile(state, b.id)
+            for b in sorted(state.buildings.values(), key=lambda b: b.id)
+            if b.owner_id == citizen_id
+        ],
     )
 
 
@@ -215,8 +221,14 @@ def resource_stocks(state: m.WorldState) -> list[m.ResourceStock]:
 
 
 def job_openings(state: m.WorldState) -> list[m.JobOpening]:
-    """Businesses with at least one free slot, in building ID order."""
-    applications = sorted(state.job_applications.values(), key=lambda a: a.sequence)
+    """Businesses with at least one free slot, in building ID order.
+
+    Only pending applications are listed; resolved (hired/rejected) records are kept as history.
+    """
+    applications = sorted(
+        (a for a in state.job_applications.values() if a.status == "pending"),
+        key=lambda a: a.sequence,
+    )
     openings = []
     for building_id in sorted(state.buildings):
         view = business_profile(state, building_id)

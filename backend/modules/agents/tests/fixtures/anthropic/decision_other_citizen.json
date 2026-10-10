@@ -1,0 +1,26 @@
+{
+  "id": "msg_01KronosDecisionWrongActor",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-opus-5-5",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "",
+      "signature": "EqQBCkYIBxgCKkDfixture"
+    },
+    {
+      "type": "text",
+      "text": "{\"result\": {\"type\": \"consume\", \"actor_id\": \"citizen-0\", \"rationale\": \"Elena should eat.\"}}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "stop_details": null,
+  "usage": {
+    "input_tokens": 412,
+    "output_tokens": 96,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 2950
+  }
+}

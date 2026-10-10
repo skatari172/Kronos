@@ -102,6 +102,20 @@ class Citizen(Model):
     research_until_tick: int = Field(
         default=0, ge=0, description="Last day of time-mode research; wages are skipped until then"
     )
+    destitute_days: int = Field(
+        default=0,
+        ge=0,
+        description="Consecutive days ending with hunger 100 and no money; 3 means they leave",
+    )
+    memory_summary: str = Field(
+        default="",
+        max_length=400,
+        description="Rolling digest of routine events and memories older than the 8-line window",
+    )
+    memory_tally: dict[str, int] = Field(
+        default_factory=dict,
+        description="Counters behind memory_summary (wages, purchases, meals, folded lines)",
+    )
 
 
 class Plot(Model):
@@ -161,14 +175,24 @@ def default_resources() -> dict[str, ResourceStock]:
     return {"wheat": ResourceStock(kind="wheat", stock=120, regen_per_tick=6, cap=200)}
 
 
+JobApplicationStatus = Literal["pending", "hired", "rejected"]
+
+
 class JobApplication(Model):
-    """A pending request to work at a business. Resolved by the owner or the next daily tick."""
+    """A request to work at a business. Resolved by the owner or the next daily tick.
+
+    Resolved applications keep their record with status `hired` or `rejected` (a withdrawn
+    application counts as rejected); only `pending` ones are open.
+    """
 
     id: str
     citizen_id: str
     building_id: str
     tick: int = Field(ge=0, description="Tick when the citizen applied")
     sequence: int = Field(ge=0, description="World sequence when applied; orders first-come")
+    status: JobApplicationStatus = Field(
+        default="pending", description="pending until hired or rejected"
+    )
 
 
 LoanStatus = Literal["offered", "active", "repaid", "defaulted", "declined", "expired"]
@@ -294,7 +318,8 @@ class WorldState(Model):
     plots: dict[str, Plot]
     resources: dict[str, ResourceStock] = Field(default_factory=default_resources)
     job_applications: dict[str, JobApplication] = Field(
-        default_factory=dict, description="Pending job applications by ID"
+        default_factory=dict,
+        description="Job applications by ID; resolved ones keep their status",
     )
 
     loans: dict[str, Loan] = Field(default_factory=dict)
@@ -1059,6 +1084,17 @@ class LotLeased(EventBase):
     payload: LotPayload
 
 
+class PlotOpenedPayload(LotPayload):
+    position: Position
+
+
+class PlotOpened(EventBase):
+    """The village grew: a new town-land lot opened on the outer ring."""
+
+    type: Literal["plot_opened"] = "plot_opened"
+    payload: PlotOpenedPayload
+
+
 class RentChangePayload(Model):
     plot_id: str
     old_rent: int
@@ -1106,10 +1142,117 @@ class CitizenInteracted(EventBase):
     payload: InteractionPayload
 
 
-class InterventionPayload(Model):
-    text: str
+class PriceIntervention(Model):
+    """Change every bakery's bread price by a percentage."""
+
+    type: Literal["modify_price"] = "modify_price"
+    resource: Literal["bread"] = "bread"
     scope: Literal["all_bakeries"] = "all_bakeries"
-    percent: int
+    percent: int = Field(ge=-90, le=200)
+
+
+class WageIntervention(Model):
+    """Set every business's daily wage, either to `wage` cents or by `percent`."""
+
+    type: Literal["set_wage"] = "set_wage"
+    scope: Literal["all_businesses"] = "all_businesses"
+    wage: int | None = Field(default=None, gt=0, le=1000000, description="New wage in cents")
+    percent: int | None = Field(default=None, ge=-90, le=200, description="Relative change")
+
+    @model_validator(mode="after")
+    def _one(self):
+        if (self.wage is None) == (self.percent is None):
+            raise ValueError("give exactly one of wage or percent")
+        return self
+
+
+class GrantIntervention(Model):
+    """Money from outside the economy: positive gives, negative takes (never below zero)."""
+
+    type: Literal["grant_money"] = "grant_money"
+    citizen_id: str | None = Field(default=None, description="One citizen; null = everyone")
+    amount: int = Field(ge=-1000000, le=1000000, description="Cents per citizen; not zero")
+
+    @model_validator(mode="after")
+    def _nonzero(self):
+        if self.amount == 0:
+            raise ValueError("amount must not be zero")
+        return self
+
+
+class ResourceIntervention(Model):
+    """Harvest boom or drought: change a natural stock and/or its daily regrowth."""
+
+    type: Literal["adjust_resource"] = "adjust_resource"
+    resource: NaturalResource = "wheat"
+    stock_change: int = Field(
+        default=0, ge=-10000, le=10000, description="Added to the stock (clamped at zero)"
+    )
+    regen_per_tick: int | None = Field(
+        default=None, ge=0, le=1000, description="New daily regrowth; null keeps it"
+    )
+
+    @model_validator(mode="after")
+    def _changes(self):
+        if not self.stock_change and self.regen_per_tick is None:
+            raise ValueError("change the stock or the regrowth")
+        return self
+
+
+class HungerIntervention(Model):
+    """Feast (negative change) or famine (positive change); hunger stays within 0..100."""
+
+    type: Literal["adjust_hunger"] = "adjust_hunger"
+    citizen_id: str | None = Field(default=None, description="One citizen; null = everyone")
+    change: int = Field(ge=-100, le=100, description="Added to hunger; not zero")
+
+    @model_validator(mode="after")
+    def _nonzero(self):
+        if self.change == 0:
+            raise ValueError("change must not be zero")
+        return self
+
+
+class PolicyIntervention(Model):
+    """Put a town policy in force directly, without a vote. 0 lifts it."""
+
+    type: Literal["set_policy"] = "set_policy"
+    kind: VoteKind
+    value: int = Field(ge=0, le=1000000, description="Cents, or basis points for market_tax")
+
+    @model_validator(mode="after")
+    def _bounds(self):
+        if self.kind == "market_tax" and self.value > 10000:
+            raise ValueError("market tax is at most 10000 basis points")
+        return self
+
+
+Intervention = Annotated[
+    PriceIntervention
+    | WageIntervention
+    | GrantIntervention
+    | ResourceIntervention
+    | HungerIntervention
+    | PolicyIntervention,
+    Field(discriminator="type"),
+]
+InterventionKind = Literal[
+    "modify_price", "set_wage", "grant_money", "adjust_resource", "adjust_hunger", "set_policy"
+]
+
+
+class InterventionPayload(Model):
+    """`kind` names the intervention; `command` is the full parsed command (absent on events
+    saved before other kinds existed). `percent` is kept for bread price changes."""
+
+    text: str
+    kind: InterventionKind = "modify_price"
+    scope: str = "all_bakeries"
+    percent: int | None = None
+    command: Intervention | None = None
+    affected_ids: list[str] = Field(
+        default_factory=list, description="Citizens or businesses the intervention changed"
+    )
 
 
 class InterventionApplied(EventBase):
@@ -1171,6 +1314,7 @@ SimulationEvent = Annotated[
     | TaxCollected
     | InterventionApplied
     | LotLeased
+    | PlotOpened
     | RentChanged
     | RentMissed
     | RentCovered
@@ -1194,22 +1338,28 @@ class SimulationTickResult(WorldUpdate):
     action_results: list["ActionResult"] = Field(default_factory=list)
 
 
+class EventPage(Model):
+    """One page of the event log, oldest first. Pass `next_after` as `after` to read on."""
+
+    branch_id: str
+    events: list[SimulationEvent] = Field(default_factory=list)
+    next_after: int = Field(
+        ge=0, description="Sequence of the last event returned, or the requested `after` if none"
+    )
+    has_more: bool = Field(description="More events exist after `next_after`")
+
+
 class InterventionRequest(Model):
     text: str = Field(min_length=1, max_length=500)
     branch_id: str
     expected_sequence: int = Field(ge=0)
 
 
-class PriceIntervention(Model):
-    type: Literal["modify_price"] = "modify_price"
-    resource: Literal["bread"] = "bread"
-    scope: Literal["all_bakeries"] = "all_bakeries"
-    percent: int = Field(ge=-90, le=200)
-
-
 class InterventionResult(Model):
     command: PriceIntervention
     result: "ActionResult"
+    command: Intervention
+    update: WorldUpdate
 
 
 class SnapshotMetadata(Model):
@@ -1294,6 +1444,12 @@ class AgentObservation(Model):
         default_factory=list,
         description="Strongest feelings toward others: top few by |trust| or grudge",
     )
+    open_jobs: list["JobOpening"] = Field(
+        default_factory=list, description="Public job openings (businesses with a free slot)"
+    )
+    businesses: list["BusinessProfile"] = Field(
+        default_factory=list, description="Businesses this citizen owns, with their staff"
+    )
 
 
 class ActionValidationResult(Model):
@@ -1341,9 +1497,16 @@ class SpawnResult(Model):
     update: WorldUpdate
 
 
+ProposalSource = Literal["llm", "mock", "fallback"]
+
+
 class DecisionResult(Model):
     action: AgentAction
     result: ActionResult
+    source: ProposalSource = Field(
+        description="Who chose the action: a real model, the offline mock, or the utility "
+        "fallback used when the provider failed. Also prefixed to the rationale, e.g. [fallback]"
+    )
 
 
 class AskRequest(Model):

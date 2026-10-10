@@ -22,18 +22,20 @@ This directory stores the authoritative SQLite database for local KRONOS simulat
 
 The tables are deliberately simple; the world lives as JSON in `branches.state` (latest) and `snapshots.state` (every commit). Its shape is `WorldState` in `backend/modules/simulation/src/kronos_sim/models.py`, mirrored in `backend/contracts/generated/api.ts`. Money is integer cents.
 
-| Field                                                | Contents                                                                                                                       |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `branch_id`, `tick`, `sequence`, `seed`, `rng_state` | Timeline position and the seeded RNG state                                                                                     |
-| `citizens`                                           | People: money, inventory, hunger, job (`employer_id`), goal weights, reputation, memories, relationships, research in progress |
-| `buildings`                                          | Businesses: owner, plot, cash, inventory, prices, wage, job slots, unpaid days                                                 |
-| `plots`                                              | Lots: position, owner, tenant, rent, arrears                                                                                   |
-| `resources`                                          | Shared natural stocks (wheat): stock, daily regrowth, cap                                                                      |
-| `job_applications`                                   | Pending job applications                                                                                                       |
-| `trade_offers`                                       | Pending citizen-to-citizen trade offers                                                                                        |
-| `loans`                                              | Loans in every status (offered, active, repaid, defaulted, …)                                                                  |
-| `inventions`, `license_offers`                       | Research progress, owners, licensees, adopters; pending license offers                                                         |
-| `votes`, `policies`                                  | Town votes with ballots and tallies; active minimum wage, bread price cap, market tax                                          |
+| Field                                                | Contents                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `branch_id`, `tick`, `sequence`, `seed`, `rng_state` | Timeline position and the seeded RNG state                                                                                                       |
+| `citizens`                                           | People: money, inventory, hunger, `destitute_days`, job (`employer_id`), goal weights, reputation, memories, relationships, research in progress |
+| `buildings`                                          | Businesses: owner, plot, cash, inventory, prices, wage, job slots, unpaid days                                                                   |
+| `plots`                                              | Lots: position, owner, tenant, rent, arrears; six seed plots, more opened by the growth step                                                     |
+| `resources`                                          | Shared natural stocks (wheat): stock, daily regrowth, cap                                                                                        |
+| `job_applications`                                   | Job applications with `status` (`pending`, `hired`, `rejected`); resolved ones are kept                                                          |
+| `trade_offers`                                       | Pending citizen-to-citizen trade offers                                                                                                          |
+| `loans`                                              | Loans in every status (offered, active, repaid, defaulted, …)                                                                                    |
+| `inventions`, `license_offers`                       | Research progress, owners, licensees, adopters; pending license offers                                                                           |
+| `votes`, `policies`                                  | Town votes with ballots and tallies; active minimum wage, bread price cap, market tax                                                            |
+
+The v1 core is `citizens`, `buildings`, `plots`, `job_applications`, and the event ledger (see `docs/simulation-design.md`); the other fields and branch history are beyond v1 core and already implemented.
 
 Pending records are branch-scoped and survive restart. A tick saves outcomes, events, the world, and its checkpoint together before broadcasting. Forks inherit committed state and leave pending records on the source branch.
 

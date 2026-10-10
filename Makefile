@@ -3,18 +3,35 @@ UV ?= $(shell command -v uv 2>/dev/null || echo $(CURDIR)/.tools/python/bin/uv)
 PNPM ?= $(shell command -v pnpm 2>/dev/null || echo $(CURDIR)/.tools/node/node_modules/.bin/pnpm)
 export PATH := $(dir $(PNPM)):$(PATH)
 export UV_CACHE_DIR ?= $(CURDIR)/.cache/uv
+BACKEND_PORT := 8000
+FRONTEND_PORT := 5173
 
-.PHONY: help install backend frontend test lint format build contracts check reset db-init
+# Stop whatever is listening on a port, so a stale dev server never blocks a restart.
+define free_port
+	@pids=$$(lsof -ti tcp:$(1) -sTCP:LISTEN); \
+	if [ -n "$$pids" ]; then \
+		echo "Stopping existing server on port $(1)"; \
+		kill $$pids; \
+		for _ in 1 2 3 4 5 6 7 8 9 10; do lsof -ti tcp:$(1) -sTCP:LISTEN >/dev/null || break; sleep 0.5; done; \
+	fi
+endef
+
+.PHONY: help install backend frontend stop test lint format build contracts check reset db-init
 help:
-	@echo 'make install | backend | frontend | test | lint | format | build | contracts | check | reset | db-init'
+	@echo 'make install | backend | frontend | stop | test | lint | format | build | contracts | check | reset | db-init'
 install:
 	./scripts/bootstrap.sh
 	$(UV) sync --frozen
 	CI=true $(PNPM) install --frozen-lockfile
 backend:
+	$(call free_port,$(BACKEND_PORT))
 	$(UV) run python scripts/run_backend.py
 frontend:
+	$(call free_port,$(FRONTEND_PORT))
 	$(PNPM) dev
+stop:
+	$(call free_port,$(BACKEND_PORT))
+	$(call free_port,$(FRONTEND_PORT))
 test:
 	$(UV) run pytest -q
 	$(PNPM) test

@@ -286,6 +286,12 @@ def test_decide_submits_the_provider_choice(client):
     assert result["event_ids"] == [
         e["id"] for e in tick["events"] if e["action_id"] == result["action_id"]
     ]
+    assert decision["action"]["actor_id"] == "citizen-6"
+    assert decision["result"]["status"] == "applied"
+    assert decision["source"] == "mock" and decision["action"]["rationale"].startswith("[mock] ")
+    events = client.get("/api/history/events?branch_id=main").json()
+    assert [e["id"] for e in events] == decision["result"]["event_ids"]
+    assert all(e["action_id"] == decision["result"]["action_id"] for e in events)
     assert client.post("/api/agents/citizen-6/decide", json=mutation()).status_code == 409
     assert (
         client.post("/api/agents/missing/decide", json=mutation(tick["sequence"])).status_code

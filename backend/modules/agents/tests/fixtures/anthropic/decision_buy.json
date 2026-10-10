@@ -1,0 +1,26 @@
+{
+  "id": "msg_01KronosDecisionBuy",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-opus-5-5",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "",
+      "signature": "EqQBCkYIBxgCKkDfixture"
+    },
+    {
+      "type": "text",
+      "text": "{\"result\": {\"type\": \"buy\", \"actor_id\": \"citizen-5\", \"building_id\": \"bakery\", \"resource\": \"bread\", \"quantity\": 1, \"max_unit_price\": 500, \"rationale\": \"I have no bread and the bakery sells a loaf for 500 cents.\"}}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "stop_details": null,
+  "usage": {
+    "input_tokens": 412,
+    "output_tokens": 96,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 2950
+  }
+}

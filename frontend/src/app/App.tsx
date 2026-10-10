@@ -1,18 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  ArrowRight,
-  Boxes,
-  ChevronRight,
-  Circle,
-  GitBranch,
-  Globe2,
+  Clapperboard,
   Hourglass,
   Pause,
   Play,
-  RotateCcw,
   SkipForward,
-  Sparkles,
-  Sun,
 } from "lucide-react";
 import { context, connect, request } from "../api/client";
 import type {
@@ -24,11 +16,12 @@ import type {
   WorldUpdate,
 } from "../api/types";
 import { usePresentation, useWorld } from "../stores/world";
+import { useWorld } from "../stores/world";
+import { growthOf, TIERS } from "../world/progress";
 import { Village } from "../world/Village";
-import { Inspector } from "../components/Inspector";
-import { coins } from "../api/format";
-import { EventLedger } from "../components/EventLedger";
+import { useSimulation } from "./useSimulation";
 
+/** Full-screen village. Interface panels float over it as HUDs. */
 export function App() {
   const update = useWorld((s) => s.update);
   const historical = useWorld((s) => s.historical);
@@ -253,75 +246,108 @@ export function App() {
     );
   }
   if (!update)
+  const epoch = useWorld((s) => s.epoch);
+  const sim = useSimulation();
+  const [timelapse, setTimelapse] = useState(false);
+  const growth = update ? growthOf(update.state, epoch) : null;
+  const banner = useTierBanner(growth?.tier, epoch);
+
+  if (!update || !growth)
     return (
       <main className="loading">
         <Hourglass size={36} />
         <h1>KRONOS</h1>
-        <p>{error || "A small world is taking shape…"}</p>
-        {error && <button onClick={() => location.reload()}>Reconnect</button>}
+        <p>{sim.error || "A small world is taking shape…"}</p>
+        {sim.error && (
+          <button onClick={() => location.reload()}>Reconnect</button>
+        )}
       </main>
     );
-  const state = update.state;
-  const citizens = Object.values(state.citizens);
-  const avgHunger = Math.round(
-    citizens.reduce((sum, c) => sum + c.hunger, 0) / citizens.length,
-  );
-  const bread = Object.values(state.buildings).filter(
-    (b) => b.kind === "bakery",
-  );
-  const locked = busy || historical || mode !== "live";
-  const selectedSnapshot = snapshots.findIndex((s) => s.id === snapshotId);
+
+  const live = sim.mode === "live";
+  const day = String(update.state.tick + 1).padStart(2, "0");
+  const status = !live
+    ? sim.preview || "Offline preview · press ⏭ to grow the village"
+    : !sim.connected
+      ? "Reconnecting"
+      : timelapse
+        ? "Time-lapse"
+        : sim.playing
+          ? "Life in motion"
+          : "Paused";
+
+  async function toggleTimelapse() {
+    const next = !timelapse;
+    setTimelapse(next);
+    // Real simulation speed: 4× days, then back to normal.
+    await sim.setPlayback(true, next ? 4 : 1);
+  }
+
   return (
-    <div className="shell">
-      <header className="topbar">
-        <a className="brand" href="/">
-          <span className="brand-mark">
-            <Hourglass size={22} />
-          </span>
-          KRONOS
-          <span className="brand-divider" />
-          <small>THE LIVING VILLAGE</small>
-        </a>
-        <div className="top-right">
-          <span className={`connection ${connected ? "online" : ""}`}>
-            <i />
-            {mode === "offline"
-              ? "OFFLINE DEMO"
-              : connected
-                ? "WORLD CONNECTED"
-                : "RECONNECTING"}
-          </span>
-          <span className="version">EXPERIMENT 001</span>
+    <div className="stage">
+      <Village autoRotate={timelapse} />
+      <div className="growth" aria-label="Settlement growth">
+        <span>OAKHAVEN</span>
+        <strong>{growth.name}</strong>
+        <div className="growth-bar">
+          <i style={{ width: `${Math.round(growth.toNext * 100)}%` }} />
         </div>
-      </header>
-      <div className="workspace-heading">
-        <div>
-          <div className="eyebrow">
-            <Globe2 size={13} /> A WORLD OF POSSIBILITIES
-          </div>
-          <h1>
-            Small village. <em>Infinite stories.</em>
-          </h1>
+        <small>{growth.next ? `Next: ${growth.next}` : "Fully grown"}</small>
+      </div>
+      {banner && (
+        <div className="tier-banner" role="status" key={banner}>
+          <small>OAKHAVEN IS NOW A</small>
+          <strong>{banner}</strong>
         </div>
-        <div className="branch-control">
-          <GitBranch size={16} />
-          <select
-            aria-label="Active branch"
-            disabled={busy || mode !== "live"}
-            value={state.branch_id}
-            onChange={(e) => void run(() => activate(e.target.value))}
-          >
-            {mode === "offline" ? (
-              <option value="offline">Demo timeline</option>
-            ) : (
-              branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))
-            )}
-          </select>
+      )}
+      <div className="hud" role="toolbar" aria-label="Simulation controls">
+        <div className="hud-day">
+          <strong>Day {day}</strong>
+          <small>
+            <i className={live && sim.connected ? "online" : ""} />
+            {status}
+          </small>
         </div>
+        <span className="hud-divider" />
+        <button
+          className="hud-button primary"
+          aria-label={sim.playing ? "Pause simulation" : "Play simulation"}
+          disabled={!live || sim.busy}
+          onClick={() => {
+            setTimelapse(false);
+            void sim.togglePlay();
+          }}
+        >
+          {sim.playing ? <Pause size={17} /> : <Play size={17} />}
+        </button>
+        <button
+          className="hud-button"
+          aria-label={live ? "Advance one day" : "Next preview event"}
+          disabled={sim.busy || (live && sim.playing)}
+          onClick={() => void sim.step()}
+        >
+          <SkipForward size={17} />
+        </button>
+        <select
+          aria-label="Simulation speed"
+          value={sim.speed}
+          disabled={!live || sim.busy}
+          onChange={(e) => sim.changeSpeed(Number(e.target.value))}
+        >
+          <option value={1}>1×</option>
+          <option value={2}>2×</option>
+          <option value={4}>4×</option>
+        </select>
+        <button
+          className={`hud-button ${timelapse ? "active" : ""}`}
+          aria-label={timelapse ? "Stop time-lapse" : "Start time-lapse"}
+          aria-pressed={timelapse}
+          title="Time-lapse: 4× days with a slow orbit"
+          disabled={!live || sim.busy}
+          onClick={() => void toggleTimelapse()}
+        >
+          <Clapperboard size={17} />
+        </button>
       </div>
       <main className="workspace">
         <div className="main-column">
@@ -535,42 +561,31 @@ export function App() {
               </button>
             </div>
           </section>
+      {sim.error && (
+        <div className="hud-error" role="status">
+          {sim.error}
         </div>
-        <aside>
-          <Inspector />
-          <EventLedger />
-          <div className="demo-card">
-            <Boxes size={20} />
-            <div>
-              <strong>
-                {mode === "offline"
-                  ? "See the village evolve"
-                  : "Room for another story"}
-              </strong>
-              <p>
-                {mode === "offline"
-                  ? "Cycle construction, upgrades, arrival, movement, prices, and departure."
-                  : "Build a bakery on the next empty plot. Costs Marcus 50 coins."}
-              </p>
-              <button
-                disabled={busy || historical || (mode !== "offline" && playing)}
-                onClick={() =>
-                  void run(mode === "offline" ? demonstrate : construct)
-                }
-              >
-                {mode === "offline" ? "Next visual event" : "Build a bakery"}{" "}
-                <ArrowRight size={13} />
-              </button>
-            </div>
-          </div>
-        </aside>
-      </main>
-      <footer>
-        <span>
-          OBSERVE <i>→</i> INTERVENE <i>→</i> EXPLORE
-        </span>
-        <span>Every choice leaves a trace.</span>
-      </footer>
+      )}
     </div>
   );
+}
+
+/**
+ * Announce a new tier for a few seconds. Seeks and branch switches (a new
+ * epoch) set the baseline silently instead of celebrating.
+ */
+function useTierBanner(tier: number | undefined, epoch: number) {
+  const [banner, setBanner] = useState<string | null>(null);
+  const seen = useRef<{ tier?: number; epoch: number }>({ epoch });
+  useEffect(() => {
+    if (tier === undefined) return;
+    const previous = seen.current;
+    seen.current = { tier, epoch };
+    if (previous.tier === undefined || previous.epoch !== epoch) return;
+    if (tier <= previous.tier) return;
+    setBanner(TIERS[tier]);
+    const timer = setTimeout(() => setBanner(null), 4200);
+    return () => clearTimeout(timer);
+  }, [tier, epoch]);
+  return banner;
 }
