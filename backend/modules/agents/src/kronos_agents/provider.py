@@ -58,8 +58,9 @@ class MockProvider:
         bread, actor = citizen["inventory"]["bread"], {"actor_id": citizen["id"]}
         if bread and citizen["hunger"] >= 40:
             return {**actor, "type": "consume", "rationale": "I am hungry and have bread."}
-        if not bread and prices:
-            bakery = min(prices, key=lambda b: (prices[b], b))
+        stocked = [b for b in prices if observation.get("bread_stock", {}).get(b, 1) > 0]
+        if not bread and stocked:
+            bakery = min(stocked, key=lambda b: (prices[b], b))
             if citizen["money"] >= prices[bakery]:
                 return {
                     **actor,
@@ -76,9 +77,13 @@ class MockProvider:
             **actor,
             "type": "communicate",
             "recipient_id": min(observation["neighbors"]),
-            "message": "Bread is getting costly; I am watching my savings."
-            if min(prices.values()) >= 700
-            else "There is fresh bread at the bakery.",
+            "message": (
+                "There is no bread in stock right now."
+                if not stocked
+                else "Bread is getting costly; I am watching my savings."
+                if min(prices[b] for b in stocked) >= 700
+                else "There is fresh bread at the bakery."
+            ),
             "rationale": "Share the observed price with a neighbor.",
         }
 
@@ -142,8 +147,26 @@ class AgentService:
             raise ProviderError("Answer cited events outside the citizen's history")
         return result
 
-    async def propose(self, world: WorldState) -> list[AgentAction]:
-        # One strategic call every third day; routine mechanics never call an LLM.
-        if (world.tick + 1) % 3 or len(world.citizens) < 2:
-            return []
-        return [await self.decide(observe(world, max(world.citizens)))]
+    async def propose(
+        self, world: WorldState, events: list[SimulationEvent] | None = None
+    ) -> list[AgentAction]:
+        """A small post-tick decision budget; every result is a next-day proposal.
+
+        Each provider sees only its own copied observation. gather preserves citizen
+        order even when network calls finish in a different order. A failed decision
+        does not discard other citizens' decisions or interrupt the clock.
+        """
+        candidates = [
+            cid
+            for cid in sorted(world.citizens)
+            if (
+                world.citizens[cid].inventory.bread == 0
+                or any(offer.recipient_id == cid for offer in world.trade_offers.values())
+                or (world.tick > 0 and world.tick % 3 == 0)
+            )
+        ][:8]
+        selected = [observe(world, cid, events) for cid in candidates]
+        outcomes = await asyncio.gather(
+            *(self.decide(observation) for observation in selected), return_exceptions=True
+        )
+        return [outcome for outcome in outcomes if not isinstance(outcome, BaseException)]

@@ -670,6 +670,7 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
+        "research_start_tick": 0,
         "research_until_tick": 0
       },
       "citizen-1": {
@@ -702,6 +703,7 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
+        "research_start_tick": 0,
         "research_until_tick": 0
       },
       "citizen-2": {
@@ -734,6 +736,7 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
+        "research_start_tick": 0,
         "research_until_tick": 0
       },
       "citizen-3": {
@@ -766,6 +769,7 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
+        "research_start_tick": 0,
         "research_until_tick": 0
       },
       "citizen-4": {
@@ -798,6 +802,7 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
+        "research_start_tick": 0,
         "research_until_tick": 0
       },
       "citizen-5": {
@@ -830,6 +835,7 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
+        "research_start_tick": 0,
         "research_until_tick": 0
       },
       "citizen-6": {
@@ -862,6 +868,7 @@
         "memories": [],
         "reputation": 50,
         "research_invention_id": null,
+        "research_start_tick": 0,
         "research_until_tick": 0
       }
     },

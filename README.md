@@ -45,7 +45,7 @@ Root configuration files manage the shared toolchain. Each Python module has its
 - Seven citizens, farm, bakery, market, six plots, ownership, cents, wheat, bread, hunger, wages, transactions, and seeded harvest/movement.
 - Dark dashboard, isometric scene, building/citizen selection, inspector, live price labels, play/pause/step/speed, and expandable event ledger.
 - Enter **“Increase bread price by 40%.”** Prices change from 5 to 7 coins; state/events persist before the WebSocket update. Subsequent trades use the new price. Decreases work too.
-- Engine actions: buy, sell, transfer money, set price, produce, consume, communicate, construct, upgrade, move.
+- The existing 36 typed engine actions cover trade, food, business management, jobs, relationships, rent, loans, research, inventions, and votes. Gameplay submissions queue for the next tick; the engine alone validates and changes the world.
 - Build a real bakery from the dashboard; Marcus pays 50 coins and a free plot is occupied.
 - Every commit saves a complete immutable checkpoint. Seek, fork, switch branches, and restart without losing state or re-running provider calls.
 - Development preview cycles construction, upgrade, arrival, movement, price change, and departure with animation.
@@ -69,7 +69,7 @@ Swagger UI: **http://localhost:8000/docs**, grouped into User tools, Agent tools
 
 ## Deliberate limits
 
-This is a foundation, not a complete village game. The mock parser accepts percentage bread-price changes only; unsupported natural language returns a clear error. Strategies are deterministic neighbor conversations every third tick, with bounded memory/trust effects. A configurable provider interface exists; no real LLM adapter is bundled and the mock ignores model selection. Citizens are rule-driven for daily routines. Population changes are visual fixtures only; real citizen lifecycle mechanics remain an extension.
+This is a foundation, not a complete village game. The mock parser accepts percentage bread-price changes only; unsupported natural language returns a clear error. Post-tick strategies use copied observations to propose food purchases or neighbor conversations; proposals execute on the next tick. All gameplay tools share a runtime queue and return session queued/applied/rejected results. Committed outcomes persist as Events; pending attempts are discarded on restart. A configurable provider interface exists; no real LLM adapter is bundled and the mock ignores model selection. Citizens are rule-driven for daily routines. Deterministic rules open land, welcome newcomers, found and upgrade businesses, and house workers. Starvation departure awaits a database-owned persisted counter. See [the engine developer guide](docs/simulation-engine.md) for the current v1 contract and database handoffs.
 
 Run one API process/worker. Active branch and playback are shared across local browser tabs, not per-user. No authentication or internet deployment is included. Checkpoints store full worlds on every commit for simplicity; introduce retention and migrations before long-running use. The timeline shows branch-local events; parent ancestry remains available through branch metadata. Existing historical outcomes are reproducible; future real LLM decisions would not guarantee identical counterfactuals.
 

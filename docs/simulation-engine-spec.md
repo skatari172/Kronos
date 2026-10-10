@@ -1,3 +1,5 @@
+> Historical design reference. The implemented runtime now follows the supplied `KRONOS_SIMULATION_ENGINE_BUILD_SPEC.md` and [simulation mechanics](simulation-design.md): durable queued actions before daily rules, post-commit next-tick deliberation, full-state broadcasts, and no mutation on rejection. Older immediate-execution and transaction-context proposals below are not the implementation contract.
+
 # KRONOS Simulation Engine Specification & Architecture Guide
 
 > **Target Audience**: AI Agents and Engineers implementing or extending the authoritative world simulation in `backend/modules/simulation/`.

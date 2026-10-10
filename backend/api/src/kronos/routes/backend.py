@@ -29,9 +29,7 @@ async def status(service: ServiceDependency):
     summary="Advance the simulation by one day",
 )
 async def tick(body: m.MutationRequest, service: ServiceDependency):
-    async with service.lock:
-        service.check(body)
-        return await service.tick()
+    return await service.tick(body)
 
 
 @router.post(
@@ -55,8 +53,8 @@ async def pause(service: ServiceDependency):
 
 @router.post(
     "/api/backend/actions",
-    response_model=m.WorldUpdate,
-    summary="Execute a backend automation action",
+    response_model=m.ActionResult,
+    summary="Queue a backend automation action",
 )
 async def action(body: m.ActionRequest, service: ServiceDependency):
     """Use the same version, engine, and persistence checks as other action callers.
@@ -64,7 +62,7 @@ async def action(body: m.ActionRequest, service: ServiceDependency):
     This endpoint grants no extra capabilities. In-process jobs may call
     Service.execute_action directly instead of making an HTTP request to this server.
     """
-    return await service.execute_action(body)
+    return await service.execute_action(body, source="backend")
 
 
 @router.post(

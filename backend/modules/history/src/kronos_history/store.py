@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from kronos_sim.models import (
+    ActionResult,
     BranchMetadata,
     SimulationEvent,
     SnapshotMetadata,
@@ -21,6 +22,7 @@ from sqlalchemy import (
     Table,
     create_engine,
     event,
+    func,
     insert,
     or_,
     select,
@@ -54,6 +56,16 @@ events = Table(
     Column("sequence", Integer, nullable=False),
     Column("data", String, nullable=False),
     Index("ix_events_branch_sequence", "branch_id", "sequence"),
+)
+actions = Table(
+    "actions",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("branch_id", String, nullable=False, index=True),
+    Column("ordinal", Integer, nullable=False),
+    Column("status", String, nullable=False),
+    Column("data", String, nullable=False),
+    Index("ix_actions_branch_status", "branch_id", "status"),
 )
 # Payload fields that name the citizen an event happened to.
 INVOLVEMENT_KEYS = ("sender_id", "recipient_id", "entity_id", "citizen_id")
@@ -156,8 +168,70 @@ class HistoryStore:
                 .where(branches.c.id == state.branch_id)
                 .values(state=state.model_dump_json())
             )
+            for outcome in getattr(result, "action_results", []):
+                saved = db.execute(
+                    update(actions)
+                    .where(
+                        actions.c.id == outcome.action_id,
+                        actions.c.branch_id == state.branch_id,
+                        actions.c.status == "queued",
+                    )
+                    .values(status=outcome.status, data=outcome.model_dump_json())
+                )
+                if saved.rowcount != 1:
+                    raise ValueError("Action was missing or already resolved")
             # Every commit is a checkpoint: simple, exact historical reconstruction, no LLM replay.
             self._snapshot(db, state)
+
+    def enqueue(self, state: WorldState, action, source="agent", text=None) -> ActionResult:
+        """One table is both the pending queue and permanent action ledger."""
+        with self.engine.begin() as db:
+            ordinal = (
+                db.execute(
+                    select(func.max(actions.c.ordinal)).where(
+                        actions.c.branch_id == state.branch_id
+                    )
+                ).scalar()
+                or 0
+            ) + 1
+            record = ActionResult(
+                action_id=f"action-{state.branch_id}:{ordinal:08d}",
+                branch_id=state.branch_id,
+                status="queued",
+                action=action,
+                source=source,
+                order=ordinal,
+                scheduled_tick=state.tick + 1,
+                text=text,
+                tick=state.tick,
+                sequence=state.sequence,
+            )
+            db.execute(
+                insert(actions).values(
+                    id=record.action_id,
+                    branch_id=state.branch_id,
+                    ordinal=ordinal,
+                    status="queued",
+                    data=record.model_dump_json(),
+                )
+            )
+        return record
+
+    def action(self, action_id: str) -> ActionResult:
+        with self.engine.connect() as db:
+            raw = db.execute(select(actions.c.data).where(actions.c.id == action_id)).scalar()
+        if raw is None:
+            raise KeyError("Unknown action")
+        return ActionResult.model_validate_json(raw)
+
+    def pending(self, branch_id: str) -> list[ActionResult]:
+        with self.engine.connect() as db:
+            rows = db.execute(
+                select(actions.c.data)
+                .where(actions.c.branch_id == branch_id, actions.c.status == "queued")
+                .order_by(actions.c.ordinal)
+            ).scalars()
+            return [ActionResult.model_validate_json(raw) for raw in rows]
 
     def world(self, branch_id: str) -> WorldState:
         with self.engine.connect() as db:

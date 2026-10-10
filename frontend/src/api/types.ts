@@ -8,3 +8,4 @@ export type Branch = components["schemas"]["BranchMetadata"];
 export type Snapshot = components["schemas"]["SnapshotMetadata"];
 export type Status = components["schemas"]["SimulationStatus"];
 export type InterventionResult = components["schemas"]["InterventionResult"];
+export type ActionResult = components["schemas"]["ActionResult"];

@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import suppress
 from uuid import uuid4
 
 from fastapi import HTTPException, WebSocket
@@ -12,6 +13,7 @@ from kronos_sim.models import (
     AskResult,
     BranchMetadata,
     DecisionResult,
+    InterventionResult,
     MutationRequest,
     SimulationStatus,
     SpawnCitizenRequest,
@@ -41,6 +43,12 @@ class Service:
         self.state = self.store.world(self.store.active_id())
         self.agents = AgentService(MockProvider(), config.llm_timeout, config.llm_retries)
         self.lock = asyncio.Lock()
+        self.branch_epoch = 0
+        # V1 attempts live only in this API session; committed Events are durable history.
+        self.actions: dict[str, ActionResult] = {}
+        self.action_order = 0
+        self.action_session = uuid4().hex
+        self.decision_task: asyncio.Task | None = None
         self.clients: set[WebSocket] = set()
         self.playing = False
         self.speed = 1
@@ -91,10 +99,45 @@ class Service:
         await asyncio.gather(*(send(client) for client in tuple(self.clients)))
 
     async def commit(self, result):
-        self.store.commit(result, self.state.sequence)
+        # Persist through the unchanged world/event interface, without an action ledger.
+        persisted = WorldUpdate(
+            branch_id=result.branch_id,
+            tick=result.tick,
+            sequence=result.sequence,
+            state=result.state,
+            events=result.events,
+        )
+        self.store.commit(persisted, self.state.sequence)
         self.state = result.state
+        for outcome in getattr(result, "action_results", []):
+            self.actions[outcome.action_id] = outcome
         await self.broadcast(result)
         return result
+
+    def enqueue(self, action, source="agent", text=None) -> ActionResult:
+        """Caller holds the lock. Runtime attempts never change persisted world state."""
+        self.action_order += 1
+        record = ActionResult(
+            action_id=f"action-{self.state.branch_id}:{self.action_session}:{self.action_order:08d}",
+            branch_id=self.state.branch_id,
+            status="queued",
+            action=action.model_copy(deep=True),
+            source=source,
+            order=self.action_order,
+            scheduled_tick=self.state.tick + 1,
+            text=text,
+            tick=self.state.tick,
+            sequence=self.state.sequence,
+        )
+        self.actions[record.action_id] = record
+        return record.model_copy(deep=True)
+
+    def pending(self) -> list[ActionResult]:
+        return [
+            record.model_copy(deep=True)
+            for record in self.actions.values()
+            if record.branch_id == self.state.branch_id and record.status == "queued"
+        ]
 
     def _authorize(self, body: ActionRequest, citizen_id: str | None):
         """Caller holds the lock. Request-level checks; failures are HTTP errors, never logged."""
@@ -113,83 +156,64 @@ class Service:
         self._authorize(body, citizen_id)
         return Engine(self.state).apply(body.action)
 
-    async def execute_action(self, body: ActionRequest, citizen_id: str | None = None):
-        """One serialized execution path for user, agent, and backend action tools."""
-        async with self.lock:
-            result = self._evaluate_action(body, citizen_id)
-            return await self.commit(result)
-
-    async def submit_agent_action(self, body: ActionRequest, citizen_id: str) -> ActionResult:
-        """Like execute_action, but a rule rejection is committed as an action_rejected event."""
+    async def execute_action(
+        self, body: ActionRequest, citizen_id: str | None = None, source="player"
+    ) -> ActionResult:
+        """Admit a proposal. Only a later tick may change gameplay state."""
         async with self.lock:
             self._authorize(body, citizen_id)
-            action_id = f"action-{self.state.branch_id}:{self.state.sequence}"
-            try:
-                result = await self.commit(Engine(self.state).apply(body.action, action_id))
-                status, error = "applied", None
-            except InvalidAction as exc:
-                result = await self.commit(Engine(self.state).reject(body.action, exc, action_id))
-                status, error = "rejected", exc
-            return ActionResult(
-                action_id=action_id,
-                branch_id=result.branch_id,
-                status=status,
-                tick=result.tick,
-                sequence=result.sequence,
-                event_ids=[event.id for event in result.events],
-                error=error.code if error else None,
-                message=str(error) if error else None,
-            )
+            return self.enqueue(body.action, source)
+
+    async def submit_agent_action(self, body: ActionRequest, citizen_id: str) -> ActionResult:
+        return await self.execute_action(body, citizen_id, source="agent")
 
     def action_result(self, action_id: str) -> ActionResult:
-        """Rebuild an agent action's outcome from the events tagged with its ID."""
-        try:
-            branch_id, before = action_id.removeprefix("action-").rsplit(":", 1)
-            after = int(before)
-        except ValueError:
-            raise KeyError("Unknown action") from None
-        tagged = []
-        for event in self.store.list_events_after(branch_id, after, limit=50):
-            if event.action_id != action_id:
-                break
-            tagged.append(event)
-        if not tagged:
-            raise KeyError("Unknown action")
-        rejection = next((e for e in tagged if e.type == "action_rejected"), None)
-        return ActionResult(
-            action_id=action_id,
-            branch_id=branch_id,
-            status="rejected" if rejection else "applied",
-            tick=tagged[0].tick,
-            sequence=tagged[-1].sequence,
-            event_ids=[event.id for event in tagged],
-            error=rejection.payload.code if rejection else None,
-            message=rejection.payload.message if rejection else None,
-        )
+        if action_id in self.actions:
+            return self.actions[action_id].model_copy(deep=True)
+        raise KeyError("Unknown action in this API session; read committed Events for history")
+
+    async def intervene(self, body):
+        command = await self.agents.parse(body.text)
+        async with self.lock:
+            self.check(body)
+            result = self.enqueue(command, "player", body.text)
+        return InterventionResult(command=command, result=result)
 
     async def decide(self, citizen_id: str, request: MutationRequest) -> DecisionResult:
         """Ask the provider for one action, then submit it like any other agent action.
 
-        The provider call happens outside the lock; if the world moves on meanwhile, the
-        submission fails the version check (409) instead of applying a stale decision.
+        The provider call happens outside the lock. If the world moves on meanwhile,
+        the proposal is queued for the next available tick and validated against current state.
         """
         async with self.lock:
             self.check(request)
-            observation = observe(self.state, citizen_id)
+            observation = observe(
+                self.state,
+                citizen_id,
+                self.store.list_citizen_events(
+                    self.state.branch_id, citizen_id, self.state.sequence, limit=8
+                ),
+            )
+            epoch = self.branch_epoch
         action = await self.agents.decide(observation)
-        body = ActionRequest(
-            branch_id=observation.branch_id,
-            expected_sequence=observation.sequence,
-            action=action,
-        )
-        return DecisionResult(
-            action=action, result=await self.submit_agent_action(body, citizen_id)
-        )
+        async with self.lock:
+            if self.branch_epoch != epoch or self.state.branch_id != observation.branch_id:
+                raise HTTPException(409, "Active branch changed during deliberation")
+            if action.actor_id not in self.state.citizens:
+                raise KeyError("Unknown citizen")
+            result = self.enqueue(action, "agent")
+        return DecisionResult(action=action, result=result)
 
     async def ask(self, citizen_id: str, question: str) -> AskResult:
         """Read-only grounded Q&A over the citizen's own events on the active branch."""
         async with self.lock:
-            observation = observe(self.state, citizen_id)
+            observation = observe(
+                self.state,
+                citizen_id,
+                self.store.list_citizen_events(
+                    self.state.branch_id, citizen_id, self.state.sequence, limit=8
+                ),
+            )
         events = self.store.list_citizen_events(
             observation.branch_id, citizen_id, observation.sequence, limit=20
         )
@@ -209,12 +233,38 @@ class Service:
                 branch_id=self.state.branch_id, sequence=self.state.sequence, action=body.action
             )
 
-    async def tick(self):
+    async def tick(self, request: MutationRequest | None = None):
+        async with self.lock:
+            if request is not None:
+                self.check(request)
+            batch = self.pending()
+            result = await self.commit(Engine(self.state).tick(queued=batch))
+            snapshot, epoch = self.state.model_copy(deep=True), self.branch_epoch
+        # Keep the single clock moving while at most one bounded decision batch awaits I/O.
+        if self.decision_task is None or self.decision_task.done():
+            self.decision_task = asyncio.create_task(
+                self._deliberate(snapshot, epoch, result.events)
+            )
+        return result
+
+    async def _deliberate(self, snapshot, epoch, events):
         try:
-            proposals = await self.agents.propose(self.state)
+            proposals = await self.agents.propose(snapshot, events)
+            async with self.lock:
+                if epoch == self.branch_epoch and snapshot.branch_id == self.state.branch_id:
+                    for action in proposals:
+                        if action.actor_id in self.state.citizens:
+                            self.enqueue(action, "agent")
         except ProviderError:
-            proposals = []  # Failed strategy never prevents routine food/economy mechanics.
-        return await self.commit(Engine(self.state).tick(proposals))
+            pass  # A failed strategy never interrupts deterministic daily mechanics.
+        except Exception as exc:
+            self.error = f"Agent decisions skipped: {type(exc).__name__}"
+
+    async def stop_decisions(self):
+        if self.decision_task is not None:
+            self.decision_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.decision_task
 
     async def fork(self, snapshot_id: str, name: str):
         original = self.store.restore(snapshot_id)
@@ -233,10 +283,9 @@ class Service:
     async def loop(self):
         while True:
             await asyncio.sleep(max(0.1, self.config.tick_seconds / self.speed))
-            async with self.lock:
-                if self.playing:
-                    try:
-                        await self.tick()
-                    except Exception as exc:
-                        self.playing = False
-                        self.error = f"Simulation paused: {type(exc).__name__}"
+            if self.playing:
+                try:
+                    await self.tick()
+                except Exception as exc:
+                    self.playing = False
+                    self.error = f"Simulation paused: {type(exc).__name__}"

@@ -58,15 +58,15 @@ def test_timeout_is_bounded():
 def test_proposals_are_bounded_and_social_effects_persist():
     state = initial_world()
     assert asyncio.run(AgentService(MockProvider()).propose(state)) == []
-    state.tick = 2
+    state.tick = 3
     before = state.model_copy(deep=True)
     proposals = asyncio.run(AgentService(MockProvider()).propose(state))
     assert state == before
     result = Engine(state).tick(proposals)
-    assert len(proposals) == 1
-    assert result.state.citizens["citizen-0"].relationships[0].trust == 1
+    assert len(proposals) == 7
+    assert all(r.trust == 1 for r in result.state.citizens["citizen-0"].relationships)
     assert result.state.rng_state != before.rng_state
-    assert len(result.state.citizens["citizen-0"].memories) == 1
+    assert len(result.state.citizens["citizen-0"].memories) == 7
 
 
 def test_mock_decisions_follow_needs():
@@ -93,3 +93,23 @@ def test_ask_rejects_citations_outside_given_events():
 
     with pytest.raises(ProviderError):
         asyncio.run(AgentService(Liar()).ask("Why?", observe(initial_world(), "citizen-0"), []))
+
+
+def test_mock_ignores_a_cheaper_empty_bakery():
+    from kronos_sim.queries import observe
+
+    state = initial_world()
+    empty = state.buildings["bakery"].model_copy(deep=True)
+    empty.id = "empty-bakery"
+    empty.prices["bread"] = 1
+    empty.inventory.bread = 0
+    state.buildings[empty.id] = empty
+    state.citizens["citizen-6"].inventory.bread = 0
+    action = asyncio.run(AgentService(MockProvider()).decide(observe(state, "citizen-6")))
+    assert action.type == "buy" and action.building_id == "bakery"
+
+    state.buildings["bakery"].inventory.bread = 0
+    action = asyncio.run(AgentService(MockProvider()).decide(observe(state, "citizen-6")))
+    assert (
+        action.type == "communicate" and action.message == "There is no bread in stock right now."
+    )

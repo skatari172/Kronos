@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { context, connect, request } from "../api/client";
 import type {
+  ActionResult,
   Branch,
   InterventionResult,
   Snapshot,
@@ -35,6 +36,7 @@ export function App() {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -112,6 +114,45 @@ export function App() {
     };
   }, [mode]);
 
+  useEffect(() => {
+    if (!pendingActionId || mode !== "live" || historical) return;
+    let cancelled = false;
+    void request<ActionResult>(
+      `/api/actions/${encodeURIComponent(pendingActionId)}`,
+    )
+      .then((result) => {
+        if (cancelled) return;
+        if (result.branch_id !== update?.branch_id) {
+          setPendingActionId(null);
+          return;
+        }
+        if (result.status !== "queued") {
+          const label =
+            result.action.type === "modify_price"
+              ? "Bread price change"
+              : "Bakery construction";
+          setNotice(
+            result.status === "applied"
+              ? `${label} applied on day ${result.tick + 1}.`
+              : `${label} rejected: ${result.message}`,
+          );
+          setPendingActionId(null);
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        if (String(e).includes("Unknown action in this API session")) {
+          setPendingActionId(null);
+          setNotice(
+            "This action is no longer in the server session. Check the event feed before submitting again.",
+          );
+        } else setError(String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingActionId, mode, historical, update?.branch_id, update?.sequence]);
+
   async function run(action: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -141,10 +182,10 @@ export function App() {
       ...context(),
       text,
     });
-    useWorld.getState().ingest(result.update);
     setText("");
+    setPendingActionId(result.result.action_id);
     setNotice(
-      `Bread prices changed by ${result.command.percent}% across all bakeries.`,
+      `Bread price change queued for day ${result.result.scheduled_tick + 1}. Advance a day to apply it.`,
     );
   }
   async function seek(id: string) {
@@ -196,7 +237,7 @@ export function App() {
       (p) => !Object.values(state.buildings).some((b) => b.plot_id === p.id),
     );
     if (!plot) throw new Error("All construction plots are occupied");
-    const result = await request<WorldUpdate>("/api/actions", {
+    const result = await request<ActionResult>("/api/actions", {
       ...context(),
       action: {
         type: "construct_building",
@@ -206,7 +247,10 @@ export function App() {
         rationale: "Player requested a construction demonstration.",
       },
     });
-    useWorld.getState().ingest(result);
+    setPendingActionId(result.action_id);
+    setNotice(
+      `Bakery construction queued for day ${result.scheduled_tick + 1}. Advance a day to build it.`,
+    );
   }
   if (!update)
     return (
@@ -416,7 +460,7 @@ export function App() {
                 maxLength={500}
               />
               <button
-                aria-label="Apply intervention"
+                aria-label="Queue intervention"
                 className="submit"
                 disabled={locked || !text.trim()}
               >
