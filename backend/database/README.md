@@ -7,6 +7,7 @@ This directory stores the authoritative SQLite database for local KRONOS simulat
 - `kronos.db`: The authoritative SQLite database containing:
   - `branches`: Active and historical branch metadata and serialized world states
   - `snapshots`: Immutable point-in-time state checkpoints with SHA-256 integrity hashes
+  - `actions`: Durable pending queue and permanent original proposals / applied or rejected results
   - `events`: Append-only event ledger tracking actions, prices, transactions, and dialogue
   - `settings`: Active timeline pointer and local simulation configuration
 - `*.db-wal`, `*.db-shm`: Ephemeral SQLite write-ahead log and shared memory files (ignored by Git)
@@ -35,6 +36,8 @@ The tables are deliberately simple; the world lives as JSON in `branches.state` 
 | `votes`, `policies`                                  | Town votes with ballots and tallies; active minimum wage, bread price cap, market tax                                                            |
 
 The v1 core is `citizens`, `buildings`, `plots`, `job_applications`, and the event ledger (see `docs/simulation-design.md`); the other fields and branch history are beyond v1 core and already implemented.
+
+Pending records are branch-scoped and survive restart. A tick saves outcomes, events, the world, and its checkpoint together before broadcasting. Forks inherit committed state and leave pending records on the source branch.
 
 Each `events.data` row is one `SimulationEvent` (see the same models file); agent actions carry an `action_id`.
 

@@ -166,8 +166,9 @@ class MockProvider:
         bread, actor = citizen["inventory"]["bread"], {"actor_id": citizen["id"]}
         if bread and citizen["hunger"] >= 40:
             return {**actor, "type": "consume", "rationale": "I am hungry and have bread."}
-        if not bread and prices:
-            bakery = min(prices, key=lambda b: (prices[b], b))
+        stocked = [b for b in prices if observation.get("bread_stock", {}).get(b, 1) > 0]
+        if not bread and stocked:
+            bakery = min(stocked, key=lambda b: (prices[b], b))
             if citizen["money"] >= prices[bakery]:
                 return {
                     **actor,
@@ -184,9 +185,13 @@ class MockProvider:
             **actor,
             "type": "communicate",
             "recipient_id": min(observation["neighbors"]),
-            "message": "Bread is getting costly; I am watching my savings."
-            if min(prices.values()) >= 700
-            else "There is fresh bread at the bakery.",
+            "message": (
+                "There is no bread in stock right now."
+                if not stocked
+                else "Bread is getting costly; I am watching my savings."
+                if min(prices[b] for b in stocked) >= 700
+                else "There is fresh bread at the bakery."
+            ),
             "rationale": "Share the observed price with a neighbor.",
         }
 
@@ -207,6 +212,10 @@ class MockProvider:
             + ".",
             "cited_event_ids": [e["id"] for e in reversed(recent)],
         }
+
+
+# Decisions per post-tick batch; bounds latency however large the town grows.
+MAX_DECISIONS = 8
 
 
 class AgentService:
@@ -319,15 +328,32 @@ class AgentService:
         ranked = sorted(world.citizens, key=lambda c: (c not in owners, c))
         return set(ranked if self.strategic_limit is None else ranked[: self.strategic_limit])
 
-    async def propose(self, world: WorldState) -> list[AgentAction]:
-        """One strategic proposal per scheduled citizen; routine mechanics never call an LLM.
+    def due(self, world: WorldState) -> list[str]:
+        """Who decides after this day, at most MAX_DECISIONS per batch, in ID order.
+
+        Urgent citizens (no bread, or an offer waiting for their answer) decide now; everyone
+        else decides once per round on their staggered slot (see `scheduled`).
+        """
+        urgent = {
+            cid
+            for cid, citizen in world.citizens.items()
+            if citizen.inventory.bread == 0
+            or any(offer.recipient_id == cid for offer in world.trade_offers.values())
+        }
+        return sorted(urgent | set(self.scheduled(world)))[:MAX_DECISIONS]
+
+    async def propose(
+        self, world: WorldState, events: list[SimulationEvent] | None = None
+    ) -> list[AgentAction]:
+        """Next-day proposals for the citizens `due` after this day; daily mechanics never
+        call an LLM, and each provider sees only its own copied observation.
 
         Strategic citizens ask the provider, up to `calls_per_tick` of them in ID order;
         the rest decide with the fallback. At most `concurrency` calls are in flight. Calls
         fail independently: a citizen with no usable decision is skipped this round.
         Nothing here touches the world's seeded RNG.
         """
-        due = self.scheduled(world)
+        due = self.due(world)
         strategic = [c for c in due if c in self.strategic(world)]
         budget = len(strategic) if self.calls_per_tick is None else self.calls_per_tick
         callers = set(strategic[: max(budget, 0)])
@@ -335,7 +361,7 @@ class AgentService:
 
         async def one(citizen_id: str) -> AgentAction | None:
             try:
-                observation = observe(world, citizen_id)
+                observation = observe(world, citizen_id, events)
                 if citizen_id not in callers:
                     return (await self.proposal(observation, use_provider=False)).action
                 async with limit:

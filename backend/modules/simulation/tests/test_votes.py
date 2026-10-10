@@ -87,7 +87,7 @@ def test_min_wage_vote_passes_after_three_days_and_raises_wages():
     policy = next(e for e in events if e.type == "policy_changed")
     assert (policy.payload.old_value, policy.payload.new_value) == (0, 300)
     raised = [e for e in events if e.type == "wage_changed"]
-    assert sorted(e.payload.building_id for e in raised) == ["bakery", "farm", "market"]
+    assert {e.payload.building_id for e in raised} >= {"bakery", "farm", "market"}
     assert all(e.causal_refs == [closed.id] for e in raised)
     assert state.policies.min_wage == 300
     assert all(b.wage == 300 for b in state.buildings.values())
@@ -183,7 +183,9 @@ def test_bread_price_cap_lowers_prices_and_blocks_raises():
     apply(state, SetPrice(actor_id="citizen-1", building_id="bakery", resource="wheat", price=900))
 
 
-def test_market_tax_is_shared_equally_and_conserves_money():
+def test_market_tax_is_shared_equally_and_conserves_money(monkeypatch):
+    # Isolate circulation from newcomer starting money and upgrade construction costs.
+    monkeypatch.setattr(Engine, "_growth_rules", lambda self: None)
     state = initial_world()
     state.policies.market_tax_bps = 1000
     before = total_money(state)
@@ -211,7 +213,7 @@ def test_policies_also_bind_businesses_founded_later():
         state, FoundBusiness(actor_id="citizen-5", plot_id="plot-3", kind="bakery", capital=5000)
     )
     new = next(b for b in state.buildings.values() if b.owner_id == "citizen-5")
-    assert new.wage == 150
+    assert new.wage == 300
     state, _ = ticks(state, 1)
     assert state.buildings[new.id].wage == 300
 

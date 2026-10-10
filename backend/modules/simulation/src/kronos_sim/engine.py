@@ -4,6 +4,7 @@ import json
 import random
 import re
 from decimal import ROUND_HALF_UP, Decimal
+from typing import get_args
 
 from pydantic import TypeAdapter
 
@@ -12,6 +13,9 @@ from kronos_sim import models as m
 EVENT = TypeAdapter(m.SimulationEvent)
 ACTION = TypeAdapter(m.AgentAction)
 # Action types with engine rules; every other AgentAction is rejected as not_supported.
+# Every player intervention command; queued ones run before citizen actions on a tick.
+INTERVENTIONS = get_args(get_args(m.Intervention)[0])
+
 SUPPORTED_ACTIONS = (
     "buy",
     "sell",
@@ -440,6 +444,11 @@ class Engine:
 
     def result(self, rejected=None) -> m.SimulationTickResult:
         self.state.rng_state = json.loads(json.dumps(self.rng.getstate()))
+        occupied = [building.plot_id for building in self.state.buildings.values()]
+        if len(occupied) != len(set(occupied)):
+            raise ValueError("Multiple buildings occupy one plot")
+        if any(self._free_slots(building) < 0 for building in self.state.buildings.values()):
+            raise ValueError("Business exceeds its job capacity")
         # Revalidate every committed state, including mutated nested models.
         state = m.WorldState.model_validate(self.state.model_dump())
         return m.SimulationTickResult(
@@ -460,17 +469,18 @@ class Engine:
     def reject(
         self, action: m.AgentAction, error: InvalidAction, action_id: str | None = None
     ) -> m.SimulationTickResult:
-        """Log a rule rejection and remember it, so agents can learn from refused proposals."""
+        """Record refusal without changing citizen, economic, or random state."""
         tx = Engine(self.state)
         tx.action_id = action_id
         actor = tx.state.citizens.get(action.actor_id)
-        if actor is None:
-            raise error
-        remember(actor, f"Rejected {action.type}: {error}")
+        # A queued action can outlive its citizen (they left town); the refusal is still
+        # logged so the queue resolves, but there is nobody to remember it.
+        if actor is not None:
+            remember(actor, f"Rejected {action.type}: {error}")
         tx.emit(
             "action_rejected",
             dict(action_type=action.type, code=error.code, message=str(error)),
-            actor.id,
+            action.actor_id if actor is not None else None,
             action.rationale,
         )
         return tx.result()
@@ -638,16 +648,12 @@ class Engine:
                 position=plot.position.model_copy(),
                 owner_id=actor.id,
                 cash=0,
+                wage=max(150, s.policies.min_wage),
+                prices={"bread": min(500, s.policies.bread_price_cap or 500), "wheat": 100},
             )
             emit("building_constructed", dict(entity_id=bid, position=plot.position.model_dump()))
         elif isinstance(action, m.UpgradeBuilding):
-            if building.level >= 3:
-                raise InvalidAction("bad_params", "Building is already at level 3")
-            if actor.money < 2500:
-                raise InvalidAction("insufficient_funds", "Upgrade costs 25 coins")
-            actor.money -= 2500
-            building.level += 1
-            emit("building_upgraded", dict(entity_id=building.id, level=building.level))
+            self._upgrade(building, action.rationale)
         elif isinstance(action, m.FoundBusiness):
             plot = s.plots.get(action.plot_id)
             if plot is None:
@@ -669,6 +675,8 @@ class Engine:
                 position=plot.position.model_copy(),
                 owner_id=actor.id,
                 cash=action.capital,
+                wage=max(150, s.policies.min_wage),
+                prices={"bread": min(500, s.policies.bread_price_cap or 500), "wheat": 100},
             )
             emit("building_constructed", dict(entity_id=bid, position=plot.position.model_dump()))
             emit(
@@ -883,9 +891,10 @@ class Engine:
                     raise InvalidAction(
                         "bad_params", "Time research forfeits wages; get a job first"
                     )
-                if self._researching(actor):
+                if actor.research_invention_id is not None:
                     raise InvalidAction("bad_params", "Already researching on wage time")
                 actor.research_invention_id = invention.id
+                actor.research_start_tick = s.tick + 1
                 actor.research_until_tick = s.tick + action.ticks
                 emit(
                     "research_contributed",
@@ -936,8 +945,8 @@ class Engine:
                 raise InvalidAction(
                     "insufficient_authority", "Only the recipient may answer this offer"
                 )
-            if offer.tick != s.tick:
-                raise InvalidAction("bad_params", "License offers must be answered the same tick")
+            if s.tick > offer.tick + 1:
+                raise InvalidAction("bad_params", "License offer has expired")
             invention = s.inventions[offer.invention_id]
             owner = s.citizens.get(offer.owner_id)
             if action.accept:
@@ -1281,7 +1290,7 @@ class Engine:
         """True while a citizen's wages go to time-mode research instead of their pocket."""
         return (
             citizen.research_invention_id is not None
-            and self.state.tick <= citizen.research_until_tick
+            and citizen.research_start_tick <= self.state.tick <= citizen.research_until_tick
         )
 
     def _open_invention(self, invention_id: str) -> m.Invention:
@@ -1331,6 +1340,7 @@ class Engine:
         for other in sorted(self.state.citizens.values(), key=lambda c: c.id):
             if other.research_invention_id == invention.id:
                 other.research_invention_id = None
+                other.research_start_tick = 0
                 other.research_until_tick = 0
                 released.append(other.id)
         self.emit(
@@ -1386,6 +1396,8 @@ class Engine:
             key=lambda a: (-owner_trust(a), a.sequence),
         )
         for application in pending:
+            if application.tick >= s.tick:
+                continue  # Give the owner the next queued-action round to answer.
             if application.status != "pending":
                 continue  # Withdrawn by an earlier hire this tick.
             applicant = s.citizens.get(application.citizen_id)
@@ -1404,7 +1416,7 @@ class Engine:
         s = self.state
         for oid in sorted(s.license_offers):
             offer = s.license_offers[oid]
-            if offer.tick < s.tick:
+            if s.tick > offer.tick + 1:
                 del s.license_offers[oid]
                 self.emit("license_resolved", dict(**self._offer_payload(offer), status="expired"))
         for citizen in sorted(s.citizens.values(), key=lambda c: c.id):
@@ -1420,6 +1432,7 @@ class Engine:
                 )
             if last_day and citizen.research_invention_id is not None:
                 citizen.research_invention_id = None
+                citizen.research_start_tick = 0
                 citizen.research_until_tick = 0
 
     def _settle_votes(self):
@@ -1670,6 +1683,8 @@ class Engine:
             raise InvalidAction("unknown_entity", "No pending offer with that ID")
         if offer.recipient_id != actor.id:
             raise InvalidAction("insufficient_authority", "Only the recipient may respond")
+        if s.tick > offer.expires_tick:
+            raise InvalidAction("bad_params", "Trade offer has expired")
         offerer = s.citizens.get(offer.offerer_id)
         if offerer is None:
             raise InvalidAction("unknown_entity", "The offerer no longer exists")
@@ -1741,16 +1756,6 @@ class Engine:
         self.emit("citizen_spawned", dict(entity_id=cid, position=citizen.position.model_dump()))
         return citizen
 
-    def _grow(self):
-        """Daily growth rules, in order, with no AI and no randomness (choices go by ID)."""
-        self._open_land()
-        self._welcome_newcomer()
-        self._let_destitute_leave()
-        self._found_by_saver()
-        self._upgrade_busy_businesses()
-        self._rent_homes()
-        self._pay_out_surplus()
-
     @staticmethod
     def _numbered(ids, prefix: str) -> list[int]:
         return [
@@ -1767,75 +1772,6 @@ class Engine:
             return (0, n[0], "") if n else (1, 0, plot.id)
 
         return sorted(self.state.plots.values(), key=key)
-
-    def _open_land(self):
-        """When every lot holds a building or a tenant, open NEW_PLOTS_PER_EXPANSION town lots.
-
-        Lots sit on a grid (PLOT_SPACING_X by PLOT_SPACING_Z, rows at z = +-3, +-9, ...).
-        Ring r holds the cells with max(|column|, rows beyond the middle two + 1) == r, so the
-        seed lots form ring 1. Within a ring, nearer rows and columns come first, then -x before
-        +x and -z before +z. Taken cells are skipped, so new lots never collide.
-        """
-        s = self.state
-        built = {b.plot_id for b in s.buildings.values()}
-        if not s.plots or any(p.id not in built and p.tenant_id is None for p in s.plots.values()):
-            return
-        taken = {(p.position.x, p.position.z) for p in s.plots.values()}
-        next_id = max(self._numbered(s.plots, "plot-"), default=-1) + 1
-        opened, ring = 0, 1
-        while opened < NEW_PLOTS_PER_EXPANSION:
-            cells = []
-            for gx in range(-ring, ring + 1):
-                for row in range(-ring, ring + 1):  # row 0 is z = -3, row 1 is z = 3
-                    depth = row - 1 if row >= 1 else -row
-                    if max(abs(gx), depth + 1) == ring:
-                        cells.append((depth, abs(gx), gx, row))
-            for _, _, gx, row in sorted(cells):
-                x, z = float(gx * PLOT_SPACING_X), float(row * PLOT_SPACING_Z - PLOT_SPACING_Z / 2)
-                if (x, z) in taken or opened == NEW_PLOTS_PER_EXPANSION:
-                    continue
-                while f"plot-{next_id}" in s.plots:
-                    next_id += 1
-                plot = m.Plot(id=f"plot-{next_id}", position=m.Position(x=x, z=z))
-                s.plots[plot.id] = plot
-                taken.add((x, z))
-                opened += 1
-                self.emit(
-                    "plot_opened",
-                    dict(**_lot_payload(plot), position=plot.position.model_dump()),
-                    rationale="Every lot is in use; the village grows",
-                )
-            ring += 1
-
-    def _welcome_newcomer(self):
-        """Every NEWCOMER_INTERVAL_DAYS, a fed village with an opening attracts one newcomer,
-        who applies to the business with the most free slots (ties by building ID)."""
-        s = self.state
-        if s.tick % NEWCOMER_INTERVAL_DAYS:
-            return
-        hunger = [c.hunger for c in s.citizens.values()]
-        if hunger and sum(hunger) >= NEWCOMER_MAX_AVG_HUNGER * len(hunger):
-            return
-        openings = [b for b in s.buildings.values() if self._free_slots(b) > 0]
-        if not openings:
-            return
-        building = min(openings, key=lambda b: (-self._free_slots(b), b.id))
-        number = max(self._numbered(s.citizens, "citizen-"), default=-1) + 1
-        while f"citizen-{number}" in s.citizens:
-            number += 1
-        cid = f"citizen-{number}"
-        self._add_citizen(
-            cid,
-            s.plots[building.plot_id],
-            name=NEWCOMER_NAMES[number % len(NEWCOMER_NAMES)],
-            occupation="Newcomer",
-            money=NEWCOMER_MONEY,
-        )
-        self._execute(
-            m.ApplyJob(
-                actor_id=cid, building_id=building.id, rationale="Came to the village for work"
-            )
-        )
 
     def _let_destitute_leave(self):
         """A citizen at hunger 100 with no money for LEAVE_AFTER_DAYS days in a row leaves,
@@ -1898,94 +1834,6 @@ class Engine:
             rationale,
         )
 
-    def _found_by_saver(self):
-        """At most one founding a day: the first saver (by ID) without a building of their own
-        and more than FOUNDER_MIN_MONEY founds the scarcest kind on the first free town lot."""
-        s = self.state
-        built = {b.plot_id for b in s.buildings.values()}
-        plot = next(
-            (
-                p
-                for p in self._plot_order()
-                if p.owner_id is None and p.tenant_id is None and p.id not in built
-            ),
-            None,
-        )
-        if plot is None:
-            return
-        owners = {b.owner_id for b in s.buildings.values()}
-        founder = next(
-            (
-                c
-                for c in sorted(s.citizens.values(), key=lambda c: c.id)
-                if c.id not in owners and c.money > FOUNDER_MIN_MONEY
-            ),
-            None,
-        )
-        if founder is None:
-            return
-        counts = {kind: 0 for kind in FOUNDING_ORDER}
-        for building in s.buildings.values():
-            counts[building.kind] = counts.get(building.kind, 0) + 1
-        kind = min(FOUNDING_ORDER, key=lambda k: (counts[k], FOUNDING_ORDER.index(k)))
-        self._execute(
-            m.FoundBusiness(
-                actor_id=founder.id,
-                plot_id=plot.id,
-                kind=kind,
-                capital=FOUNDER_CAPITAL,
-                rationale="Savings put to work",
-            )
-        )
-
-    def _upgrade_busy_businesses(self):
-        """A business with every slot filled and more than UPGRADE_MIN_CASH upgrades one level,
-        paying UPGRADE_COST from its cash for UPGRADE_JOB_SLOTS more slots."""
-        for building in sorted(self.state.buildings.values(), key=lambda b: b.id):
-            if (
-                building.level < MAX_LEVEL
-                and building.cash > UPGRADE_MIN_CASH
-                and self._free_slots(building) <= 0
-            ):
-                building.cash -= UPGRADE_COST
-                building.level += 1
-                building.job_slots = min(20, building.job_slots + UPGRADE_JOB_SLOTS)
-                self.emit(
-                    "building_upgraded",
-                    dict(entity_id=building.id, level=building.level),
-                    building.owner_id,
-                    "Every job slot is filled",
-                )
-
-    def _rent_homes(self):
-        """Employed citizens with more than RENTER_MIN_MONEY and no lease take the first free
-        owned lot (no tenant, no building, not their own) they can afford."""
-        s = self.state
-        for citizen in sorted(s.citizens.values(), key=lambda c: c.id):
-            if (
-                citizen.employer_id not in s.buildings
-                or citizen.money <= RENTER_MIN_MONEY
-                or any(p.tenant_id == citizen.id for p in s.plots.values())
-            ):
-                continue
-            built = {b.plot_id for b in s.buildings.values()}
-            plot = next(
-                (
-                    p
-                    for p in self._plot_order()
-                    if p.owner_id in s.citizens
-                    and p.owner_id != citizen.id
-                    and p.tenant_id is None
-                    and p.id not in built
-                    and p.rent <= citizen.money
-                ),
-                None,
-            )
-            if plot is not None:
-                self._execute(
-                    m.LeaseLot(actor_id=citizen.id, plot_id=plot.id, rationale="A home near work")
-                )
-
     def _pay_out_surplus(self):
         """Business cash above BUSINESS_CASH_CAP is shared evenly by its employees (ID order);
         the remainder, or everything when there is no staff, goes to the owner."""
@@ -2012,11 +1860,16 @@ class Engine:
 
     def spawn(self, request: m.SpawnCitizenRequest) -> m.SimulationTickResult:
         tx = Engine(self.state)
-        plot = tx.state.plots.get(request.plot_id)
+        tx._spawn(request)
+        return tx.result()
+
+    def _spawn(self, request: m.SpawnCitizenRequest) -> str:
+        plot = self.state.plots.get(request.plot_id)
         if plot is None:
             raise InvalidAction("unknown_entity", "Unknown plot")
-        tx._add_citizen(
-            f"citizen-{tx.state.branch_id}-{tx.state.sequence + 1}",
+        cid = f"citizen-{self.state.branch_id}-{self.state.sequence + 1}"
+        self._add_citizen(  # emits citizen_spawned
+            cid,
             plot,
             name=request.name,
             occupation=request.occupation,
@@ -2024,9 +1877,11 @@ class Engine:
             personality=request.personality,
             goal_weights=request.goal_weights,
         )
-        return tx.result()
+        return cid
 
-    def intervene(self, command: m.Intervention, text: str) -> m.SimulationTickResult:
+    def intervene(
+        self, command: m.Intervention, text: str, action_id: str | None = None
+    ) -> m.SimulationTickResult:
         """Apply one parsed player intervention as a single validated transaction.
 
         Emits intervention_applied (payload `kind` names the command) first, then the concrete
@@ -2034,6 +1889,7 @@ class Engine:
         each citing it in causal_refs. Invalid commands raise InvalidAction("bad_params", ...).
         """
         tx = Engine(self.state)
+        tx.action_id = action_id  # the queued attempt this intervention resolves
         handlers = {
             "modify_price": tx._intervene_price,
             "set_wage": tx._intervene_wage,
@@ -2174,13 +2030,100 @@ class Engine:
 
         return plan, "town", []
 
-    def tick(self, proposals: list[m.AgentAction] | None = None) -> m.SimulationTickResult:
+    def tick(
+        self,
+        proposals: list[m.AgentAction] | None = None,
+        *,
+        queued: list[m.ActionResult] | None = None,
+    ) -> m.SimulationTickResult:
         tx = Engine(self.state)
         tx.state.tick += 1
-        s = tx.state
+        batch = list(queued or [])
+        # Pure-module callers can still supply proposals; API callers freeze runtime records.
+        for index, action in enumerate(proposals or [], 1):
+            batch.append(
+                m.ActionResult(
+                    action_id=f"proposal-{tx.state.branch_id}:{tx.state.tick}:{index}",
+                    branch_id=tx.state.branch_id,
+                    status="queued",
+                    action=action,
+                    order=index,
+                    scheduled_tick=tx.state.tick,
+                    tick=self.state.tick,
+                    sequence=self.state.sequence,
+                )
+            )
+        outcomes = []
+        seen = set()
+        # Player interventions first, then stable citizen ID and runtime submission ordinal.
+        # Provider completion order cannot reorder different citizens' actions.
+        for record in sorted(
+            batch,
+            key=lambda r: (
+                0 if isinstance(r.action, INTERVENTIONS) else 1,
+                getattr(r.action, "actor_id", ""),
+                r.order,
+                r.action_id,
+            ),
+        ):
+            if (
+                record.status != "queued"
+                or record.branch_id != tx.state.branch_id
+                or record.scheduled_tick > tx.state.tick
+                or record.action_id in seen
+            ):
+                continue
+            seen.add(record.action_id)
+            action = record.action
+            error = None
+            try:
+                update = (
+                    Engine(tx.state).intervene(action, record.text or "", record.action_id)
+                    if isinstance(action, INTERVENTIONS)
+                    else Engine(tx.state).apply(action, record.action_id)
+                )
+            except InvalidAction as exc:
+                error = exc
+                if isinstance(action, INTERVENTIONS):
+                    rejected = Engine(tx.state)
+                    rejected.action_id = record.action_id
+                    rejected.emit(
+                        "action_rejected",
+                        dict(action_type=action.type, code=exc.code, message=str(exc)),
+                    )
+                    update = rejected.result()
+                else:
+                    update = Engine(tx.state).reject(action, exc, record.action_id)
+            tx.state = update.state
+            tx.rng.setstate(_tuples(update.state.rng_state))
+            tx.events.extend(update.events)
+            outcomes.append(
+                record.model_copy(
+                    update=dict(
+                        status="rejected" if error else "applied",
+                        tick=tx.state.tick,
+                        event_ids=[event.id for event in update.events],
+                        error=error.code if error else None,
+                        message=str(error) if error else None,
+                    )
+                )
+            )
+        tx._automatic_rules()
+        tx._growth_rules()
+        tx.emit("tick_completed", {"actions": len(outcomes)})
+        for outcome in outcomes:
+            outcome.sequence = tx.state.sequence
+        result = tx.result([r.message for r in outcomes if r.status == "rejected"])
+        result.action_results = outcomes
+        return result
+
+    def _automatic_rules(self):
+        """Daily mechanics; strategic proposals have already been resolved."""
+        s = self.state
+        self._resolve_job_applications()
         # Business-to-business wheat purchase, then production; no free resource teleportation.
-        farms = [b for b in s.buildings.values() if b.kind == "farm"]
-        for building in list(s.buildings.values()):
+        farms = sorted((b for b in s.buildings.values() if b.kind == "farm"), key=lambda b: b.id)
+        for building in sorted(s.buildings.values(), key=lambda b: (b.kind != "farm", b.id)):
             if building.kind == "bakery" and building.inventory.wheat < 2 and farms:
                 farm = farms[0]
                 amount = farm.prices["wheat"] * 2
@@ -2189,7 +2132,7 @@ class Engine:
                     building.inventory.wheat += 2
                     farm.cash += amount
                     building.cash -= amount
-                    tx.emit(
+                    self.emit(
                         "transaction_completed",
                         dict(
                             sender_id=building.id,
@@ -2201,17 +2144,17 @@ class Engine:
                     )
             if building.kind != "market":
                 try:
-                    tx._execute(m.Produce(actor_id=building.owner_id, building_id=building.id))
+                    self._execute(m.Produce(actor_id=building.owner_id, building_id=building.id))
                 except InvalidAction:
                     pass  # Scarcity is a valid economic outcome.
         missed_payroll = set()
-        for citizen in s.citizens.values():
+        for citizen in sorted(s.citizens.values(), key=lambda c: c.id):
             # Time-mode researchers forfeit today's wage; _innovation_day credits it as progress.
-            employer = None if tx._researching(citizen) else s.buildings.get(citizen.employer_id)
+            employer = None if self._researching(citizen) else s.buildings.get(citizen.employer_id)
             if employer and employer.cash >= employer.wage:
                 employer.cash -= employer.wage
                 citizen.money += employer.wage
-                tx.emit(
+                self.emit(
                     "transaction_completed",
                     dict(sender_id=employer.id, recipient_id=citizen.id, amount=employer.wage),
                     citizen.id,
@@ -2219,59 +2162,172 @@ class Engine:
             elif employer:
                 missed_payroll.add(employer.id)
             citizen.hunger = min(100, citizen.hunger + 20)
-            bakeries = sorted(
-                (b for b in s.buildings.values() if b.kind == "bakery" and b.inventory.bread),
-                key=lambda b: (b.prices["bread"], b.id),
-            )
-            if citizen.inventory.bread == 0 and bakeries:
-                bakery = bakeries[0]
-                if citizen.money >= bakery.prices["bread"]:
-                    tx._execute(
-                        m.Buy(
-                            actor_id=citizen.id,
-                            building_id=bakery.id,
-                            resource="bread",
-                            quantity=1,
-                            max_unit_price=citizen.money,
-                        )
-                    )
             if citizen.inventory.bread and citizen.hunger >= 20:
-                tx._execute(m.Consume(actor_id=citizen.id))
-            tx._execute(m.MoveTo(actor_id=citizen.id, plot_id=tx.rng.choice(sorted(s.plots))))
+                self._execute(m.Consume(actor_id=citizen.id))
+            if s.plots:
+                self._execute(
+                    m.MoveTo(actor_id=citizen.id, plot_id=self.rng.choice(sorted(s.plots)))
+                )
         for building in sorted(s.buildings.values(), key=lambda b: b.id):
             building.unpaid_days = building.unpaid_days + 1 if building.id in missed_payroll else 0
             if building.unpaid_days >= BANKRUPTCY_DAYS:
-                tx._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
-        tx._regenerate_resources()
-        tx._resolve_job_applications()
-        tx._settle_loans()
-        tx._expire_offers()
-        tx._innovation_day()
-        tx._settle_votes()
-        tx._collect_rent()
-        tx._grow()
-        tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
-        rejected = []
-        for proposal in proposals or []:
-            # Each proposal is its own transaction, tagged like a route submission. A rule
-            # rejection is logged and remembered (as on the HTTP route) from the untouched
-            # pre-proposal state, so it cannot leak partial mutations or RNG consumption.
-            action_id = f"action-{tx.state.branch_id}:{tx.state.sequence}"
-            try:
-                update = Engine(tx.state).apply(proposal, action_id)
-            except InvalidAction as exc:
-                rejected.append(str(exc))
-                try:
-                    update = Engine(tx.state).reject(proposal, exc, action_id)
-                except InvalidAction:
-                    continue  # Unknown actor: nobody to remember it.
-            except ValueError as exc:
-                rejected.append(str(exc))
+                self._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
+        self._regenerate_resources()
+        self._settle_loans()
+        self._expire_offers()
+        self._innovation_day()
+        self._settle_votes()
+        self._collect_rent()
+
+    def _upgrade(self, building: m.Building, rationale=None, *, business_pays=False):
+        """One upgrade rule for owner commands and automatic reinvestment."""
+        if building.level >= 3 or building.job_slots > 18:
+            raise InvalidAction("bad_params", "Building is at its level or job-slot limit")
+        owner = self.state.citizens[building.owner_id]
+        balance = building.cash if business_pays else owner.money
+        if balance < 2500:
+            raise InvalidAction("insufficient_funds", "Upgrade costs 25 coins")
+        if business_pays:
+            building.cash -= 2500
+        else:
+            owner.money -= 2500
+        building.level += 1
+        building.job_slots += 2
+        self.emit(
+            "building_upgraded",
+            dict(entity_id=building.id, level=building.level),
+            owner.id,
+            rationale,
+        )
+
+    def _growth_rules(self):
+        """V1 deterministic growth, after daily mechanics; no model calls or new stored fields."""
+        self._open_land()
+        self._welcome_newcomer()
+        self._found_saved_business()
+        for building in sorted(self.state.buildings.values(), key=lambda b: b.id):
+            if (
+                building.cash > 10000
+                and building.job_slots > 0
+                and self._free_slots(building) == 0
+                and building.level < 3
+                and building.job_slots <= 18
+            ):
+                self._upgrade(building, "Busy business reinvests savings", business_pays=True)
+        self._house_workers()
+        # Persisted Citizen.destitute_days carries the streak, so departures are durable.
+        self._let_destitute_leave()
+        self._pay_out_surplus()
+
+    def _open_land(self):
+        s = self.state
+        occupied = {b.plot_id for b in s.buildings.values()}
+        if not s.plots or any(
+            p.id not in occupied and p.tenant_id is None for p in s.plots.values()
+        ):
+            return
+        positions = {(p.position.x, p.position.z) for p in s.plots.values()}
+        # Extend the seed's three-column grid, skipping every existing coordinate.
+        index = 0
+        for _ in range(2):
+            while (4 * (index % 3) - 4, 6 * (index // 3) - 3) in positions:
+                index += 1
+            position = m.Position(x=4 * (index % 3) - 4, z=6 * (index // 3) - 3)
+            pid = f"plot-{s.branch_id}-{s.sequence + 1}"
+            s.plots[pid] = m.Plot(id=pid, position=position)
+            positions.add((position.x, position.z))
+            self.emit("plot_opened", dict(entity_id=pid, position=position.model_dump()))
+
+    def _welcome_newcomer(self):
+        s = self.state
+        if s.tick % 3 or not s.citizens:
+            return
+        if sum(c.hunger for c in s.citizens.values()) >= 50 * len(s.citizens):
+            return
+        opening = next(
+            (
+                b
+                for b in sorted(s.buildings.values(), key=lambda b: b.id)
+                if self._free_slots(b) > 0
+            ),
+            None,
+        )
+        if opening is None:
+            return
+        cid = self._spawn(
+            m.SpawnCitizenRequest(
+                branch_id=s.branch_id,
+                expected_sequence=s.sequence,
+                name=f"Traveler {s.tick // 3}",
+                occupation="Newcomer",
+                plot_id=opening.plot_id,
+                money=1000,
+            )
+        )
+        self._execute(
+            m.ApplyJob(actor_id=cid, building_id=opening.id, rationale="Newcomer seeks an open job")
+        )
+
+    def _found_saved_business(self):
+        s = self.state
+        occupied = {b.plot_id for b in s.buildings.values()}
+        plot = next(
+            (
+                p
+                for p in sorted(s.plots.values(), key=lambda p: p.id)
+                if p.owner_id is None and p.tenant_id is None and p.id not in occupied
+            ),
+            None,
+        )
+        saver = next(
+            (c for c in sorted(s.citizens.values(), key=lambda c: c.id) if c.money > 8000), None
+        )
+        if plot is None or saver is None:
+            return
+        kinds = ("farm", "bakery", "market")
+        kind = min(kinds, key=lambda k: sum(b.kind == k for b in s.buildings.values()))
+        self._execute(
+            m.FoundBusiness(
+                actor_id=saver.id,
+                plot_id=plot.id,
+                kind=kind,
+                capital=MIN_CAPITAL,
+                rationale="Saver founds a business",
+            )
+        )
+
+    def _house_workers(self):
+        s = self.state
+        occupied = {b.plot_id for b in s.buildings.values()}
+        for citizen in sorted(s.citizens.values(), key=lambda c: c.id):
+            if citizen.employer_id not in s.buildings or citizen.money <= 2000:
                 continue
-            tx.state = update.state
-            tx.rng.setstate(_tuples(update.state.rng_state))
-            tx.events.extend(update.events)
-        return tx.result(rejected)
+            if any(
+                p.id not in occupied
+                and (
+                    p.tenant_id == citizen.id or (p.owner_id == citizen.id and p.tenant_id is None)
+                )
+                for p in s.plots.values()
+            ):
+                continue
+            plot = next(
+                (
+                    p
+                    for p in sorted(s.plots.values(), key=lambda p: p.id)
+                    if p.owner_id in s.citizens
+                    and p.owner_id != citizen.id
+                    and p.tenant_id is None
+                    and p.id not in occupied
+                    and citizen.money >= p.rent
+                ),
+                None,
+            )
+            if plot is not None:
+                self._execute(
+                    m.LeaseLot(
+                        actor_id=citizen.id, plot_id=plot.id, rationale="Worker rents a home"
+                    )
+                )
 
     def fork(self, branch_id: str) -> m.WorldState:
         state = self.state.model_copy(deep=True)

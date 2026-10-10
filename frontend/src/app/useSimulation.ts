@@ -17,6 +17,7 @@ export function useSimulation() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const demoIndex = useRef(0);
+  const [preview, setPreview] = useState("");
   const autoplayed = useRef(false);
 
   useEffect(() => {
@@ -99,10 +100,21 @@ export function useSimulation() {
   const step = () =>
     run(async () => {
       if (mode === "offline") {
-        // Development preview only: cycles labeled fixture events.
-        const { mockEvent } = await import("../api/mock");
-        const current = useWorld.getState().update!;
-        useWorld.getState().ingest(mockEvent(current, demoIndex.current++));
+        // Development preview only: plays the labeled fixture story, then
+        // starts it over from the seed world.
+        const { initialMock, mockEvent, STORY } = await import("../api/mock");
+        const next = mockEvent(useWorld.getState().update!, demoIndex.current);
+        if (next) {
+          useWorld.getState().ingest(next);
+          setPreview(
+            `${STORY[demoIndex.current].title} · ${demoIndex.current + 1}/${STORY.length}`,
+          );
+          demoIndex.current++;
+        } else {
+          useWorld.getState().replace(initialMock());
+          demoIndex.current = 0;
+          setPreview("Story restarted from the seed village");
+        }
         return;
       }
       const next = await request<WorldUpdate>(
@@ -148,6 +160,7 @@ export function useSimulation() {
     playing,
     speed,
     step,
+    preview,
     togglePlay,
     setPlayback,
     changeSpeed,

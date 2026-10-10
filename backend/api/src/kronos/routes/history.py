@@ -20,28 +20,13 @@ async def events(
     return service.store.list_events(branch_id, through, limit)
 
 
-@router.get("/events", response_model=m.EventPage, summary="Page through the event log")
-async def event_log(
+@router.get("/events", response_model=list[m.SimulationEvent], summary="Read new village events")
+async def events_after(
     service: ServiceDependency,
-    after: int = Query(0, ge=0, description="Return events with a sequence greater than this"),
+    after: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    branch_id: str | None = None,
 ):
-    """Events oldest first. Pass the returned `next_after` as `after` to read the next page.
-
-    Defaults to the active branch.
-    """
-    branch_id = branch_id or service.state.branch_id
-    if branch_id != service.state.branch_id:
-        service.store.world(branch_id)  # KeyError -> 404 for an unknown branch
-    found = service.store.list_events_after(branch_id, after, limit + 1)
-    page = found[:limit]
-    return m.EventPage(
-        branch_id=branch_id,
-        events=page,
-        next_after=page[-1].sequence if page else after,
-        has_more=len(found) > limit,
-    )
+    return service.store.list_events_after(service.state.branch_id, after, limit)
 
 
 @router.get(
@@ -81,6 +66,9 @@ async def activate(branch_id: str, service: ServiceDependency):
         state = service.store.world(branch_id)
         service.store.activate(branch_id)
         service.state, service.playing = state, False
+        service.branch_epoch += 1
+        if service.decision_task is not None:
+            service.decision_task.cancel()
         result = service.update()
         await service.broadcast(result)
         return result
@@ -123,5 +111,5 @@ async def citizen_history(
     summary="Read the outcome of an agent action",
 )
 async def action_result(action_id: str, service: ServiceDependency):
-    """Actions apply immediately, so this never reports "queued"; it rebuilds the result."""
+    """Read an attempt in this API session; committed Events survive restarts."""
     return service.action_result(action_id)

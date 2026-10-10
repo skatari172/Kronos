@@ -12,7 +12,7 @@ import { joinCrowd, keepApart } from "./crowd";
 import { CharacterModel, type Motion } from "./Models";
 import { preloadModels } from "./preload";
 import { useTown } from "./progress";
-import { startRoutine, stepRoutine } from "./routine";
+import { startRoutine, startSpot, stepRoutine } from "./routine";
 import { stepSpring, type Spring } from "./spring";
 import { Selection, type LabelPortal } from "./Selection";
 import type { Town } from "./town";
@@ -69,8 +69,20 @@ function EntityRenderer({
   const select = usePresentation((s) => s.select);
   const seed = hash(entity.value.id);
   const home = new Vector3(entity.value.position.x, 0, entity.value.position.z);
-  const position = useRef(home.clone());
-  const routine = useRef(startRoutine(town, home, seed));
+  // Villagers begin spread across the town rather than on the main street.
+  const [start] = useState(() => {
+    if (entity.kind !== "citizen") return home;
+    const lane = ((seed % 5) - 2) * 0.13;
+    const spot = startSpot(
+      entity.value,
+      useWorld.getState().update!.state,
+      town,
+      lane,
+    );
+    return new Vector3(spot.x, 0, spot.z);
+  });
+  const position = useRef(start.clone());
+  const routine = useRef(startRoutine(town, start, seed));
   const townRef = useRef(town);
   useEffect(() => {
     townRef.current = town;
@@ -123,7 +135,7 @@ function EntityRenderer({
   return (
     <group
       ref={group}
-      position={[home.x, 0, home.z]}
+      position={[start.x, 0, start.z]}
       scale={
         entity.kind === "building" ? 1 : Math.max(0.0001, size.current.value)
       }

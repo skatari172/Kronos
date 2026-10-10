@@ -3,6 +3,7 @@
 import pytest
 from kronos_sim.engine import EVENT, Engine, InvalidAction
 from kronos_sim.models import (
+    ActionResult,
     GrantIntervention,
     HungerIntervention,
     InterventionResult,
@@ -140,6 +141,24 @@ def test_set_policy_applies_now_and_enforces_it():
 
 
 def test_intervention_result_accepts_every_kind():
-    result = intervene(GrantIntervention(amount=1))
-    wire = InterventionResult(command=GrantIntervention(amount=1), update=result)
-    assert InterventionResult.model_validate_json(wire.model_dump_json()).command.amount == 1
+    # Interventions are queued like actions; the record round-trips every command kind.
+    command = GrantIntervention(amount=1)
+    queued = ActionResult(
+        action_id="a-1",
+        branch_id="main",
+        status="queued",
+        action=command,
+        source="player",
+        order=1,
+        scheduled_tick=1,
+        tick=0,
+        sequence=0,
+    )
+    wire = InterventionResult(command=command, result=queued)
+    parsed = InterventionResult.model_validate_json(wire.model_dump_json())
+    assert parsed.command.amount == 1 and isinstance(parsed.result.action, GrantIntervention)
+    # A wage intervention shares the `set_wage` tag with an action but never parses as one.
+    wage = queued.model_copy(update={"action": WageIntervention(wage=200)})
+    assert isinstance(
+        ActionResult.model_validate_json(wage.model_dump_json()).action, WageIntervention
+    )

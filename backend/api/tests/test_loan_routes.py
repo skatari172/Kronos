@@ -4,10 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 from kronos.config import Settings
 from kronos.main import create_app
+from route_helpers import resolve
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(tmp_path, route_only):
     with TestClient(
         create_app(Settings(database_url=f"sqlite:///{tmp_path / 'loans.db'}"))
     ) as client:
@@ -23,16 +24,19 @@ def money(client, citizen_id):
 
 
 def test_loan_lifecycle_through_routes(client):
-    offer = client.post(
-        "/api/loans",
-        json=command(
-            "citizen-2",
-            0,
-            borrower_id="citizen-6",
-            principal=6000,
-            rate_bps=1000,
-            due_tick=5,
-            rationale="Help Finn",
+    offer = resolve(
+        client,
+        client.post(
+            "/api/loans",
+            json=command(
+                "citizen-2",
+                0,
+                borrower_id="citizen-6",
+                principal=6000,
+                rate_bps=1000,
+                due_tick=5,
+                rationale="Help Finn",
+            ),
         ),
     ).json()
     assert offer["status"] == "applied"
@@ -45,33 +49,42 @@ def test_loan_lifecycle_through_routes(client):
     assert [x["id"] for x in observation["loans"]] == [loan["id"]]
 
     seq = offer["sequence"]
-    stolen = client.post(
-        f"/api/loans/{loan['id']}/respond", json=command("citizen-2", seq, accept=True)
+    stolen = resolve(
+        client,
+        client.post(
+            f"/api/loans/{loan['id']}/respond", json=command("citizen-2", seq, accept=True)
+        ),
     ).json()
     assert (stolen["status"], stolen["error"]) == ("rejected", "insufficient_authority")
     seq = stolen["sequence"]
-    accepted = client.post(
-        f"/api/loans/{loan['id']}/respond", json=command("citizen-6", seq, accept=True)
+    accepted = resolve(
+        client,
+        client.post(
+            f"/api/loans/{loan['id']}/respond", json=command("citizen-6", seq, accept=True)
+        ),
     ).json()
     assert accepted["status"] == "applied"
     assert (money(client, "citizen-2"), money(client, "citizen-6")) == (10000, 6550)
 
     seq = accepted["sequence"]
-    too_much = client.post(
-        f"/api/loans/{loan['id']}/repay", json=command("citizen-6", seq, amount=7000)
+    too_much = resolve(
+        client,
+        client.post(f"/api/loans/{loan['id']}/repay", json=command("citizen-6", seq, amount=7000)),
     ).json()
     assert too_much["error"] == "bad_params"
     seq = too_much["sequence"]
-    paid = client.post(
-        f"/api/loans/{loan['id']}/repay", json=command("citizen-6", seq, amount=6550)
+    paid = resolve(
+        client,
+        client.post(f"/api/loans/{loan['id']}/repay", json=command("citizen-6", seq, amount=6550)),
     ).json()
     assert paid["status"] == "applied"
     current = client.get(f"/api/loans/{loan['id']}").json()
     assert (current["status"], current["amount_repaid"]) == ("active", 6550)
     assert money(client, "citizen-2") == 16550
     assert (
-        client.post(
-            f"/api/loans/{loan['id']}/repay", json=command("citizen-6", seq, amount=0)
+        resolve(
+            client,
+            client.post(f"/api/loans/{loan['id']}/repay", json=command("citizen-6", seq, amount=0)),
         ).status_code
         == 422
     )

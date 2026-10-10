@@ -76,7 +76,8 @@ const LANDMARKS: Record<string, string> = {
   [key({ x: 0, z: -4 * ROW })]: "building_church_red",
   [key({ x: -12.6, z: -ROW })]: "building_blacksmith_red",
   [key({ x: 12.6, z: ROW })]: "building_lumbermill_red",
-  [key({ x: -5.6, z: 2 * ROW })]: "building_well_red",
+  // Beside the main street, clear of the simulated plots and their upgrades.
+  [key({ x: -7, z: ROW })]: "building_well_red",
 };
 const HOUSES = ["building_home_A_red", "building_home_B_red"];
 const FOREST = [

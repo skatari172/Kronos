@@ -20,7 +20,13 @@ async def observation(citizen_id: str, service: ServiceDependency):
     Read-only; this is the same observation /decide sends to the AI provider.
     """
     async with service.lock:
-        return observe(service.state, citizen_id)
+        return observe(
+            service.state,
+            citizen_id,
+            service.store.list_citizen_events(
+                service.state.branch_id, citizen_id, service.state.sequence, limit=8
+            ),
+        )
 
 
 @router.post(
@@ -42,10 +48,10 @@ async def validate(citizen_id: str, body: m.ActionRequest, service: ServiceDepen
     summary="Submit an agent action for engine execution",
 )
 async def execute(citizen_id: str, body: m.ActionRequest, service: ServiceDependency):
-    """Require actor_id to match citizen_id, then validate, persist, and broadcast.
+    """Require actor_id to match citizen_id, then durably queue the proposal.
 
-    A rule rejection returns status "rejected" with an error code, and is saved as an
-    action_rejected event plus a memory for the agent. Stale versions still return 409.
+    At the next tick a rule rejection records status "rejected" with an error code
+    and an action_rejected event. Stale versions still return 409.
     Agents never mutate live state themselves; the full world arrives on WS /ws/world.
     """
     return await service.submit_agent_action(body, citizen_id)
@@ -59,7 +65,7 @@ async def execute(citizen_id: str, body: m.ActionRequest, service: ServiceDepend
 async def decide(citizen_id: str, body: m.MutationRequest, service: ServiceDependency):
     """Observation → provider → the same path as POST /actions (logged even if rejected).
 
-    Returns 409 if the world changed while the provider was thinking, and 422 if the provider
+    Returns 409 if the branch changed while the provider was thinking, and 422 if the provider
     fails or times out.
     """
     return await service.decide(citizen_id, body)

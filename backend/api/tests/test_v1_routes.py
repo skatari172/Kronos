@@ -47,38 +47,18 @@ def test_events_pages_in_sequence_order(tmp_path):
         assert world["events"][-1]["sequence"] == latest
 
         everything = client.get("/api/events", params={"limit": 500}).json()
-        assert everything["branch_id"] == "main"
-        sequences = [e["sequence"] for e in everything["events"]]
+        sequences = [e["sequence"] for e in everything]
         assert sequences == sorted(sequences) and len(set(sequences)) == len(sequences)
-        assert sequences[-1] == latest and not everything["has_more"]
-        assert len(sequences) > 4
+        assert sequences[-1] == latest and len(sequences) > 4
 
-        # Walk the log two at a time using next_after; the pages join up exactly.
+        # Walk the log two at a time, passing the last sequence seen as `after`.
         paged, after = [], 0
-        while True:
-            page = client.get("/api/events", params={"after": after, "limit": 2}).json()
-            assert len(page["events"]) <= 2
-            assert all(e["sequence"] > after for e in page["events"])
-            paged += [e["sequence"] for e in page["events"]]
-            after = page["next_after"]
-            if not page["has_more"]:
-                break
+        while page := client.get("/api/events", params={"after": after, "limit": 2}).json():
+            assert len(page) <= 2 and all(e["sequence"] > after for e in page)
+            paged += [e["sequence"] for e in page]
+            after = page[-1]["sequence"]
         assert paged == sequences
-
-        middle = sequences[len(sequences) // 2]
-        tail = client.get("/api/events", params={"after": middle}).json()
-        assert [e["sequence"] for e in tail["events"]] == [s for s in sequences if s > middle]
-
-        empty = client.get("/api/events", params={"after": latest}).json()
-        assert empty == {
-            "branch_id": "main",
-            "events": [],
-            "next_after": latest,
-            "has_more": False,
-        }
-
-        explicit = client.get("/api/events", params={"branch_id": "main", "limit": 500}).json()
-        assert explicit == everything
+        assert client.get("/api/events", params={"after": latest}).json() == []
         assert client.get("/api/history/events", params={"branch_id": "main"}).status_code == 200
 
 
@@ -88,7 +68,6 @@ def test_events_rejects_bad_queries(tmp_path):
         assert client.get("/api/events", params={"limit": 0}).status_code == 422
         assert client.get("/api/events", params={"limit": 501}).status_code == 422
         assert client.get("/api/events", params={"after": -1}).status_code == 422
-        assert client.get("/api/events", params={"branch_id": "nope"}).status_code == 404
 
 
 def test_jobs_lists_only_pending_applicants():

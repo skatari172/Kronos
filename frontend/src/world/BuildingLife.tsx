@@ -100,11 +100,15 @@ export function BuildingLife({
   const building_ = phase !== "ruin";
   const scaffolding = (phase === "build" && stage > 0) || phase === "upgrade";
   return (
-    // Face the main street (z = 0) from either side of it.
-    <group rotation={[0, building.position.z > 0 ? Math.PI : 0, 0]}>
+    <group>
       {building_ && (
         <group ref={body} scale={Math.max(0.0001, rise.current.value)}>
-          <BuildingModel kind={building.kind} level={level} />
+          {/* Face the main street (z = 0) from either side of it. */}
+          <BuildingModel
+            kind={building.kind}
+            level={level}
+            flip={building.position.z > 0}
+          />
         </group>
       )}
       {phase === "build" && stage < 3 && (

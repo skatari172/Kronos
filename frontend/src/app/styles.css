@@ -1000,6 +1000,9 @@ footer > span:last-child {
   color: #f1f0e4;
 }
 .hud-day small {
+  max-width: min(280px, 46vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: flex;
   align-items: center;
   gap: 6px;

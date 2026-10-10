@@ -74,27 +74,42 @@ export function StaticModel({
   );
 }
 
+/**
+ * A business with the dressing for its level. `flip` turns it to face north,
+ * for lots south of the main street. The camera looks from the south-east, so
+ * all dressing then stays on the street side: anything behind the building
+ * would stand between it and the camera.
+ */
 export function BuildingModel({
   kind,
   level = 1,
+  flip = false,
 }: {
   kind: Building["kind"];
   level?: number;
+  flip?: boolean;
 }) {
   return (
     <group scale={HEX_SCALE}>
-      <StaticModel url={BUILDING_MODELS[kind]} scale={1} />
+      <StaticModel
+        url={BUILDING_MODELS[kind]}
+        scale={1}
+        rotation={[0, flip ? Math.PI : 0, 0]}
+      />
       {BUSINESS_DRESSING[kind]
         .filter((prop) => (prop.level ?? 1) <= level)
-        .map((prop) => (
-          <StaticModel
-            key={`${prop.model}:${prop.at}`}
-            url={hex(prop.model)}
-            scale={prop.size ?? 1}
-            position={[prop.at[0], 0, prop.at[1]]}
-            rotation={[0, prop.turn ?? 0, 0]}
-          />
-        ))}
+        .map((prop) => {
+          const [x, z] = prop.at;
+          return (
+            <StaticModel
+              key={`${prop.model}:${prop.at}`}
+              url={hex(prop.model)}
+              scale={prop.size ?? 1}
+              position={flip ? [-x, 0, -Math.abs(z)] : [x, 0, z]}
+              rotation={[0, (prop.turn ?? 0) + (flip ? Math.PI : 0), 0]}
+            />
+          );
+        })}
     </group>
   );
 }

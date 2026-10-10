@@ -6,8 +6,9 @@ from kronos_sim.queries import OBSERVED_JOBS, OBSERVED_NEIGHBORS, observe
 from kronos_sim.seed import initial_world
 
 OWNER_ACTIONS = {"set_price", "set_wage", "close_business", "upgrade_building", "produce"}
-# ~800 tokens at a conservative 3 characters per token for JSON (A5).
-MAX_OBSERVATION_CHARS = 2400
+# ~1,000-1,300 tokens of JSON (A5). Raised from 2,400 when observations gained bread stock
+# and owned-business caps; recent events (up to 8, passed by the service) come on top.
+MAX_OBSERVATION_CHARS = 4000
 
 
 def crowded_world(citizens: int = 30) -> m.WorldState:

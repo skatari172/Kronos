@@ -29,11 +29,14 @@ def profile(state: m.WorldState, citizen_id: str) -> m.CitizenProfile:
 
 # Observation caps keep a prompt near 800 tokens however large the town grows (A5).
 OBSERVED_NEIGHBORS = 8
-OBSERVED_JOBS = 5
+OBSERVED_JOBS = 3
+OBSERVED_BUSINESSES = 3
 CONSTRUCTION_COST = 5000  # engine: construct_building costs 50 coins
 
 
-def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
+def observe(
+    state: m.WorldState, citizen_id: str, events: list[m.SimulationEvent] | None = None
+) -> m.AgentObservation:
     """The single observation builder for routes, /decide, and the tick loop."""
     view = profile(state, citizen_id)
     # The full relationship list and the raw memory counts stay out of the prompt: `ties`
@@ -47,6 +50,10 @@ def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
         if "apply_job" in actions
         else []
     )
+    bakeries = sorted(
+        (b for b in state.buildings.values() if b.kind == "bakery"),
+        key=lambda b: (b.prices["bread"], b.id),
+    )[:12]
     return m.AgentObservation(
         branch_id=state.branch_id,
         tick=state.tick,
@@ -54,24 +61,35 @@ def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
         citizen=citizen,
         role=view.role,
         wealth_tier=view.wealth_tier,
-        bread_prices={
-            b.id: b.prices["bread"] for b in state.buildings.values() if b.kind == "bakery"
-        },
+        bread_prices={b.id: b.prices["bread"] for b in bakeries},
+        bread_stock={b.id: b.inventory.bread for b in bakeries},
         neighbors=neighbors(state, citizen_id, [t.citizen_id for t in ties]),
         available_actions=actions,
+        recent_events=[
+            event.model_copy(deep=True)
+            for event in (events or [])
+            if (
+                event.actor_id == citizen_id
+                or citizen_id
+                in {
+                    event.payload.model_dump().get(key)
+                    for key in ("sender_id", "recipient_id", "entity_id", "citizen_id")
+                }
+            )
+        ][-8:],
         loans=[
             loan
             for loan in loans(state, citizen_id)
             if loan.status in ("offered", "active", "defaulted")
-        ],
-        incoming_offers=offers(state, citizen_id).incoming,
+        ][:8],
+        incoming_offers=offers(state, citizen_id).incoming[:8],
         ties=ties,
         open_jobs=jobs[:OBSERVED_JOBS],
         businesses=[
             business_profile(state, b.id)
             for b in sorted(state.buildings.values(), key=lambda b: b.id)
             if b.owner_id == citizen_id
-        ],
+        ][:OBSERVED_BUSINESSES],
     )
 
 

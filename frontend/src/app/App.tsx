@@ -35,7 +35,7 @@ export function App() {
   const live = sim.mode === "live";
   const day = String(update.state.tick + 1).padStart(2, "0");
   const status = !live
-    ? "Offline preview"
+    ? sim.preview || "Offline preview · press ⏭ to grow the village"
     : !sim.connected
       ? "Reconnecting"
       : timelapse

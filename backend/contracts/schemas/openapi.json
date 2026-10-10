@@ -12,7 +12,7 @@
           "User tools"
         ],
         "summary": "Apply a natural-language intervention",
-        "description": "Parse supported text, validate the current version, then persist and broadcast.",
+        "description": "Parse supported text and queue it for the next authoritative tick.",
         "operationId": "intervene_api_interventions_post",
         "requestBody": {
           "content": {
@@ -53,7 +53,7 @@
         "tags": [
           "User tools"
         ],
-        "summary": "Execute a player-directed action",
+        "summary": "Queue a player-directed action",
         "description": "Buy, sell, transfer, price, produce, consume, communicate, build, upgrade, or move.\n\nThe player chooses actor_id; the engine still enforces ownership, funds, and stock.",
         "operationId": "action_api_actions_post",
         "requestBody": {
@@ -72,7 +72,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorldUpdate"
+                  "$ref": "#/components/schemas/ActionResult"
                 }
               }
             }
@@ -326,7 +326,7 @@
           "Agent tools"
         ],
         "summary": "Submit an agent action for engine execution",
-        "description": "Require actor_id to match citizen_id, then validate, persist, and broadcast.\n\nA rule rejection returns status \"rejected\" with an error code, and is saved as an\naction_rejected event plus a memory for the agent. Stale versions still return 409.\nAgents never mutate live state themselves; the full world arrives on WS /ws/world.",
+        "description": "Require actor_id to match citizen_id, then durably queue the proposal.\n\nAt the next tick a rule rejection records status \"rejected\" with an error code\nand an action_rejected event. Stale versions still return 409.\nAgents never mutate live state themselves; the full world arrives on WS /ws/world.",
         "operationId": "execute_api_agents__citizen_id__actions_post",
         "parameters": [
           {
@@ -379,7 +379,7 @@
           "Agent tools"
         ],
         "summary": "Let the AI layer choose and submit this citizen's next action",
-        "description": "Observation \u2192 provider \u2192 the same path as POST /actions (logged even if rejected).\n\nReturns 409 if the world changed while the provider was thinking, and 422 if the provider\nfails or times out.",
+        "description": "Observation \u2192 provider \u2192 the same path as POST /actions (logged even if rejected).\n\nReturns 409 if the branch changed while the provider was thinking, and 422 if the provider\nfails or times out.",
         "operationId": "decide_api_agents__citizen_id__decide_post",
         "parameters": [
           {
@@ -2958,7 +2958,7 @@
         "tags": [
           "Backend tools"
         ],
-        "summary": "Execute a backend automation action",
+        "summary": "Queue a backend automation action",
         "description": "Use the same version, engine, and persistence checks as other action callers.\n\nThis endpoint grants no extra capabilities. In-process jobs may call\nService.execute_action directly instead of making an HTTP request to this server.",
         "operationId": "action_api_backend_actions_post",
         "requestBody": {
@@ -2977,7 +2977,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorldUpdate"
+                  "$ref": "#/components/schemas/ActionResult"
                 }
               }
             }
@@ -3226,6 +3226,9 @@
                         "$ref": "#/components/schemas/CitizenRemoved"
                       },
                       {
+                        "$ref": "#/components/schemas/PlotOpened"
+                      },
+                      {
                         "$ref": "#/components/schemas/BuildingConstructed"
                       },
                       {
@@ -3331,9 +3334,6 @@
                         "$ref": "#/components/schemas/LotLeased"
                       },
                       {
-                        "$ref": "#/components/schemas/PlotOpened"
-                      },
-                      {
                         "$ref": "#/components/schemas/RentChanged"
                       },
                       {
@@ -3347,6 +3347,9 @@
                       },
                       {
                         "$ref": "#/components/schemas/CitizenInteracted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TickCompleted"
                       }
                     ],
                     "discriminator": {
@@ -3359,6 +3362,7 @@
                         "citizen_moved": "#/components/schemas/CitizenMoved",
                         "citizen_spawned": "#/components/schemas/CitizenSpawned",
                         "citizen_removed": "#/components/schemas/CitizenRemoved",
+                        "plot_opened": "#/components/schemas/PlotOpened",
                         "building_constructed": "#/components/schemas/BuildingConstructed",
                         "building_upgraded": "#/components/schemas/BuildingUpgraded",
                         "building_removed": "#/components/schemas/BuildingRemoved",
@@ -3394,12 +3398,12 @@
                         "policy_changed": "#/components/schemas/PolicyChanged",
                         "tax_collected": "#/components/schemas/TaxCollected",
                         "lot_leased": "#/components/schemas/LotLeased",
-                        "plot_opened": "#/components/schemas/PlotOpened",
                         "rent_changed": "#/components/schemas/RentChanged",
                         "rent_missed": "#/components/schemas/RentMissed",
                         "rent_covered": "#/components/schemas/RentCovered",
                         "tenant_evicted": "#/components/schemas/TenantEvicted",
-                        "citizen_interacted": "#/components/schemas/CitizenInteracted"
+                        "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                        "tick_completed": "#/components/schemas/TickCompleted"
                       }
                     }
                   },
@@ -3426,9 +3430,8 @@
         "tags": [
           "History"
         ],
-        "summary": "Page through the event log",
-        "description": "Events oldest first. Pass the returned `next_after` as `after` to read the next page.\n\nDefaults to the active branch.",
-        "operationId": "event_log_api_events_get",
+        "summary": "Read new village events",
+        "operationId": "events_after_api_events_get",
         "parameters": [
           {
             "name": "after",
@@ -3437,11 +3440,9 @@
             "schema": {
               "type": "integer",
               "minimum": 0,
-              "description": "Return events with a sequence greater than this",
               "default": 0,
               "title": "After"
-            },
-            "description": "Return events with a sequence greater than this"
+            }
           },
           {
             "name": "limit",
@@ -3454,22 +3455,6 @@
               "default": 100,
               "title": "Limit"
             }
-          },
-          {
-            "name": "branch_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Branch Id"
-            }
           }
         ],
         "responses": {
@@ -3478,7 +3463,213 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EventPage"
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/PriceChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TransactionCompleted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResourceProduced"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResourceConsumed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenMoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenSpawned"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenRemoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/PlotOpened"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingConstructed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingUpgraded"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingRemoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/AgentSpoke"
+                      },
+                      {
+                        "$ref": "#/components/schemas/RelationshipChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ActionRejected"
+                      },
+                      {
+                        "$ref": "#/components/schemas/GoalsChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/EmploymentChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/WageChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/InterventionApplied"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResourceGathered"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResourceRegenerated"
+                      },
+                      {
+                        "$ref": "#/components/schemas/JobApplied"
+                      },
+                      {
+                        "$ref": "#/components/schemas/JobApplicationResolved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LoanOffered"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LoanAccepted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LoanDeclined"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LoanRepaid"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LoanExpired"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LoanDefaulted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TradeOffered"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TradeAccepted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TradeDeclined"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TradeExpired"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResearchContributed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/InventionUnlocked"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LicenseOffered"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LicenseResolved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/InventionAdopted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/VoteProposed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/VoteCast"
+                      },
+                      {
+                        "$ref": "#/components/schemas/VoteClosed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/PolicyChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TaxCollected"
+                      },
+                      {
+                        "$ref": "#/components/schemas/LotLeased"
+                      },
+                      {
+                        "$ref": "#/components/schemas/RentChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/RentMissed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/RentCovered"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TenantEvicted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenInteracted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TickCompleted"
+                      }
+                    ],
+                    "discriminator": {
+                      "propertyName": "type",
+                      "mapping": {
+                        "price_changed": "#/components/schemas/PriceChanged",
+                        "transaction_completed": "#/components/schemas/TransactionCompleted",
+                        "resource_produced": "#/components/schemas/ResourceProduced",
+                        "resource_consumed": "#/components/schemas/ResourceConsumed",
+                        "citizen_moved": "#/components/schemas/CitizenMoved",
+                        "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                        "citizen_removed": "#/components/schemas/CitizenRemoved",
+                        "plot_opened": "#/components/schemas/PlotOpened",
+                        "building_constructed": "#/components/schemas/BuildingConstructed",
+                        "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                        "building_removed": "#/components/schemas/BuildingRemoved",
+                        "agent_spoke": "#/components/schemas/AgentSpoke",
+                        "relationship_changed": "#/components/schemas/RelationshipChanged",
+                        "action_rejected": "#/components/schemas/ActionRejected",
+                        "goals_changed": "#/components/schemas/GoalsChanged",
+                        "employment_changed": "#/components/schemas/EmploymentChanged",
+                        "wage_changed": "#/components/schemas/WageChanged",
+                        "intervention_applied": "#/components/schemas/InterventionApplied",
+                        "resource_gathered": "#/components/schemas/ResourceGathered",
+                        "resource_regenerated": "#/components/schemas/ResourceRegenerated",
+                        "job_applied": "#/components/schemas/JobApplied",
+                        "job_application_resolved": "#/components/schemas/JobApplicationResolved",
+                        "loan_offered": "#/components/schemas/LoanOffered",
+                        "loan_accepted": "#/components/schemas/LoanAccepted",
+                        "loan_declined": "#/components/schemas/LoanDeclined",
+                        "loan_repaid": "#/components/schemas/LoanRepaid",
+                        "loan_expired": "#/components/schemas/LoanExpired",
+                        "loan_defaulted": "#/components/schemas/LoanDefaulted",
+                        "trade_offered": "#/components/schemas/TradeOffered",
+                        "trade_accepted": "#/components/schemas/TradeAccepted",
+                        "trade_declined": "#/components/schemas/TradeDeclined",
+                        "trade_expired": "#/components/schemas/TradeExpired",
+                        "research_contributed": "#/components/schemas/ResearchContributed",
+                        "invention_unlocked": "#/components/schemas/InventionUnlocked",
+                        "license_offered": "#/components/schemas/LicenseOffered",
+                        "license_resolved": "#/components/schemas/LicenseResolved",
+                        "invention_adopted": "#/components/schemas/InventionAdopted",
+                        "vote_proposed": "#/components/schemas/VoteProposed",
+                        "vote_cast": "#/components/schemas/VoteCast",
+                        "vote_closed": "#/components/schemas/VoteClosed",
+                        "policy_changed": "#/components/schemas/PolicyChanged",
+                        "tax_collected": "#/components/schemas/TaxCollected",
+                        "lot_leased": "#/components/schemas/LotLeased",
+                        "rent_changed": "#/components/schemas/RentChanged",
+                        "rent_missed": "#/components/schemas/RentMissed",
+                        "rent_covered": "#/components/schemas/RentCovered",
+                        "tenant_evicted": "#/components/schemas/TenantEvicted",
+                        "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                        "tick_completed": "#/components/schemas/TickCompleted"
+                      }
+                    }
+                  },
+                  "title": "Response Events After Api Events Get"
                 }
               }
             }
@@ -3826,6 +4017,9 @@
                         "$ref": "#/components/schemas/CitizenRemoved"
                       },
                       {
+                        "$ref": "#/components/schemas/PlotOpened"
+                      },
+                      {
                         "$ref": "#/components/schemas/BuildingConstructed"
                       },
                       {
@@ -3931,9 +4125,6 @@
                         "$ref": "#/components/schemas/LotLeased"
                       },
                       {
-                        "$ref": "#/components/schemas/PlotOpened"
-                      },
-                      {
                         "$ref": "#/components/schemas/RentChanged"
                       },
                       {
@@ -3947,6 +4138,9 @@
                       },
                       {
                         "$ref": "#/components/schemas/CitizenInteracted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TickCompleted"
                       }
                     ],
                     "discriminator": {
@@ -3959,6 +4153,7 @@
                         "citizen_moved": "#/components/schemas/CitizenMoved",
                         "citizen_spawned": "#/components/schemas/CitizenSpawned",
                         "citizen_removed": "#/components/schemas/CitizenRemoved",
+                        "plot_opened": "#/components/schemas/PlotOpened",
                         "building_constructed": "#/components/schemas/BuildingConstructed",
                         "building_upgraded": "#/components/schemas/BuildingUpgraded",
                         "building_removed": "#/components/schemas/BuildingRemoved",
@@ -3994,12 +4189,12 @@
                         "policy_changed": "#/components/schemas/PolicyChanged",
                         "tax_collected": "#/components/schemas/TaxCollected",
                         "lot_leased": "#/components/schemas/LotLeased",
-                        "plot_opened": "#/components/schemas/PlotOpened",
                         "rent_changed": "#/components/schemas/RentChanged",
                         "rent_missed": "#/components/schemas/RentMissed",
                         "rent_covered": "#/components/schemas/RentCovered",
                         "tenant_evicted": "#/components/schemas/TenantEvicted",
-                        "citizen_interacted": "#/components/schemas/CitizenInteracted"
+                        "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                        "tick_completed": "#/components/schemas/TickCompleted"
                       }
                     }
                   },
@@ -4027,7 +4222,7 @@
           "History"
         ],
         "summary": "Read the outcome of an agent action",
-        "description": "Actions apply immediately, so this never reports \"queued\"; it rebuilds the result.",
+        "description": "Read an attempt in this API session; committed Events survive restarts.",
         "operationId": "action_result_api_actions__action_id__get",
         "parameters": [
           {
@@ -4339,10 +4534,233 @@
           "status": {
             "type": "string",
             "enum": [
+              "queued",
               "applied",
               "rejected"
             ],
             "title": "Status"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Buy-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Sell-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TransferMoney-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SetPrice-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Produce-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Consume-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Communicate-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConstructBuilding-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UpgradeBuilding-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MoveTo-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdjustGoals-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FoundBusiness-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CloseBusiness-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SetWage-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Hire-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Fire-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ApplyJob-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/QuitJob-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Trade-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RespondTrade-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LeaseLot-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SetRent-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PayRent-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Evict-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Interact-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Research-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LicenseInvention-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AdoptInvention-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Lend-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Repay-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ProposeVote-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CastVote-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GatherResource-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RejectApplication-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RespondLoan-Output"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RespondLicense-Output"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "adjust_goals": "#/components/schemas/AdjustGoals-Output",
+                    "adopt_invention": "#/components/schemas/AdoptInvention-Output",
+                    "apply_job": "#/components/schemas/ApplyJob-Output",
+                    "buy": "#/components/schemas/Buy-Output",
+                    "close_business": "#/components/schemas/CloseBusiness-Output",
+                    "communicate": "#/components/schemas/Communicate-Output",
+                    "construct_building": "#/components/schemas/ConstructBuilding-Output",
+                    "consume": "#/components/schemas/Consume-Output",
+                    "evict": "#/components/schemas/Evict-Output",
+                    "fire": "#/components/schemas/Fire-Output",
+                    "found_business": "#/components/schemas/FoundBusiness-Output",
+                    "gather_resource": "#/components/schemas/GatherResource-Output",
+                    "hire": "#/components/schemas/Hire-Output",
+                    "interact": "#/components/schemas/Interact-Output",
+                    "lease_lot": "#/components/schemas/LeaseLot-Output",
+                    "lend": "#/components/schemas/Lend-Output",
+                    "license_invention": "#/components/schemas/LicenseInvention-Output",
+                    "move_to": "#/components/schemas/MoveTo-Output",
+                    "pay_rent": "#/components/schemas/PayRent-Output",
+                    "produce": "#/components/schemas/Produce-Output",
+                    "propose_vote": "#/components/schemas/ProposeVote-Output",
+                    "quit_job": "#/components/schemas/QuitJob-Output",
+                    "reject_application": "#/components/schemas/RejectApplication-Output",
+                    "repay": "#/components/schemas/Repay-Output",
+                    "research": "#/components/schemas/Research-Output",
+                    "respond_license": "#/components/schemas/RespondLicense-Output",
+                    "respond_loan": "#/components/schemas/RespondLoan-Output",
+                    "respond_trade": "#/components/schemas/RespondTrade-Output",
+                    "sell": "#/components/schemas/Sell-Output",
+                    "set_price": "#/components/schemas/SetPrice-Output",
+                    "set_rent": "#/components/schemas/SetRent-Output",
+                    "set_wage": "#/components/schemas/SetWage-Output",
+                    "trade": "#/components/schemas/Trade-Output",
+                    "transfer_money": "#/components/schemas/TransferMoney-Output",
+                    "upgrade_building": "#/components/schemas/UpgradeBuilding-Output",
+                    "vote": "#/components/schemas/CastVote-Output"
+                  }
+                }
+              },
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PriceIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WageIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GrantIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/HungerIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PolicyIntervention"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "adjust_hunger": "#/components/schemas/HungerIntervention",
+                    "adjust_resource": "#/components/schemas/ResourceIntervention",
+                    "grant_money": "#/components/schemas/GrantIntervention",
+                    "modify_price": "#/components/schemas/PriceIntervention",
+                    "set_policy": "#/components/schemas/PolicyIntervention",
+                    "set_wage": "#/components/schemas/WageIntervention"
+                  }
+                }
+              }
+            ],
+            "title": "Action"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "player",
+              "backend"
+            ],
+            "title": "Source",
+            "default": "agent"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Order"
+          },
+          "scheduled_tick": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Scheduled Tick"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
           },
           "tick": {
             "type": "integer",
@@ -4403,6 +4821,11 @@
           "action_id",
           "branch_id",
           "status",
+          "action",
+          "source",
+          "order",
+          "scheduled_tick",
+          "text",
           "tick",
           "sequence",
           "event_ids",
@@ -4410,7 +4833,7 @@
           "message"
         ],
         "title": "ActionResult",
-        "description": "Outcome of an agent action. Rule rejections are logged events, not HTTP errors.\n\nRequest problems (stale sequence, unknown citizen, malformed body) still fail with HTTP codes.\nsequence is the world version after this result; send it as the next expected_sequence."
+        "description": "Proposal and session outcome. Queuing does not change the world version.\n\nscheduled_tick is the earliest execution day; sequence is the last committed world\nversion at submission or resolution. Gameplay preconditions are checked at execution."
       },
       "ActionValidationResult": {
         "properties": {
@@ -4862,6 +5285,13 @@
             "type": "object",
             "title": "Bread Prices"
           },
+          "bread_stock": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Bread Stock"
+          },
           "neighbors": {
             "additionalProperties": {
               "type": "string"
@@ -4876,6 +5306,215 @@
             },
             "type": "array",
             "title": "Available Actions"
+          },
+          "recent_events": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PriceChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TransactionCompleted"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceProduced"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceConsumed"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenMoved"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenSpawned"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/PlotOpened"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingConstructed"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingUpgraded"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/AgentSpoke"
+                },
+                {
+                  "$ref": "#/components/schemas/RelationshipChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/ActionRejected"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalsChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/EmploymentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/WageChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/InterventionApplied"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceGathered"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceRegenerated"
+                },
+                {
+                  "$ref": "#/components/schemas/JobApplied"
+                },
+                {
+                  "$ref": "#/components/schemas/JobApplicationResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanAccepted"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanDeclined"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanRepaid"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanExpired"
+                },
+                {
+                  "$ref": "#/components/schemas/LoanDefaulted"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeAccepted"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeDeclined"
+                },
+                {
+                  "$ref": "#/components/schemas/TradeExpired"
+                },
+                {
+                  "$ref": "#/components/schemas/ResearchContributed"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionUnlocked"
+                },
+                {
+                  "$ref": "#/components/schemas/LicenseOffered"
+                },
+                {
+                  "$ref": "#/components/schemas/LicenseResolved"
+                },
+                {
+                  "$ref": "#/components/schemas/InventionAdopted"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteProposed"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteCast"
+                },
+                {
+                  "$ref": "#/components/schemas/VoteClosed"
+                },
+                {
+                  "$ref": "#/components/schemas/PolicyChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TaxCollected"
+                },
+                {
+                  "$ref": "#/components/schemas/LotLeased"
+                },
+                {
+                  "$ref": "#/components/schemas/RentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/RentMissed"
+                },
+                {
+                  "$ref": "#/components/schemas/RentCovered"
+                },
+                {
+                  "$ref": "#/components/schemas/TenantEvicted"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenInteracted"
+                },
+                {
+                  "$ref": "#/components/schemas/TickCompleted"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "action_rejected": "#/components/schemas/ActionRejected",
+                  "agent_spoke": "#/components/schemas/AgentSpoke",
+                  "building_constructed": "#/components/schemas/BuildingConstructed",
+                  "building_removed": "#/components/schemas/BuildingRemoved",
+                  "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                  "citizen_interacted": "#/components/schemas/CitizenInteracted",
+                  "citizen_moved": "#/components/schemas/CitizenMoved",
+                  "citizen_removed": "#/components/schemas/CitizenRemoved",
+                  "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "employment_changed": "#/components/schemas/EmploymentChanged",
+                  "goals_changed": "#/components/schemas/GoalsChanged",
+                  "intervention_applied": "#/components/schemas/InterventionApplied",
+                  "invention_adopted": "#/components/schemas/InventionAdopted",
+                  "invention_unlocked": "#/components/schemas/InventionUnlocked",
+                  "job_application_resolved": "#/components/schemas/JobApplicationResolved",
+                  "job_applied": "#/components/schemas/JobApplied",
+                  "license_offered": "#/components/schemas/LicenseOffered",
+                  "license_resolved": "#/components/schemas/LicenseResolved",
+                  "loan_accepted": "#/components/schemas/LoanAccepted",
+                  "loan_declined": "#/components/schemas/LoanDeclined",
+                  "loan_defaulted": "#/components/schemas/LoanDefaulted",
+                  "loan_expired": "#/components/schemas/LoanExpired",
+                  "loan_offered": "#/components/schemas/LoanOffered",
+                  "loan_repaid": "#/components/schemas/LoanRepaid",
+                  "lot_leased": "#/components/schemas/LotLeased",
+                  "plot_opened": "#/components/schemas/PlotOpened",
+                  "policy_changed": "#/components/schemas/PolicyChanged",
+                  "price_changed": "#/components/schemas/PriceChanged",
+                  "relationship_changed": "#/components/schemas/RelationshipChanged",
+                  "rent_changed": "#/components/schemas/RentChanged",
+                  "rent_covered": "#/components/schemas/RentCovered",
+                  "rent_missed": "#/components/schemas/RentMissed",
+                  "research_contributed": "#/components/schemas/ResearchContributed",
+                  "resource_consumed": "#/components/schemas/ResourceConsumed",
+                  "resource_gathered": "#/components/schemas/ResourceGathered",
+                  "resource_produced": "#/components/schemas/ResourceProduced",
+                  "resource_regenerated": "#/components/schemas/ResourceRegenerated",
+                  "tax_collected": "#/components/schemas/TaxCollected",
+                  "tenant_evicted": "#/components/schemas/TenantEvicted",
+                  "tick_completed": "#/components/schemas/TickCompleted",
+                  "trade_accepted": "#/components/schemas/TradeAccepted",
+                  "trade_declined": "#/components/schemas/TradeDeclined",
+                  "trade_expired": "#/components/schemas/TradeExpired",
+                  "trade_offered": "#/components/schemas/TradeOffered",
+                  "transaction_completed": "#/components/schemas/TransactionCompleted",
+                  "vote_cast": "#/components/schemas/VoteCast",
+                  "vote_closed": "#/components/schemas/VoteClosed",
+                  "vote_proposed": "#/components/schemas/VoteProposed",
+                  "wage_changed": "#/components/schemas/WageChanged"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Recent Events"
           },
           "loans": {
             "items": {
@@ -4928,8 +5567,10 @@
           "role",
           "wealth_tier",
           "bread_prices",
+          "bread_stock",
           "neighbors",
           "available_actions",
+          "recent_events",
           "loans",
           "incoming_offers",
           "ties",
@@ -6078,6 +6719,12 @@
             "title": "Research Invention Id",
             "description": "Invention this citizen forfeits wages for (time mode)"
           },
+          "research_start_tick": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Research Start Tick",
+            "default": 0
+          },
           "research_until_tick": {
             "type": "integer",
             "minimum": 0.0,
@@ -6126,6 +6773,7 @@
           "memories",
           "reputation",
           "research_invention_id",
+          "research_start_tick",
           "research_until_tick",
           "destitute_days",
           "memory_summary",
@@ -7232,240 +7880,6 @@
           "level"
         ],
         "title": "EntityPayload"
-      },
-      "EventPage": {
-        "properties": {
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id"
-          },
-          "events": {
-            "items": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/PriceChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/TransactionCompleted"
-                },
-                {
-                  "$ref": "#/components/schemas/ResourceProduced"
-                },
-                {
-                  "$ref": "#/components/schemas/ResourceConsumed"
-                },
-                {
-                  "$ref": "#/components/schemas/CitizenMoved"
-                },
-                {
-                  "$ref": "#/components/schemas/CitizenSpawned"
-                },
-                {
-                  "$ref": "#/components/schemas/CitizenRemoved"
-                },
-                {
-                  "$ref": "#/components/schemas/BuildingConstructed"
-                },
-                {
-                  "$ref": "#/components/schemas/BuildingUpgraded"
-                },
-                {
-                  "$ref": "#/components/schemas/BuildingRemoved"
-                },
-                {
-                  "$ref": "#/components/schemas/AgentSpoke"
-                },
-                {
-                  "$ref": "#/components/schemas/RelationshipChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/ActionRejected"
-                },
-                {
-                  "$ref": "#/components/schemas/GoalsChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/EmploymentChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/WageChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/InterventionApplied"
-                },
-                {
-                  "$ref": "#/components/schemas/ResourceGathered"
-                },
-                {
-                  "$ref": "#/components/schemas/ResourceRegenerated"
-                },
-                {
-                  "$ref": "#/components/schemas/JobApplied"
-                },
-                {
-                  "$ref": "#/components/schemas/JobApplicationResolved"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanOffered"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanAccepted"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanDeclined"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanRepaid"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanExpired"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanDefaulted"
-                },
-                {
-                  "$ref": "#/components/schemas/TradeOffered"
-                },
-                {
-                  "$ref": "#/components/schemas/TradeAccepted"
-                },
-                {
-                  "$ref": "#/components/schemas/TradeDeclined"
-                },
-                {
-                  "$ref": "#/components/schemas/TradeExpired"
-                },
-                {
-                  "$ref": "#/components/schemas/ResearchContributed"
-                },
-                {
-                  "$ref": "#/components/schemas/InventionUnlocked"
-                },
-                {
-                  "$ref": "#/components/schemas/LicenseOffered"
-                },
-                {
-                  "$ref": "#/components/schemas/LicenseResolved"
-                },
-                {
-                  "$ref": "#/components/schemas/InventionAdopted"
-                },
-                {
-                  "$ref": "#/components/schemas/VoteProposed"
-                },
-                {
-                  "$ref": "#/components/schemas/VoteCast"
-                },
-                {
-                  "$ref": "#/components/schemas/VoteClosed"
-                },
-                {
-                  "$ref": "#/components/schemas/PolicyChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/TaxCollected"
-                },
-                {
-                  "$ref": "#/components/schemas/LotLeased"
-                },
-                {
-                  "$ref": "#/components/schemas/PlotOpened"
-                },
-                {
-                  "$ref": "#/components/schemas/RentChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/RentMissed"
-                },
-                {
-                  "$ref": "#/components/schemas/RentCovered"
-                },
-                {
-                  "$ref": "#/components/schemas/TenantEvicted"
-                },
-                {
-                  "$ref": "#/components/schemas/CitizenInteracted"
-                }
-              ],
-              "discriminator": {
-                "propertyName": "type",
-                "mapping": {
-                  "action_rejected": "#/components/schemas/ActionRejected",
-                  "agent_spoke": "#/components/schemas/AgentSpoke",
-                  "building_constructed": "#/components/schemas/BuildingConstructed",
-                  "building_removed": "#/components/schemas/BuildingRemoved",
-                  "building_upgraded": "#/components/schemas/BuildingUpgraded",
-                  "citizen_interacted": "#/components/schemas/CitizenInteracted",
-                  "citizen_moved": "#/components/schemas/CitizenMoved",
-                  "citizen_removed": "#/components/schemas/CitizenRemoved",
-                  "citizen_spawned": "#/components/schemas/CitizenSpawned",
-                  "employment_changed": "#/components/schemas/EmploymentChanged",
-                  "goals_changed": "#/components/schemas/GoalsChanged",
-                  "intervention_applied": "#/components/schemas/InterventionApplied",
-                  "invention_adopted": "#/components/schemas/InventionAdopted",
-                  "invention_unlocked": "#/components/schemas/InventionUnlocked",
-                  "job_application_resolved": "#/components/schemas/JobApplicationResolved",
-                  "job_applied": "#/components/schemas/JobApplied",
-                  "license_offered": "#/components/schemas/LicenseOffered",
-                  "license_resolved": "#/components/schemas/LicenseResolved",
-                  "loan_accepted": "#/components/schemas/LoanAccepted",
-                  "loan_declined": "#/components/schemas/LoanDeclined",
-                  "loan_defaulted": "#/components/schemas/LoanDefaulted",
-                  "loan_expired": "#/components/schemas/LoanExpired",
-                  "loan_offered": "#/components/schemas/LoanOffered",
-                  "loan_repaid": "#/components/schemas/LoanRepaid",
-                  "lot_leased": "#/components/schemas/LotLeased",
-                  "plot_opened": "#/components/schemas/PlotOpened",
-                  "policy_changed": "#/components/schemas/PolicyChanged",
-                  "price_changed": "#/components/schemas/PriceChanged",
-                  "relationship_changed": "#/components/schemas/RelationshipChanged",
-                  "rent_changed": "#/components/schemas/RentChanged",
-                  "rent_covered": "#/components/schemas/RentCovered",
-                  "rent_missed": "#/components/schemas/RentMissed",
-                  "research_contributed": "#/components/schemas/ResearchContributed",
-                  "resource_consumed": "#/components/schemas/ResourceConsumed",
-                  "resource_gathered": "#/components/schemas/ResourceGathered",
-                  "resource_produced": "#/components/schemas/ResourceProduced",
-                  "resource_regenerated": "#/components/schemas/ResourceRegenerated",
-                  "tax_collected": "#/components/schemas/TaxCollected",
-                  "tenant_evicted": "#/components/schemas/TenantEvicted",
-                  "trade_accepted": "#/components/schemas/TradeAccepted",
-                  "trade_declined": "#/components/schemas/TradeDeclined",
-                  "trade_expired": "#/components/schemas/TradeExpired",
-                  "trade_offered": "#/components/schemas/TradeOffered",
-                  "transaction_completed": "#/components/schemas/TransactionCompleted",
-                  "vote_cast": "#/components/schemas/VoteCast",
-                  "vote_closed": "#/components/schemas/VoteClosed",
-                  "vote_proposed": "#/components/schemas/VoteProposed",
-                  "wage_changed": "#/components/schemas/WageChanged"
-                }
-              }
-            },
-            "type": "array",
-            "title": "Events"
-          },
-          "next_after": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Next After",
-            "description": "Sequence of the last event returned, or the requested `after` if none"
-          },
-          "has_more": {
-            "type": "boolean",
-            "title": "Has More",
-            "description": "More events exist after `next_after`"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "branch_id",
-          "events",
-          "next_after",
-          "has_more"
-        ],
-        "title": "EventPage",
-        "description": "One page of the event log, oldest first. Pass `next_after` as `after` to read on."
       },
       "Evict-Input": {
         "properties": {
@@ -8993,15 +9407,15 @@
               }
             }
           },
-          "update": {
-            "$ref": "#/components/schemas/WorldUpdate"
+          "result": {
+            "$ref": "#/components/schemas/ActionResult"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "command",
-          "update"
+          "result"
         ],
         "title": "InterventionResult"
       },
@@ -11822,7 +12236,7 @@
             "default": "plot_opened"
           },
           "payload": {
-            "$ref": "#/components/schemas/PlotOpenedPayload"
+            "$ref": "#/components/schemas/EntityPayload"
           }
         },
         "additionalProperties": false,
@@ -11839,73 +12253,7 @@
           "type",
           "payload"
         ],
-        "title": "PlotOpened",
-        "description": "The village grew: a new town-land lot opened on the outer ring."
-      },
-      "PlotOpenedPayload": {
-        "properties": {
-          "plot_id": {
-            "type": "string",
-            "title": "Plot Id"
-          },
-          "owner_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Id"
-          },
-          "tenant_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tenant Id"
-          },
-          "rent": {
-            "type": "integer",
-            "title": "Rent"
-          },
-          "arrears": {
-            "type": "integer",
-            "title": "Arrears",
-            "default": 0
-          },
-          "missed_periods": {
-            "type": "integer",
-            "title": "Missed Periods",
-            "default": 0
-          },
-          "prepaid_periods": {
-            "type": "integer",
-            "title": "Prepaid Periods",
-            "default": 0
-          },
-          "position": {
-            "$ref": "#/components/schemas/Position"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "plot_id",
-          "owner_id",
-          "tenant_id",
-          "rent",
-          "arrears",
-          "missed_periods",
-          "prepaid_periods",
-          "position"
-        ],
-        "title": "PlotOpenedPayload"
+        "title": "PlotOpened"
       },
       "Policies": {
         "properties": {
@@ -15273,6 +15621,9 @@
                   "$ref": "#/components/schemas/CitizenRemoved"
                 },
                 {
+                  "$ref": "#/components/schemas/PlotOpened"
+                },
+                {
                   "$ref": "#/components/schemas/BuildingConstructed"
                 },
                 {
@@ -15378,9 +15729,6 @@
                   "$ref": "#/components/schemas/LotLeased"
                 },
                 {
-                  "$ref": "#/components/schemas/PlotOpened"
-                },
-                {
                   "$ref": "#/components/schemas/RentChanged"
                 },
                 {
@@ -15394,6 +15742,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/CitizenInteracted"
+                },
+                {
+                  "$ref": "#/components/schemas/TickCompleted"
                 }
               ],
               "discriminator": {
@@ -15438,6 +15789,7 @@
                   "resource_regenerated": "#/components/schemas/ResourceRegenerated",
                   "tax_collected": "#/components/schemas/TaxCollected",
                   "tenant_evicted": "#/components/schemas/TenantEvicted",
+                  "tick_completed": "#/components/schemas/TickCompleted",
                   "trade_accepted": "#/components/schemas/TradeAccepted",
                   "trade_declined": "#/components/schemas/TradeDeclined",
                   "trade_expired": "#/components/schemas/TradeExpired",
@@ -15459,6 +15811,13 @@
             },
             "type": "array",
             "title": "Rejected Actions"
+          },
+          "action_results": {
+            "items": {
+              "$ref": "#/components/schemas/ActionResult"
+            },
+            "type": "array",
+            "title": "Action Results"
           }
         },
         "additionalProperties": false,
@@ -15469,7 +15828,8 @@
           "sequence",
           "state",
           "events",
-          "rejected_actions"
+          "rejected_actions",
+          "action_results"
         ],
         "title": "SimulationTickResult"
       },
@@ -15807,6 +16167,105 @@
         ],
         "title": "TenantEvicted",
         "description": "tenant_id is the evicted tenant; arrears are the written-off debt."
+      },
+      "TickCompleted": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "type": {
+            "type": "string",
+            "const": "tick_completed",
+            "title": "Type",
+            "default": "tick_completed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TickPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "action_id",
+          "type",
+          "payload"
+        ],
+        "title": "TickCompleted"
+      },
+      "TickPayload": {
+        "properties": {
+          "actions": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Actions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actions"
+        ],
+        "title": "TickPayload"
       },
       "Trade-Input": {
         "properties": {
@@ -17692,6 +18151,9 @@
                   "$ref": "#/components/schemas/CitizenRemoved"
                 },
                 {
+                  "$ref": "#/components/schemas/PlotOpened"
+                },
+                {
                   "$ref": "#/components/schemas/BuildingConstructed"
                 },
                 {
@@ -17797,9 +18259,6 @@
                   "$ref": "#/components/schemas/LotLeased"
                 },
                 {
-                  "$ref": "#/components/schemas/PlotOpened"
-                },
-                {
                   "$ref": "#/components/schemas/RentChanged"
                 },
                 {
@@ -17813,6 +18272,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/CitizenInteracted"
+                },
+                {
+                  "$ref": "#/components/schemas/TickCompleted"
                 }
               ],
               "discriminator": {
@@ -17857,6 +18319,7 @@
                   "resource_regenerated": "#/components/schemas/ResourceRegenerated",
                   "tax_collected": "#/components/schemas/TaxCollected",
                   "tenant_evicted": "#/components/schemas/TenantEvicted",
+                  "tick_completed": "#/components/schemas/TickCompleted",
                   "trade_accepted": "#/components/schemas/TradeAccepted",
                   "trade_declined": "#/components/schemas/TradeDeclined",
                   "trade_expired": "#/components/schemas/TradeExpired",
