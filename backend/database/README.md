@@ -16,3 +16,24 @@ This directory stores the authoritative SQLite database for local KRONOS simulat
 - Seed / initialize the database: `make db-init` (or start the backend with `make backend`)
 - Reset local world: `make reset`
 - Custom database URL: configured via `KRONOS_DATABASE_URL` in `.env`
+
+## World state schema
+
+The tables are deliberately simple; the world lives as JSON in `branches.state` (latest) and `snapshots.state` (every commit). Its shape is `WorldState` in `backend/modules/simulation/src/kronos_sim/models.py`, mirrored in `backend/contracts/generated/api.ts`. Money is integer cents.
+
+| Field                                                | Contents                                                                                                                       |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `branch_id`, `tick`, `sequence`, `seed`, `rng_state` | Timeline position and the seeded RNG state                                                                                     |
+| `citizens`                                           | People: money, inventory, hunger, job (`employer_id`), goal weights, reputation, memories, relationships, research in progress |
+| `buildings`                                          | Businesses: owner, plot, cash, inventory, prices, wage, job slots, unpaid days                                                 |
+| `plots`                                              | Lots: position, owner, tenant, rent, arrears                                                                                   |
+| `resources`                                          | Shared natural stocks (wheat): stock, daily regrowth, cap                                                                      |
+| `job_applications`                                   | Pending job applications                                                                                                       |
+| `trade_offers`                                       | Pending citizen-to-citizen trade offers                                                                                        |
+| `loans`                                              | Loans in every status (offered, active, repaid, defaulted, …)                                                                  |
+| `inventions`, `license_offers`                       | Research progress, owners, licensees, adopters; pending license offers                                                         |
+| `votes`, `policies`                                  | Town votes with ballots and tallies; active minimum wage, bread price cap, market tax                                          |
+
+Each `events.data` row is one `SimulationEvent` (see the same models file); agent actions carry an `action_id`.
+
+**Compatibility:** every field added after the first release has a default, so older databases still load. They won't have the newer seed data, though (inventions, plot owners, the leased home). To start fresh with the current seed, run `make reset && make db-init`.
