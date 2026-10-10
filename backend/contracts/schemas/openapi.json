@@ -532,6 +532,475 @@
         }
       }
     },
+    "/api/businesses": {
+      "get": {
+        "tags": [
+          "World"
+        ],
+        "summary": "List businesses",
+        "operationId": "businesses_api_businesses_get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "farm",
+                    "bakery",
+                    "market"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BusinessProfile"
+                  },
+                  "title": "Response Businesses Api Businesses Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Found a business",
+        "description": "Capital (at least 5,000 cents) moves from the founder into the new business's cash.",
+        "operationId": "found_api_businesses_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FoundBusinessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/businesses/{building_id}": {
+      "get": {
+        "tags": [
+          "World"
+        ],
+        "summary": "Read one business",
+        "operationId": "business_api_businesses__building_id__get",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Building Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessProfile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/businesses/{building_id}/close": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Close a business (owner only)",
+        "description": "Cash and goods return to the owner, employees are released, and the plot is freed.",
+        "operationId": "close_api_businesses__building_id__close_post",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Building Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BusinessCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/businesses/{building_id}/price": {
+      "patch": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Set a price (owner only)",
+        "operationId": "price_api_businesses__building_id__price_patch",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Building Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/businesses/{building_id}/wage": {
+      "patch": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Set the daily wage (owner only)",
+        "operationId": "wage_api_businesses__building_id__wage_patch",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Building Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/businesses/{building_id}/hire": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Hire an unemployed citizen (owner only)",
+        "operationId": "hire_api_businesses__building_id__hire_post",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Building Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/businesses/{building_id}/fire": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Release an employee (owner only)",
+        "operationId": "fire_api_businesses__building_id__fire_post",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Building Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/businesses/{building_id}/buy": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Buy goods from a business",
+        "operationId": "buy_api_businesses__building_id__buy_post",
+        "parameters": [
+          {
+            "name": "building_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Building Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -906,6 +1375,12 @@
                         "$ref": "#/components/schemas/GoalsChanged"
                       },
                       {
+                        "$ref": "#/components/schemas/EmploymentChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/WageChanged"
+                      },
+                      {
                         "$ref": "#/components/schemas/InterventionApplied"
                       }
                     ],
@@ -926,6 +1401,8 @@
                         "relationship_changed": "#/components/schemas/RelationshipChanged",
                         "action_rejected": "#/components/schemas/ActionRejected",
                         "goals_changed": "#/components/schemas/GoalsChanged",
+                        "employment_changed": "#/components/schemas/EmploymentChanged",
+                        "wage_changed": "#/components/schemas/WageChanged",
                         "intervention_applied": "#/components/schemas/InterventionApplied"
                       }
                     }
@@ -1299,6 +1776,12 @@
                         "$ref": "#/components/schemas/GoalsChanged"
                       },
                       {
+                        "$ref": "#/components/schemas/EmploymentChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/WageChanged"
+                      },
+                      {
                         "$ref": "#/components/schemas/InterventionApplied"
                       }
                     ],
@@ -1319,6 +1802,8 @@
                         "relationship_changed": "#/components/schemas/RelationshipChanged",
                         "action_rejected": "#/components/schemas/ActionRejected",
                         "goals_changed": "#/components/schemas/GoalsChanged",
+                        "employment_changed": "#/components/schemas/EmploymentChanged",
+                        "wage_changed": "#/components/schemas/WageChanged",
                         "intervention_applied": "#/components/schemas/InterventionApplied"
                       }
                     }
@@ -2445,6 +2930,28 @@
             },
             "type": "object",
             "title": "Prices"
+          },
+          "wage": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Wage",
+            "description": "Paid to each employee per day",
+            "default": 150
+          },
+          "job_slots": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Job Slots",
+            "default": 3
+          },
+          "unpaid_days": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Unpaid Days",
+            "description": "Consecutive days with a missed wage; 3 means bankruptcy",
+            "default": 0
           }
         },
         "additionalProperties": false,
@@ -2459,7 +2966,10 @@
           "cash",
           "level",
           "inventory",
-          "prices"
+          "prices",
+          "wage",
+          "job_slots",
+          "unpaid_days"
         ],
         "title": "Building"
       },
@@ -2714,6 +3224,71 @@
           "payload"
         ],
         "title": "BuildingUpgraded"
+      },
+      "BusinessCommand": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "actor_id"
+        ],
+        "title": "BusinessCommand",
+        "description": "Convenience-route body. actor_id is the citizen acting (owner or buyer)."
+      },
+      "BusinessProfile": {
+        "properties": {
+          "building": {
+            "$ref": "#/components/schemas/Building"
+          },
+          "employee_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Employee Ids"
+          },
+          "free_slots": {
+            "type": "integer",
+            "title": "Free Slots"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "building",
+          "employee_ids",
+          "free_slots"
+        ],
+        "title": "BusinessProfile",
+        "description": "A building plus values derived from the world. Employees are citizens whose\nemployer_id points here; there is no separate employee list to drift out of sync."
       },
       "Buy-Input": {
         "properties": {
@@ -3803,6 +4378,171 @@
         ],
         "title": "DecisionResult"
       },
+      "EmployeeRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "actor_id",
+          "citizen_id"
+        ],
+        "title": "EmployeeRequest"
+      },
+      "EmploymentChanged": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "type": {
+            "type": "string",
+            "const": "employment_changed",
+            "title": "Type",
+            "default": "employment_changed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EmploymentPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "action_id",
+          "type",
+          "payload"
+        ],
+        "title": "EmploymentChanged"
+      },
+      "EmploymentPayload": {
+        "properties": {
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          },
+          "building_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Building Id",
+            "description": "New employer; null when released"
+          },
+          "previous_building_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "citizen_id",
+          "building_id",
+          "previous_building_id"
+        ],
+        "title": "EmploymentPayload"
+      },
       "EntityPayload": {
         "properties": {
           "entity_id": {
@@ -4111,6 +4851,64 @@
         ],
         "title": "FoundBusiness",
         "description": "Fund a new business from the founder's money; capital becomes business cash."
+      },
+      "FoundBusinessRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "farm",
+              "bakery",
+              "market"
+            ],
+            "title": "Kind"
+          },
+          "capital": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Capital"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "actor_id",
+          "plot_id",
+          "kind",
+          "capital"
+        ],
+        "title": "FoundBusinessRequest"
       },
       "GatherResource-Input": {
         "properties": {
@@ -5581,6 +6379,59 @@
         ],
         "title": "PricePayload"
       },
+      "PriceRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "price": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "actor_id",
+          "resource",
+          "price"
+        ],
+        "title": "PriceRequest"
+      },
       "Produce-Input": {
         "properties": {
           "actor_id": {
@@ -5758,6 +6609,65 @@
         ],
         "title": "ProposeVote",
         "description": "value is basis points for market_tax and cents for price caps and minimum wage."
+      },
+      "PurchaseRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          },
+          "max_unit_price": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Unit Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "actor_id",
+          "resource",
+          "quantity",
+          "max_unit_price"
+        ],
+        "title": "PurchaseRequest"
       },
       "QuitJob-Input": {
         "properties": {
@@ -7042,6 +7952,12 @@
                   "$ref": "#/components/schemas/GoalsChanged"
                 },
                 {
+                  "$ref": "#/components/schemas/EmploymentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/WageChanged"
+                },
+                {
                   "$ref": "#/components/schemas/InterventionApplied"
                 }
               ],
@@ -7056,13 +7972,15 @@
                   "citizen_moved": "#/components/schemas/CitizenMoved",
                   "citizen_removed": "#/components/schemas/CitizenRemoved",
                   "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "employment_changed": "#/components/schemas/EmploymentChanged",
                   "goals_changed": "#/components/schemas/GoalsChanged",
                   "intervention_applied": "#/components/schemas/InterventionApplied",
                   "price_changed": "#/components/schemas/PriceChanged",
                   "relationship_changed": "#/components/schemas/RelationshipChanged",
                   "resource_consumed": "#/components/schemas/ResourceConsumed",
                   "resource_produced": "#/components/schemas/ResourceProduced",
-                  "transaction_completed": "#/components/schemas/TransactionCompleted"
+                  "transaction_completed": "#/components/schemas/TransactionCompleted",
+                  "wage_changed": "#/components/schemas/WageChanged"
                 }
               }
             },
@@ -7682,6 +8600,158 @@
         ],
         "title": "ValidationError"
       },
+      "WageChanged": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "type": {
+            "type": "string",
+            "const": "wage_changed",
+            "title": "Type",
+            "default": "wage_changed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WagePayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "action_id",
+          "type",
+          "payload"
+        ],
+        "title": "WageChanged"
+      },
+      "WagePayload": {
+        "properties": {
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "old_wage": {
+            "type": "integer",
+            "title": "Old Wage"
+          },
+          "new_wage": {
+            "type": "integer",
+            "title": "New Wage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "building_id",
+          "old_wage",
+          "new_wage"
+        ],
+        "title": "WagePayload"
+      },
+      "WageRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "wage": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Wage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "actor_id",
+          "wage"
+        ],
+        "title": "WageRequest"
+      },
       "WorldState": {
         "properties": {
           "schema_version": {
@@ -7813,6 +8883,12 @@
                   "$ref": "#/components/schemas/GoalsChanged"
                 },
                 {
+                  "$ref": "#/components/schemas/EmploymentChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/WageChanged"
+                },
+                {
                   "$ref": "#/components/schemas/InterventionApplied"
                 }
               ],
@@ -7827,13 +8903,15 @@
                   "citizen_moved": "#/components/schemas/CitizenMoved",
                   "citizen_removed": "#/components/schemas/CitizenRemoved",
                   "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "employment_changed": "#/components/schemas/EmploymentChanged",
                   "goals_changed": "#/components/schemas/GoalsChanged",
                   "intervention_applied": "#/components/schemas/InterventionApplied",
                   "price_changed": "#/components/schemas/PriceChanged",
                   "relationship_changed": "#/components/schemas/RelationshipChanged",
                   "resource_consumed": "#/components/schemas/ResourceConsumed",
                   "resource_produced": "#/components/schemas/ResourceProduced",
-                  "transaction_completed": "#/components/schemas/TransactionCompleted"
+                  "transaction_completed": "#/components/schemas/TransactionCompleted",
+                  "wage_changed": "#/components/schemas/WageChanged"
                 }
               }
             },

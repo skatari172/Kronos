@@ -198,6 +198,149 @@ export interface paths {
         patch: operations["goals_api_agents__citizen_id__goals_patch"];
         trace?: never;
     };
+    "/api/businesses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List businesses */
+        get: operations["businesses_api_businesses_get"];
+        put?: never;
+        /**
+         * Found a business
+         * @description Capital (at least 5,000 cents) moves from the founder into the new business's cash.
+         */
+        post: operations["found_api_businesses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/businesses/{building_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one business */
+        get: operations["business_api_businesses__building_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/businesses/{building_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a business (owner only)
+         * @description Cash and goods return to the owner, employees are released, and the plot is freed.
+         */
+        post: operations["close_api_businesses__building_id__close_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/businesses/{building_id}/price": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set a price (owner only) */
+        patch: operations["price_api_businesses__building_id__price_patch"];
+        trace?: never;
+    };
+    "/api/businesses/{building_id}/wage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set the daily wage (owner only) */
+        patch: operations["wage_api_businesses__building_id__wage_patch"];
+        trace?: never;
+    };
+    "/api/businesses/{building_id}/hire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hire an unemployed citizen (owner only) */
+        post: operations["hire_api_businesses__building_id__hire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/businesses/{building_id}/fire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Release an employee (owner only) */
+        post: operations["fire_api_businesses__building_id__fire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/businesses/{building_id}/buy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Buy goods from a business */
+        post: operations["buy_api_businesses__building_id__buy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -805,6 +948,23 @@ export interface components {
             prices: {
                 [key: string]: number;
             };
+            /**
+             * Wage
+             * @description Paid to each employee per day
+             * @default 150
+             */
+            wage: number;
+            /**
+             * Job Slots
+             * @default 3
+             */
+            job_slots: number;
+            /**
+             * Unpaid Days
+             * @description Consecutive days with a missed wage; 3 means bankruptcy
+             * @default 0
+             */
+            unpaid_days: number;
         };
         /** BuildingConstructed */
         BuildingConstructed: {
@@ -880,6 +1040,32 @@ export interface components {
              */
             type: "building_upgraded";
             payload: components["schemas"]["EntityPayload"];
+        };
+        /**
+         * BusinessCommand
+         * @description Convenience-route body. actor_id is the citizen acting (owner or buyer).
+         */
+        BusinessCommand: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+        };
+        /**
+         * BusinessProfile
+         * @description A building plus values derived from the world. Employees are citizens whose
+         *     employer_id points here; there is no separate employee list to drift out of sync.
+         */
+        BusinessProfile: {
+            building: components["schemas"]["Building"];
+            /** Employee Ids */
+            employee_ids: string[];
+            /** Free Slots */
+            free_slots: number;
         };
         /** Buy */
         "Buy-Input": {
@@ -1221,6 +1407,56 @@ export interface components {
             action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"];
             result: components["schemas"]["ActionResult"];
         };
+        /** EmployeeRequest */
+        EmployeeRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Citizen Id */
+            citizen_id: string;
+        };
+        /** EmploymentChanged */
+        EmploymentChanged: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "employment_changed";
+            payload: components["schemas"]["EmploymentPayload"];
+        };
+        /** EmploymentPayload */
+        EmploymentPayload: {
+            /** Citizen Id */
+            citizen_id: string;
+            /**
+             * Building Id
+             * @description New employer; null when released
+             */
+            building_id: string | null;
+            /** Previous Building Id */
+            previous_building_id: string | null;
+        };
         /** EntityPayload */
         EntityPayload: {
             /** Entity Id */
@@ -1327,6 +1563,26 @@ export interface components {
              * @enum {string}
              */
             type: "found_business";
+            /** Plot Id */
+            plot_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "farm" | "bakery" | "market";
+            /** Capital */
+            capital: number;
+        };
+        /** FoundBusinessRequest */
+        FoundBusinessRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
             /** Plot Id */
             plot_id: string;
             /**
@@ -1920,6 +2176,24 @@ export interface components {
             /** New Price */
             new_price: number;
         };
+        /** PriceRequest */
+        PriceRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "bread" | "wheat";
+            /** Price */
+            price: number;
+        };
         /** Produce */
         "Produce-Input": {
             /** Actor Id */
@@ -1991,6 +2265,26 @@ export interface components {
             kind: "market_tax" | "bread_price_cap" | "min_wage";
             /** Value */
             value: number;
+        };
+        /** PurchaseRequest */
+        PurchaseRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "bread" | "wheat";
+            /** Quantity */
+            quantity: number;
+            /** Max Unit Price */
+            max_unit_price: number;
         };
         /** QuitJob */
         "QuitJob-Input": {
@@ -2446,7 +2740,7 @@ export interface components {
             sequence: number;
             state: components["schemas"]["WorldState"];
             /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["InterventionApplied"])[];
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"])[];
             /** Rejected Actions */
             rejected_actions: string[];
         };
@@ -2675,6 +2969,53 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** WageChanged */
+        WageChanged: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "wage_changed";
+            payload: components["schemas"]["WagePayload"];
+        };
+        /** WagePayload */
+        WagePayload: {
+            /** Building Id */
+            building_id: string;
+            /** Old Wage */
+            old_wage: number;
+            /** New Wage */
+            new_wage: number;
+        };
+        /** WageRequest */
+        WageRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /** Wage */
+            wage: number;
+        };
         /** WorldState */
         WorldState: {
             /**
@@ -2722,7 +3063,7 @@ export interface components {
             sequence: number;
             state: components["schemas"]["WorldState"];
             /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["InterventionApplied"])[];
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"])[];
         };
     };
     responses: never;
@@ -3071,6 +3412,312 @@ export interface operations {
             };
         };
     };
+    businesses_api_businesses_get: {
+        parameters: {
+            query?: {
+                kind?: ("farm" | "bakery" | "market") | null;
+                owner?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessProfile"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    found_api_businesses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FoundBusinessRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    business_api_businesses__building_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                building_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessProfile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_api_businesses__building_id__close_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                building_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BusinessCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    price_api_businesses__building_id__price_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                building_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    wage_api_businesses__building_id__wage_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                building_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hire_api_businesses__building_id__hire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                building_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fire_api_businesses__building_id__fire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                building_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    buy_api_businesses__building_id__buy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                building_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurchaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -3322,7 +3969,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["InterventionApplied"])[];
+                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"])[];
                 };
             };
             /** @description Validation Error */
@@ -3534,7 +4181,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["InterventionApplied"])[];
+                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"])[];
                 };
             };
             /** @description Validation Error */

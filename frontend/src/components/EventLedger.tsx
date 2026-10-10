@@ -28,6 +28,12 @@ function describe(event: SimulationEvent) {
       return event.payload.message;
     case "relationship_changed":
       return `Familiarity grows · trust ${event.payload.trust}`;
+    case "employment_changed":
+      return event.payload.building_id
+        ? "A citizen starts a new job"
+        : "A citizen loses their job";
+    case "wage_changed":
+      return `Wage: ${coins(event.payload.old_wage)} → ${coins(event.payload.new_wage)} coins a day`;
     case "goals_changed":
       return "A citizen rethinks what matters most";
     case "action_rejected":

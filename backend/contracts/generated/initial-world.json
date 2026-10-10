@@ -864,7 +864,10 @@
         "prices": {
           "bread": 500,
           "wheat": 100
-        }
+        },
+        "wage": 150,
+        "job_slots": 3,
+        "unpaid_days": 0
       },
       "bakery": {
         "id": "bakery",
@@ -885,7 +888,10 @@
         "prices": {
           "bread": 500,
           "wheat": 100
-        }
+        },
+        "wage": 150,
+        "job_slots": 3,
+        "unpaid_days": 0
       },
       "market": {
         "id": "market",
@@ -906,7 +912,10 @@
         "prices": {
           "bread": 500,
           "wheat": 100
-        }
+        },
+        "wage": 150,
+        "job_slots": 3,
+        "unpaid_days": 0
       }
     },
     "plots": {

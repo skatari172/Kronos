@@ -23,7 +23,14 @@ SUPPORTED_ACTIONS = (
     "upgrade_building",
     "move_to",
     "adjust_goals",
+    "found_business",
+    "close_business",
+    "set_wage",
+    "hire",
+    "fire",
 )
+MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
+BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
 
 
 class InvalidAction(ValueError):
@@ -112,7 +119,16 @@ class Engine:
             building = s.buildings.get(action.building_id)
             if building is None:
                 raise InvalidAction("unknown_entity", "Unknown building")
-        if isinstance(action, (m.SetPrice, m.Produce, m.UpgradeBuilding)):
+        owner_only = (
+            m.SetPrice,
+            m.Produce,
+            m.UpgradeBuilding,
+            m.CloseBusiness,
+            m.SetWage,
+            m.Hire,
+            m.Fire,
+        )
+        if isinstance(action, owner_only):
             if building.owner_id != actor.id:
                 raise InvalidAction("not_owner", "Only the owner may perform this action")
 
@@ -248,6 +264,63 @@ class Engine:
             actor.money -= 2500
             building.level += 1
             emit("building_upgraded", dict(entity_id=building.id, level=building.level))
+        elif isinstance(action, m.FoundBusiness):
+            plot = s.plots.get(action.plot_id)
+            if plot is None:
+                raise InvalidAction("unknown_entity", "Unknown plot")
+            if any(b.plot_id == plot.id for b in s.buildings.values()):
+                raise InvalidAction("lot_occupied", "A business needs a vacant plot")
+            if action.capital < MIN_CAPITAL:
+                raise InvalidAction("bad_params", f"Capital must be at least {MIN_CAPITAL} cents")
+            if actor.money < action.capital:
+                raise InvalidAction("insufficient_funds", "Insufficient funds for that capital")
+            actor.money -= action.capital
+            bid = f"building-{s.branch_id}-{s.sequence + 1}"
+            s.buildings[bid] = m.Building(
+                id=bid,
+                name=f"{actor.name}'s {action.kind}",
+                kind=action.kind,
+                plot_id=plot.id,
+                position=plot.position.model_copy(),
+                owner_id=actor.id,
+                cash=action.capital,
+            )
+            emit("building_constructed", dict(entity_id=bid, position=plot.position.model_dump()))
+            emit(
+                "transaction_completed",
+                dict(sender_id=actor.id, recipient_id=bid, amount=action.capital),
+            )
+        elif isinstance(action, m.CloseBusiness):
+            self._close(building, actor.id, action.rationale)
+        elif isinstance(action, m.SetWage):
+            old = building.wage
+            building.wage = action.wage
+            emit(
+                "wage_changed",
+                dict(building_id=building.id, old_wage=old, new_wage=action.wage),
+            )
+        elif isinstance(action, m.Hire):
+            worker = s.citizens.get(action.citizen_id)
+            if worker is None:
+                raise InvalidAction("unknown_entity", "Unknown citizen")
+            if worker.employer_id in s.buildings:
+                raise InvalidAction("already_employed", f"{worker.name} already has a job")
+            staff = [c for c in s.citizens.values() if c.employer_id == building.id]
+            if len(staff) >= building.job_slots:
+                raise InvalidAction("no_free_slot", "No free job slot")
+            worker.employer_id = building.id
+            emit("employment_changed", dict(citizen_id=worker.id, building_id=building.id))
+        elif isinstance(action, m.Fire):
+            worker = s.citizens.get(action.citizen_id)
+            if worker is None:
+                raise InvalidAction("unknown_entity", "Unknown citizen")
+            if worker.employer_id != building.id:
+                raise InvalidAction("bad_params", f"{worker.name} does not work here")
+            worker.employer_id = None
+            emit(
+                "employment_changed",
+                dict(citizen_id=worker.id, building_id=None, previous_building_id=building.id),
+            )
         elif isinstance(action, m.AdjustGoals):
             old = actor.goal_weights
             raw = {
@@ -273,6 +346,54 @@ class Engine:
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
+
+    def _close(self, building: m.Building, actor_id: str | None, rationale: str | None):
+        """Remove a business: cash and goods go to the owner, employees are released."""
+        s = self.state
+        owner = s.citizens.get(building.owner_id)
+        if owner is not None:
+            if building.cash:
+                owner.money += building.cash
+                self.emit(
+                    "transaction_completed",
+                    dict(sender_id=building.id, recipient_id=owner.id, amount=building.cash),
+                    actor_id,
+                    rationale,
+                )
+            for resource in ("wheat", "bread"):
+                quantity = getattr(building.inventory, resource)
+                if quantity:
+                    setattr(
+                        owner.inventory, resource, getattr(owner.inventory, resource) + quantity
+                    )
+                    self.emit(
+                        "transaction_completed",
+                        dict(
+                            sender_id=building.id,
+                            recipient_id=owner.id,
+                            amount=0,
+                            resource=resource,
+                            quantity=quantity,
+                        ),
+                        actor_id,
+                        rationale,
+                    )
+        for worker in sorted(s.citizens.values(), key=lambda c: c.id):
+            if worker.employer_id == building.id:
+                worker.employer_id = None
+                self.emit(
+                    "employment_changed",
+                    dict(citizen_id=worker.id, building_id=None, previous_building_id=building.id),
+                    actor_id,
+                    rationale,
+                )
+        del s.buildings[building.id]
+        self.emit(
+            "building_removed",
+            dict(entity_id=building.id, position=building.position.model_dump()),
+            actor_id,
+            rationale,
+        )
 
     def spawn(self, request: m.SpawnCitizenRequest) -> m.SimulationTickResult:
         tx = Engine(self.state)
@@ -347,16 +468,19 @@ class Engine:
                     tx._execute(m.Produce(actor_id=building.owner_id, building_id=building.id))
                 except InvalidAction:
                     pass  # Scarcity is a valid economic outcome.
+        missed_payroll = set()
         for citizen in s.citizens.values():
             employer = s.buildings.get(citizen.employer_id)
-            if employer and employer.cash >= 150:
-                employer.cash -= 150
-                citizen.money += 150
+            if employer and employer.cash >= employer.wage:
+                employer.cash -= employer.wage
+                citizen.money += employer.wage
                 tx.emit(
                     "transaction_completed",
-                    dict(sender_id=employer.id, recipient_id=citizen.id, amount=150),
+                    dict(sender_id=employer.id, recipient_id=citizen.id, amount=employer.wage),
                     citizen.id,
                 )
+            elif employer:
+                missed_payroll.add(employer.id)
             citizen.hunger = min(100, citizen.hunger + 20)
             bakeries = sorted(
                 (b for b in s.buildings.values() if b.kind == "bakery" and b.inventory.bread),
@@ -377,6 +501,10 @@ class Engine:
             if citizen.inventory.bread and citizen.hunger >= 20:
                 tx._execute(m.Consume(actor_id=citizen.id))
             tx._execute(m.MoveTo(actor_id=citizen.id, plot_id=tx.rng.choice(sorted(s.plots))))
+        for building in sorted(s.buildings.values(), key=lambda b: b.id):
+            building.unpaid_days = building.unpaid_days + 1 if building.id in missed_payroll else 0
+            if building.unpaid_days >= BANKRUPTCY_DAYS:
+                tx._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:

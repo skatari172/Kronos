@@ -98,11 +98,6 @@ def test_long_run_invariants_and_reproducibility():
 @pytest.mark.parametrize(
     "payload",
     [
-        {"type": "found_business", "plot_id": "plot-3", "kind": "bakery", "capital": 5000},
-        {"type": "close_business", "building_id": "farm"},
-        {"type": "set_wage", "building_id": "farm", "wage": 200},
-        {"type": "hire", "building_id": "farm", "citizen_id": "citizen-5"},
-        {"type": "fire", "building_id": "farm", "citizen_id": "citizen-3"},
         {"type": "apply_job", "building_id": "farm"},
         {"type": "quit_job"},
         {
@@ -271,3 +266,97 @@ def test_spawn_adds_citizen_with_stable_id():
     assert result.events[0].payload.entity_id == "citizen-main-1"
     with pytest.raises(InvalidAction):
         Engine(initial_world()).spawn(request.model_copy(update={"plot_id": "nowhere"}))
+
+
+def test_founding_moves_capital_into_the_business():
+    from kronos_sim.models import FoundBusiness
+
+    action = FoundBusiness(actor_id="citizen-0", plot_id="plot-3", kind="bakery", capital=6000)
+    result = Engine(initial_world()).apply(action)
+    new = next(b for b in result.state.buildings.values() if b.plot_id == "plot-3")
+    assert (new.owner_id, new.cash, new.kind) == ("citizen-0", 6000, "bakery")
+    assert result.state.citizens["citizen-0"].money == 12000
+    assert [e.type for e in result.events] == ["building_constructed", "transaction_completed"]
+    for bad, code in [
+        (action.model_copy(update={"capital": 4999}), "bad_params"),
+        (action.model_copy(update={"plot_id": "plot-0"}), "lot_occupied"),
+        (
+            action.model_copy(update={"actor_id": "citizen-6", "capital": 6000}),
+            "insufficient_funds",
+        ),
+    ]:
+        with pytest.raises(InvalidAction) as error:
+            Engine(initial_world()).apply(bad)
+        assert error.value.code == code
+
+
+def test_closing_returns_assets_and_releases_staff():
+    from kronos_sim.models import CloseBusiness
+
+    state = initial_world()
+    bakery = state.buildings["bakery"]
+    result = Engine(state).apply(CloseBusiness(actor_id="citizen-1", building_id="bakery"))
+    owner = result.state.citizens["citizen-1"]
+    assert "bakery" not in result.state.buildings
+    assert owner.money == state.citizens["citizen-1"].money + bakery.cash
+    assert owner.inventory.bread == 1 + bakery.inventory.bread
+    assert owner.employer_id is None and result.state.citizens["citizen-4"].employer_id is None
+    assert result.events[-1].type == "building_removed"
+    with pytest.raises(InvalidAction) as error:
+        Engine(state).apply(CloseBusiness(actor_id="citizen-0", building_id="bakery"))
+    assert error.value.code == "not_owner"
+
+
+def test_hiring_firing_and_wages():
+    from kronos_sim.models import Fire, Hire, SetWage
+
+    state = initial_world()
+    hired = Engine(state).apply(
+        Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
+    )
+    assert hired.state.citizens["citizen-5"].employer_id == "market"
+    assert hired.events[0].type == "employment_changed"
+    raised = Engine(hired.state).apply(
+        SetWage(actor_id="citizen-2", building_id="market", wage=400)
+    )
+    paid = Engine(raised.state).tick()
+    wage_events = [
+        e
+        for e in paid.events
+        if e.type == "transaction_completed" and e.payload.recipient_id == "citizen-5"
+    ]
+    assert wage_events[0].payload.amount == 400
+    for action, code in [
+        (
+            Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-3"),
+            "already_employed",
+        ),
+        (Hire(actor_id="citizen-2", building_id="market", citizen_id="nobody"), "unknown_entity"),
+        (Fire(actor_id="citizen-2", building_id="market", citizen_id="citizen-3"), "bad_params"),
+    ]:
+        with pytest.raises(InvalidAction) as error:
+            Engine(hired.state).apply(action)
+        assert error.value.code == code
+    full = hired.state.model_copy(deep=True)
+    full.buildings["market"].job_slots = 2
+    with pytest.raises(InvalidAction) as error:
+        Engine(full).apply(Hire(actor_id="citizen-2", building_id="market", citizen_id="citizen-6"))
+    assert error.value.code == "no_free_slot"
+    fired = Engine(hired.state).apply(
+        Fire(actor_id="citizen-2", building_id="market", citizen_id="citizen-5")
+    )
+    assert fired.state.citizens["citizen-5"].employer_id is None
+
+
+def test_business_goes_bankrupt_after_three_unpaid_days():
+    state = initial_world()
+    state.buildings["market"].cash = 0
+    for day in (1, 2):
+        state = Engine(state).tick().state
+        assert state.buildings["market"].unpaid_days == day
+    result = Engine(state).tick()
+    assert "market" not in result.state.buildings
+    assert result.state.citizens["citizen-2"].employer_id is None
+    removed = next(e for e in result.events if e.type == "building_removed")
+    assert removed.actor_id is None and removed.rationale.startswith("Bankrupt")
+    assert all(b.unpaid_days == 0 for b in result.state.buildings.values())

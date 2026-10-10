@@ -46,3 +46,15 @@ def observe(state: m.WorldState, citizen_id: str) -> m.AgentObservation:
         },
         available_actions=list(SUPPORTED_ACTIONS),
     )
+
+
+def business_profile(state: m.WorldState, building_id: str) -> m.BusinessProfile:
+    building = state.buildings.get(building_id)
+    if building is None:
+        raise KeyError("Unknown business")
+    staff = sorted(c.id for c in state.citizens.values() if c.employer_id == building_id)
+    return m.BusinessProfile(
+        building=building.model_copy(deep=True),
+        employee_ids=staff,
+        free_slots=max(0, building.job_slots - len(staff)),
+    )

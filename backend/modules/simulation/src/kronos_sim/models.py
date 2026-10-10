@@ -94,6 +94,11 @@ class Building(Model):
     level: int = Field(default=1, ge=1, le=3)
     inventory: ResourceInventory = Field(default_factory=ResourceInventory)
     prices: dict[str, int] = Field(default_factory=lambda: {"bread": 500, "wheat": 100})
+    wage: int = Field(default=150, gt=0, le=1000000, description="Paid to each employee per day")
+    job_slots: int = Field(default=3, ge=0, le=20)
+    unpaid_days: int = Field(
+        default=0, ge=0, description="Consecutive days with a missed wage; 3 means bankruptcy"
+    )
 
 
 class WorldState(Model):
@@ -531,6 +536,28 @@ class GoalsChanged(EventBase):
     payload: GoalsPayload
 
 
+class EmploymentPayload(Model):
+    citizen_id: str
+    building_id: str | None = Field(description="New employer; null when released")
+    previous_building_id: str | None = None
+
+
+class EmploymentChanged(EventBase):
+    type: Literal["employment_changed"] = "employment_changed"
+    payload: EmploymentPayload
+
+
+class WagePayload(Model):
+    building_id: str
+    old_wage: int
+    new_wage: int
+
+
+class WageChanged(EventBase):
+    type: Literal["wage_changed"] = "wage_changed"
+    payload: WagePayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -557,6 +584,8 @@ SimulationEvent = Annotated[
     | RelationshipChanged
     | ActionRejected
     | GoalsChanged
+    | EmploymentChanged
+    | WageChanged
     | InterventionApplied,
     Field(discriminator="type"),
 ]
@@ -719,3 +748,44 @@ class AskResult(Model):
 class GoalsUpdateRequest(MutationRequest):
     changes: GoalWeightChanges
     rationale: str | None = Field(default=None, max_length=300)
+
+
+class BusinessProfile(Model):
+    """A building plus values derived from the world. Employees are citizens whose
+    employer_id points here; there is no separate employee list to drift out of sync."""
+
+    building: Building
+    employee_ids: list[str] = Field(default_factory=list)
+    free_slots: int
+
+
+class BusinessCommand(MutationRequest):
+    """Convenience-route body. actor_id is the citizen acting (owner or buyer)."""
+
+    actor_id: str
+    rationale: str | None = Field(default=None, max_length=300)
+
+
+class FoundBusinessRequest(BusinessCommand):
+    plot_id: str
+    kind: BuildingKind
+    capital: int = Field(gt=0)
+
+
+class WageRequest(BusinessCommand):
+    wage: int = Field(gt=0, le=1000000)
+
+
+class PriceRequest(BusinessCommand):
+    resource: TradedResource
+    price: int = Field(gt=0, le=1000000)
+
+
+class EmployeeRequest(BusinessCommand):
+    citizen_id: str
+
+
+class PurchaseRequest(BusinessCommand):
+    resource: TradedResource
+    quantity: int = Field(gt=0, le=100)
+    max_unit_price: int = Field(gt=0)

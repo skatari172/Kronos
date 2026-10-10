@@ -302,3 +302,72 @@ def test_goal_update_is_bounded_and_renormalised(client):
     assert client.patch("/api/agents/citizen-6/goals", json=too_big).status_code == 422
     nothing = {**mutation(1), "changes": {}}
     assert client.patch("/api/agents/citizen-6/goals", json=nothing).status_code == 422
+
+
+def command(actor_id, sequence=0, **fields):
+    return {**mutation(sequence), "actor_id": actor_id, **fields}
+
+
+def test_business_reads(client):
+    listing = client.get("/api/businesses").json()
+    assert [b["building"]["id"] for b in listing] == ["bakery", "farm", "market"]
+    farm = client.get("/api/businesses/farm").json()
+    assert farm["employee_ids"] == ["citizen-0", "citizen-3"] and farm["free_slots"] == 1
+    assert farm["building"]["wage"] == 150
+    assert [b["building"]["id"] for b in client.get("/api/businesses?kind=market").json()] == [
+        "market"
+    ]
+    assert client.get("/api/businesses?owner=citizen-1").json()[0]["building"]["id"] == "bakery"
+    assert client.get("/api/businesses/missing").status_code == 404
+
+
+def test_business_lifecycle_through_convenience_routes(client):
+    found = client.post(
+        "/api/businesses",
+        json=command("citizen-0", plot_id="plot-3", kind="bakery", capital=6000),
+    ).json()
+    assert found["status"] == "applied"
+    new_id = client.get("/api/businesses?owner=citizen-0&kind=bakery").json()[0]["building"]["id"]
+    seq = found["sequence"]
+
+    def step(method, path, body):
+        nonlocal seq
+        result = client.request(method, f"/api/businesses/{new_id}{path}", json=body).json()
+        seq = result["sequence"]
+        return result
+
+    assert step("POST", "/hire", command("citizen-0", seq, citizen_id="citizen-5"))["status"] == (
+        "applied"
+    )
+    assert step("PATCH", "/wage", command("citizen-0", seq, wage=300))["status"] == "applied"
+    assert (
+        step("PATCH", "/price", command("citizen-0", seq, resource="bread", price=450))["status"]
+        == "applied"
+    )
+    profile = client.get(f"/api/businesses/{new_id}").json()
+    assert profile["employee_ids"] == ["citizen-5"]
+    assert (profile["building"]["wage"], profile["building"]["prices"]["bread"]) == (300, 450)
+    denied = step("POST", "/fire", command("citizen-6", seq, citizen_id="citizen-5"))
+    assert (denied["status"], denied["error"]) == ("rejected", "not_owner")
+    assert step("POST", "/fire", command("citizen-0", seq, citizen_id="citizen-5"))["status"] == (
+        "applied"
+    )
+    closed = step("POST", "/close", command("citizen-0", seq, rationale="Too much competition"))
+    assert closed["status"] == "applied"
+    assert client.get(f"/api/businesses/{new_id}").status_code == 404
+    assert client.get("/api/agents/citizen-0").json()["citizen"]["money"] == 18000
+
+
+def test_buy_route_maps_to_buy_action(client):
+    body = command("citizen-0", resource="bread", quantity=2, max_unit_price=500)
+    result = client.post("/api/businesses/bakery/buy", json=body).json()
+    assert result["status"] == "applied"
+    assert client.get("/api/agents/citizen-0").json()["citizen"]["inventory"]["bread"] == 3
+    too_many = command(
+        "citizen-0", result["sequence"], resource="bread", quantity=99, max_unit_price=500
+    )
+    rejected = client.post("/api/businesses/bakery/buy", json=too_many).json()
+    assert rejected["error"] == "out_of_stock"
+    assert (
+        client.post("/api/businesses/bakery/buy", json={**body, "quantity": 0}).status_code == 422
+    )
