@@ -667,7 +667,8 @@
         },
         "personality": "practical",
         "relationships": [],
-        "memories": []
+        "memories": [],
+        "reputation": 50
       },
       "citizen-1": {
         "id": "citizen-1",
@@ -696,7 +697,8 @@
         },
         "personality": "practical",
         "relationships": [],
-        "memories": []
+        "memories": [],
+        "reputation": 50
       },
       "citizen-2": {
         "id": "citizen-2",
@@ -725,7 +727,8 @@
         },
         "personality": "practical",
         "relationships": [],
-        "memories": []
+        "memories": [],
+        "reputation": 50
       },
       "citizen-3": {
         "id": "citizen-3",
@@ -754,7 +757,8 @@
         },
         "personality": "practical",
         "relationships": [],
-        "memories": []
+        "memories": [],
+        "reputation": 50
       },
       "citizen-4": {
         "id": "citizen-4",
@@ -783,7 +787,8 @@
         },
         "personality": "practical",
         "relationships": [],
-        "memories": []
+        "memories": [],
+        "reputation": 50
       },
       "citizen-5": {
         "id": "citizen-5",
@@ -812,7 +817,8 @@
         },
         "personality": "practical",
         "relationships": [],
-        "memories": []
+        "memories": [],
+        "reputation": 50
       },
       "citizen-6": {
         "id": "citizen-6",
@@ -841,7 +847,8 @@
         },
         "personality": "practical",
         "relationships": [],
-        "memories": []
+        "memories": [],
+        "reputation": 50
       }
     },
     "buildings": {

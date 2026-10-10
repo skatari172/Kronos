@@ -76,6 +76,9 @@ class Citizen(Model):
     personality: str = "practical"
     relationships: list[Relationship] = Field(default_factory=list)
     memories: list[str] = Field(default_factory=list)
+    reputation: int = Field(
+        default=50, ge=0, le=100, description="Public standing; feeds influence"
+    )
 
 
 class Plot(Model):

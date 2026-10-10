@@ -1182,6 +1182,12 @@ export interface components {
             relationships: components["schemas"]["Relationship"][];
             /** Memories */
             memories: string[];
+            /**
+             * Reputation
+             * @description Public standing; feeds influence
+             * @default 50
+             */
+            reputation: number;
         };
         /** CitizenMoved */
         CitizenMoved: {
