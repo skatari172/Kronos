@@ -10,6 +10,7 @@ __pycache__/
 *.db
 *.db-shm
 *.db-wal
+!backend/database/*.db
 .dist/
 dist/
 .DS_Store

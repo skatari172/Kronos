@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from kronos_sim.models import (
@@ -13,15 +14,18 @@ from kronos_sim.models import (
 from pydantic import TypeAdapter
 from sqlalchemy import (
     Column,
+    Index,
     Integer,
     MetaData,
     String,
     Table,
     create_engine,
+    event,
     insert,
     select,
     update,
 )
+from sqlalchemy.engine import make_url
 
 metadata = MetaData()
 branches = Table(
@@ -35,18 +39,20 @@ snapshots = Table(
     "snapshots",
     metadata,
     Column("id", String, primary_key=True),
-    Column("branch_id", String, nullable=False),
-    Column("sequence", Integer),
+    Column("branch_id", String, nullable=False, index=True),
+    Column("sequence", Integer, nullable=False),
     Column("metadata", String, nullable=False),
     Column("state", String, nullable=False),
+    Index("ix_snapshots_branch_sequence", "branch_id", "sequence"),
 )
 events = Table(
     "events",
     metadata,
     Column("id", String, primary_key=True),
-    Column("branch_id", String, nullable=False),
+    Column("branch_id", String, nullable=False, index=True),
     Column("sequence", Integer, nullable=False),
     Column("data", String, nullable=False),
+    Index("ix_events_branch_sequence", "branch_id", "sequence"),
 )
 # Payload fields that name the citizen an event happened to.
 INVOLVEMENT_KEYS = ("sender_id", "recipient_id", "entity_id", "citizen_id")
@@ -57,7 +63,20 @@ settings = Table(
 
 class HistoryStore:
     def __init__(self, url: str):
+        url_obj = make_url(url)
+        if url_obj.drivername.startswith("sqlite"):
+            db_file = url_obj.database
+            if db_file and db_file != ":memory:":
+                Path(db_file).resolve().parent.mkdir(parents=True, exist_ok=True)
+
         self.engine = create_engine(url, connect_args={"check_same_thread": False})
+
+        @event.listens_for(self.engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
         metadata.create_all(self.engine)
 
     def close(self):

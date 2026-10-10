@@ -70,3 +70,11 @@ def test_stale_commit_is_rejected(store):
     store.commit(result, 0)
     with pytest.raises(ValueError, match="stale"):
         store.commit(result, 0)
+
+
+def test_history_store_creates_parent_directory(tmp_path):
+    nested_db = tmp_path / "deeply" / "nested" / "database" / "store.db"
+    assert not nested_db.parent.exists()
+    store = HistoryStore(f"sqlite:///{nested_db}")
+    assert nested_db.parent.exists()
+    store.close()
