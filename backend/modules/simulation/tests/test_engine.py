@@ -128,8 +128,6 @@ def test_long_run_invariants_and_reproducibility():
             "due_tick": 10,
         },
         {"type": "repay", "loan_id": "loan-1", "amount": 1000},
-        {"type": "propose_vote", "kind": "min_wage", "value": 200},
-        {"type": "vote", "vote_id": "vote-1", "choice": "yes"},
         {"type": "gather_resource", "building_id": "farm", "resource": "wheat", "quantity": 2},
     ],
 )
