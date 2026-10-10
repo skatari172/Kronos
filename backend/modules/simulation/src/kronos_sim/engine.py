@@ -28,9 +28,12 @@ SUPPORTED_ACTIONS = (
     "set_wage",
     "hire",
     "fire",
+    "gather_resource",
 )
 MIN_CAPITAL = 5000  # Cents a founder must move into a new business.
 BANKRUPTCY_DAYS = 3  # Consecutive days with a missed wage before a business closes.
+# Which business kind may draw on each natural stock (farm harvests and worker gathering).
+RESOURCE_SOURCES: dict[str, m.BuildingKind] = {"wheat": "farm"}
 
 
 class InvalidAction(ValueError):
@@ -115,6 +118,8 @@ class Engine:
             raise InvalidAction("unknown_entity", "Unknown citizen")
         actor = s.citizens[action.actor_id]
         building = None
+        if isinstance(action, m.GatherResource) and actor.employer_id != action.building_id:
+            raise InvalidAction("bad_params", "Gathering requires a job at that business")
         if hasattr(action, "building_id"):
             building = s.buildings.get(action.building_id)
             if building is None:
@@ -197,7 +202,11 @@ class Engine:
             )
         elif isinstance(action, m.Produce):
             if building.kind == "farm":
-                resource, quantity = "wheat", self.rng.randint(3, 6) * building.level
+                # The seeded roll is the attempted harvest; the shared field limits it.
+                resource, attempted = "wheat", self.rng.randint(3, 6) * building.level
+                field = self._stock(resource)
+                quantity = min(attempted, field.stock)
+                field.stock -= quantity
             elif building.kind == "bakery":
                 if building.inventory.wheat < 2:
                     raise InvalidAction("out_of_stock", "Bakery requires two wheat")
@@ -207,10 +216,10 @@ class Engine:
             else:
                 raise InvalidAction("bad_params", "Markets do not produce goods")
             setattr(building.inventory, resource, getattr(building.inventory, resource) + quantity)
-            emit(
-                "resource_produced",
-                dict(entity_id=building.id, resource=resource, quantity=quantity),
-            )
+            payload = dict(entity_id=building.id, resource=resource, quantity=quantity)
+            if building.kind == "farm":
+                payload["stock_remaining"] = field.stock
+            emit("resource_produced", payload)
         elif isinstance(action, m.Consume):
             if actor.inventory.bread < 1:
                 raise InvalidAction("out_of_stock", "No bread to consume")
@@ -343,9 +352,53 @@ class Engine:
                 "goals_changed",
                 dict(citizen_id=actor.id, old=old.model_dump(), new=new.model_dump()),
             )
+        elif isinstance(action, m.GatherResource):
+            if RESOURCE_SOURCES.get(action.resource) != building.kind:
+                raise InvalidAction(
+                    "bad_params", f"{action.resource} cannot be gathered at a {building.kind}"
+                )
+            # Partial gathers are allowed: take what is left, up to the requested quantity.
+            field = self._stock(action.resource)
+            quantity = min(action.quantity, field.stock)
+            field.stock -= quantity
+            setattr(
+                building.inventory,
+                action.resource,
+                getattr(building.inventory, action.resource) + quantity,
+            )
+            emit(
+                "resource_gathered",
+                dict(
+                    citizen_id=actor.id,
+                    building_id=building.id,
+                    resource=action.resource,
+                    requested=action.quantity,
+                    quantity=quantity,
+                    stock_remaining=field.stock,
+                ),
+            )
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
+
+    def _stock(self, kind: str) -> m.ResourceStock:
+        """The shared stock for kind; raises out_of_stock when missing or empty."""
+        stock = self.state.resources.get(kind)
+        if stock is None or stock.stock == 0:
+            raise InvalidAction("out_of_stock", f"No {kind} left in the village stock")
+        return stock
+
+    def _regenerate_resources(self):
+        """Daily step: each stock grows by regen_per_tick, bounded by its cap."""
+        for kind in sorted(self.state.resources):
+            stock = self.state.resources[kind]
+            ceiling = stock.cap if stock.cap is not None else stock.stock + stock.regen_per_tick
+            grown = max(0, min(stock.regen_per_tick, ceiling - stock.stock))
+            if grown:
+                stock.stock += grown
+                self.emit(
+                    "resource_regenerated", dict(resource=kind, quantity=grown, stock=stock.stock)
+                )
 
     def _close(self, building: m.Building, actor_id: str | None, rationale: str | None):
         """Remove a business: cash and goods go to the owner, employees are released."""
@@ -505,6 +558,7 @@ class Engine:
             building.unpaid_days = building.unpaid_days + 1 if building.id in missed_payroll else 0
             if building.unpaid_days >= BANKRUPTCY_DAYS:
                 tx._close(building, None, f"Bankrupt: wages unpaid for {BANKRUPTCY_DAYS} days")
+        tx._regenerate_resources()
         tx.state.rng_state = json.loads(json.dumps(tx.rng.getstate()))
         rejected = []
         for proposal in proposals or []:

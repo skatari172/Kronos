@@ -87,3 +87,32 @@ async def goals(citizen_id: str, body: m.GoalsUpdateRequest, service: ServiceDep
         branch_id=body.branch_id, expected_sequence=body.expected_sequence, action=action
     )
     return await service.submit_agent_action(request, citizen_id)
+
+
+@router.post(
+    "/{citizen_id}/gather",
+    response_model=m.ActionResult,
+    summary="Gather from a shared natural stock into the citizen's employer",
+)
+async def gather(citizen_id: str, body: m.GatherRequest, service: ServiceDependency):
+    """Submitted as a gather_resource action at the citizen's current employer.
+
+    The employer must match the resource (wheat: farm). Takes up to quantity; a nearly empty
+    stock gives a partial gather, and an empty one is rejected as out_of_stock.
+    """
+    async with service.lock:
+        citizen = service.state.citizens.get(citizen_id)
+        if citizen is None:
+            raise KeyError("Unknown citizen")
+        employer = citizen.employer_id or ""  # Unemployed: the engine rejects with bad_params.
+    action = m.GatherResource(
+        actor_id=citizen_id,
+        building_id=employer,
+        resource=body.resource,
+        quantity=body.quantity,
+        rationale=body.rationale,
+    )
+    request = m.ActionRequest(
+        branch_id=body.branch_id, expected_sequence=body.expected_sequence, action=action
+    )
+    return await service.submit_agent_action(request, citizen_id)

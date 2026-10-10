@@ -101,6 +101,28 @@ class Building(Model):
     )
 
 
+# Natural stocks only; this is not a tradeable good list. Widen together with
+# engine.RESOURCE_SOURCES when a kind (wood, iron, ...) gains a gathering business.
+NaturalResource = Literal["wheat"]
+
+
+class ResourceStock(Model):
+    """A shared natural stock. Farms harvest from it and workers gather from it;
+    it regenerates once per tick up to cap. Interventions may edit stock and regen."""
+
+    kind: NaturalResource
+    stock: int = Field(ge=0)
+    regen_per_tick: int = Field(default=0, ge=0)
+    cap: int | None = Field(
+        default=None, ge=0, description="Regeneration stops here; null = no cap"
+    )
+
+
+def default_resources() -> dict[str, ResourceStock]:
+    """Starting stocks; also used to upgrade worlds saved before resources existed."""
+    return {"wheat": ResourceStock(kind="wheat", stock=120, regen_per_tick=6, cap=200)}
+
+
 class WorldState(Model):
     schema_version: Literal[1] = 1
     branch_id: str
@@ -111,6 +133,13 @@ class WorldState(Model):
     citizens: dict[str, Citizen]
     buildings: dict[str, Building]
     plots: dict[str, Plot]
+    resources: dict[str, ResourceStock] = Field(default_factory=default_resources)
+
+    @model_validator(mode="after")
+    def _resource_keys(self):
+        if any(key != stock.kind for key, stock in self.resources.items()):
+            raise ValueError("resources must be keyed by kind")
+        return self
 
 
 class ActionBase(Model):
@@ -429,6 +458,9 @@ class ResourcePayload(Model):
     entity_id: str
     resource: str
     quantity: int
+    stock_remaining: int | None = Field(
+        default=None, description="Shared natural stock left after a farm harvest"
+    )
 
 
 class ResourceProduced(EventBase):
@@ -558,6 +590,31 @@ class WageChanged(EventBase):
     payload: WagePayload
 
 
+class GatherPayload(Model):
+    citizen_id: str
+    building_id: str
+    resource: str
+    requested: int
+    quantity: int = Field(description="Actually moved; less than requested when stock ran low")
+    stock_remaining: int
+
+
+class ResourceGathered(EventBase):
+    type: Literal["resource_gathered"] = "resource_gathered"
+    payload: GatherPayload
+
+
+class RegenerationPayload(Model):
+    resource: str
+    quantity: int
+    stock: int
+
+
+class ResourceRegenerated(EventBase):
+    type: Literal["resource_regenerated"] = "resource_regenerated"
+    payload: RegenerationPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -586,7 +643,9 @@ SimulationEvent = Annotated[
     | GoalsChanged
     | EmploymentChanged
     | WageChanged
-    | InterventionApplied,
+    | InterventionApplied
+    | ResourceGathered
+    | ResourceRegenerated,
     Field(discriminator="type"),
 ]
 
@@ -789,3 +848,11 @@ class PurchaseRequest(BusinessCommand):
     resource: TradedResource
     quantity: int = Field(gt=0, le=100)
     max_unit_price: int = Field(gt=0)
+
+
+class GatherRequest(MutationRequest):
+    """Convenience-route body; the business is the citizen's current employer."""
+
+    resource: TradedResource
+    quantity: int = Field(gt=0, le=100)
+    rationale: str | None = Field(default=None, max_length=300)

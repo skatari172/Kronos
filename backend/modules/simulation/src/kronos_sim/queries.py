@@ -58,3 +58,7 @@ def business_profile(state: m.WorldState, building_id: str) -> m.BusinessProfile
         employee_ids=staff,
         free_slots=max(0, building.job_slots - len(staff)),
     )
+
+
+def resource_stocks(state: m.WorldState) -> list[m.ResourceStock]:
+    return [state.resources[kind].model_copy() for kind in sorted(state.resources)]
