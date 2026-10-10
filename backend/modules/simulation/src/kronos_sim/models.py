@@ -24,9 +24,25 @@ class ResourceInventory(Model):
     bread: int = Field(default=0, ge=0)
 
 
+RelationshipType = Literal[
+    "acquaintance", "friend", "ally", "rival", "trade", "employer", "creditor", "landlord"
+]
+InteractionKind = Literal["befriend", "gift", "ally", "argue", "insult", "betray", "mentor"]
+
+
 class Relationship(Model):
+    """How the holding citizen feels about citizen_id (directed; the reverse may differ).
+
+    Spec 0..1 values are scaled by 100: trust 0.7 is 70, grudge 0.5 is 50.
+    """
+
     citizen_id: str
     trust: int = Field(default=0, ge=-100, le=100)
+    grudge: int = Field(default=0, ge=0, le=100)
+    type: RelationshipType = "acquaintance"
+    last_interaction_tick: int | None = Field(
+        default=None, ge=0, description="Last tick the holder started an interact toward them"
+    )
 
 
 GOALS = ("wealth", "influence", "safety", "reputation")
@@ -451,7 +467,7 @@ class Interact(ActionBase):
 
     type: Literal["interact"] = "interact"
     recipient_id: str
-    kind: Literal["befriend", "gift", "ally", "argue", "insult", "betray", "mentor"]
+    kind: InteractionKind
     amount: int | None = Field(default=None, gt=0)
 
     @model_validator(mode="after")
@@ -698,8 +714,15 @@ class AgentSpoke(EventBase):
 
 
 class RelationshipPayload(Model):
+    """recipient_id's feeling toward citizen_id, after the change."""
+
     recipient_id: str
     trust: int
+    grudge: int = 0
+    type: RelationshipType = "acquaintance"
+    citizen_id: str | None = Field(
+        default=None, description="Whom the feeling is about; null in older events means actor_id"
+    )
 
 
 class RelationshipChanged(EventBase):
@@ -1062,6 +1085,21 @@ class TenantEvicted(EventBase):
     payload: LotPayload
 
 
+class InteractionPayload(Model):
+    """One interact action. Reputations are after the interaction's side effects."""
+
+    recipient_id: str
+    kind: InteractionKind
+    amount: int = 0
+    actor_reputation: int
+    recipient_reputation: int
+
+
+class CitizenInteracted(EventBase):
+    type: Literal["citizen_interacted"] = "citizen_interacted"
+    payload: InteractionPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -1120,7 +1158,8 @@ SimulationEvent = Annotated[
     | RentChanged
     | RentMissed
     | RentCovered
-    | TenantEvicted,
+    | TenantEvicted
+    | CitizenInteracted,
     Field(discriminator="type"),
 ]
 
@@ -1230,6 +1269,10 @@ class AgentObservation(Model):
     )
     incoming_offers: list[TradeOffer] = Field(
         default_factory=list, description="Pending trade offers this citizen may accept or decline"
+    )
+    ties: list["RelationshipView"] = Field(
+        default_factory=list,
+        description="Strongest feelings toward others: top few by |trust| or grudge",
     )
 
 
@@ -1536,3 +1579,40 @@ class BallotRequest(MutationRequest):
 
 class RentRequest(LotCommand):
     rent: int = Field(ge=0, le=1000000)
+
+
+class RelationshipView(Model):
+    """One directed tie with the other citizen's name; known is false when no entry exists."""
+
+    citizen_id: str
+    name: str
+    trust: int = 0
+    grudge: int = 0
+    type: RelationshipType = "acquaintance"
+    last_interaction_tick: int | None = None
+    known: bool = True
+
+
+class RelationshipPair(Model):
+    """Both directions of one tie: a_to_b is a's feeling toward b."""
+
+    a_id: str
+    b_id: str
+    a_to_b: RelationshipView
+    b_to_a: RelationshipView
+
+
+class InteractRequest(MutationRequest):
+    target_id: str
+    kind: InteractionKind
+    amount: int | None = Field(default=None, gt=0, description="Cents; required for gift only")
+    rationale: str | None = Field(default=None, max_length=300)
+
+    @model_validator(mode="after")
+    def _gift_amount(self):
+        if (self.kind == "gift") != (self.amount is not None):
+            raise ValueError("amount is required for gift and not allowed otherwise")
+        return self
+
+
+AgentObservation.model_rebuild()

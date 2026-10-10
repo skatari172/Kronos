@@ -98,19 +98,6 @@ def test_long_run_invariants_and_reproducibility():
 @pytest.mark.parametrize(
     "payload",
     [
-        {"type": "interact", "recipient_id": "citizen-1", "kind": "befriend"},
-    ],
-)
-def test_planned_actions_parse_but_are_rejected_until_implemented(payload):
-    action = ACTION.validate_python({"actor_id": "citizen-0", **payload})
-    state = initial_world()
-    with pytest.raises(InvalidAction, match="not supported yet"):
-        Engine(state).apply(action)
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
         {"type": "interact", "recipient_id": "citizen-1", "kind": "gift"},
         {"type": "interact", "recipient_id": "citizen-1", "kind": "argue", "amount": 100},
         {"type": "research", "invention_id": "water_mill", "mode": "money", "ticks": 3},
@@ -191,6 +178,9 @@ def test_every_action_type_is_supported_or_explicitly_planned():
     types = {cls.model_fields["type"].default for cls in union}
     assert set(SUPPORTED_ACTIONS) <= types
     assert len(types) == 36
+    # Nothing is planned-only any more: every published action type has engine rules.
+    assert len(SUPPORTED_ACTIONS) == len(set(SUPPORTED_ACTIONS))
+    assert set(SUPPORTED_ACTIONS) == types
 
 
 @pytest.mark.parametrize(

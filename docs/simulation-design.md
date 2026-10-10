@@ -26,3 +26,23 @@ Current omissions: production cooldown on manually submitted `produce`, richer m
 - `license_invention` only creates a `LicenseOffer`; the recipient answers with `respond_license` on the same tick (funds re-checked) or the offer expires at the next tick. The fee moves recipient → owner.
 - `adopt_invention` is for the building owner who owns or licenses an unlocked invention matching the building kind; the business pays `adoption_cost` (a sink).
 - Waiting on richer goods: `printing_press` (books, scribes) and `ledger_banking` (loans). Add them with a matching `InventionEffect` once those goods and actions exist. Closed buildings stay in `adopters`; building IDs are never reused.
+
+## Relationships
+
+`Citizen.relationships` holds directed ties: A's entry for B is how A feels about B. Spec 0..1 values are scaled by 100: `trust` −100..100, `grudge` 0..100, plus a `type` (`acquaintance` by default, `friend`, `ally`, `rival`, `trade`, `employer`, `creditor`, `landlord`) and `last_interaction_tick`. Missing entries count as trust 0. Entries are created on first contact.
+
+`interact` (`POST /api/agents/{id}/interact`) applies fixed engine rules to the **target's** feeling toward the actor. `ally` and `argue` are mutual and change the actor's feeling toward the target the same way.
+
+| kind     | trust | grudge | side effect                                                                               |
+| -------- | ----- | ------ | ----------------------------------------------------------------------------------------- |
+| befriend | +10   | —      | an `acquaintance` at trust ≥ 50 becomes a `friend`                                        |
+| gift     | +15   | −5     | moves `amount` cents actor → target (`insufficient_funds` if short)                       |
+| ally     | +20   | —      | `type = ally` both ways; needs the target's trust toward the actor ≥ 50 (`trust_too_low`) |
+| argue    | −10   | +10    | —                                                                                         |
+| insult   | −15   | +20    | target reputation −2                                                                      |
+| betray   | −50   | +50    | target's `type = rival`; actor reputation −10                                             |
+| mentor   | +10   | —      | target reputation +2 (there is no skill yet; reputation stands in for it)                 |
+
+An actor may interact with a given target once per tick (`rate_limited`). Each interaction emits `citizen_interacted` (kind, amount, both reputations afterwards), a `transaction_completed` for a gift, and one `relationship_changed` per changed direction. `relationship_changed` carries `recipient_id` (whose feeling changed), `citizen_id` (whom it is about; null in older events means the event's actor), and the resulting `trust`, `grudge`, and `type`. Communicating adds +1 trust; a loan default costs the lender −30 trust and adds +30 grudge toward the borrower.
+
+Trust feeds hiring (the daily fallback takes applications in order of the owner's trust toward the applicant, then first come), influence (average trust from others), and the observation's `ties`: the five strongest feelings by |trust| or grudge, with names. `GET /api/agents/{id}/relationships` lists all ties by trust; `GET /api/relationships/{a}/{b}` returns both directions.
