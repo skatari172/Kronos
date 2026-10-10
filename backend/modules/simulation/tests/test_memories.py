@@ -1,5 +1,6 @@
 """Event-derived memories: salient lines, routine aggregation, folding and the summary."""
 
+from kronos_sim import models as m
 from kronos_sim.engine import MEMORY_WINDOW, SUMMARY_MAX, Engine, InvalidAction, remember
 from kronos_sim.models import (
     Buy,
@@ -129,6 +130,15 @@ def test_rejections_keep_the_reject_memory_and_are_not_duplicated():
 
 def test_newcomers_are_announced_and_the_summary_is_observed():
     state = run(initial_world(), 3)
+    request = m.SpawnCitizenRequest(
+        branch_id=state.branch_id,
+        expected_sequence=state.sequence,
+        name="Ivo",
+        occupation="Newcomer",
+        money=1000,
+        plot_id="plot-0",
+    )
+    state = Engine(state).spawn(request).state
     newcomer = next(c for c in state.citizens.values() if c.occupation == "Newcomer")
     assert "I arrived in the village" in newcomer.memories
     assert f"{newcomer.name} arrived in the village" in state.citizens["citizen-6"].memories

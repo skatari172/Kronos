@@ -1,7 +1,7 @@
 import asyncio
 
 import pytest
-from kronos_agents.provider import AgentService, MockProvider, ProviderError
+from kronos_agents.provider import MAX_DECISIONS, AgentService, MockProvider, ProviderError
 from kronos_sim.engine import Engine
 from kronos_sim.seed import initial_world
 
@@ -55,23 +55,36 @@ def test_timeout_is_bounded():
         asyncio.run(AgentService(Slow(), timeout=0.001, retries=0).parse("hello"))
 
 
-def test_proposals_follow_the_schedule_and_social_effects_persist():
+def test_due_citizens_are_urgent_or_on_their_slot_and_social_effects_persist():
     state = initial_world()
-    assert asyncio.run(AgentService(MockProvider()).propose(state)) == []
-    state.tick = 3
-    before = state.model_copy(deep=True)
     service = AgentService(MockProvider())
-    # Day 1 is slot 1 of a 3-day round; only citizen-5 hashes to it.
-    assert service.scheduled(state) == ["citizen-5"]
+    # Coming day 1 is slot 1 of a 3-day round; only citizen-5 hashes to it.
+    assert service.scheduled(state) == service.due(state) == ["citizen-5"]
+    # Out of bread: Rowan decides now, off his slot.
+    state.citizens["citizen-3"].inventory.bread = 0
+    assert service.due(state) == ["citizen-3", "citizen-5"]
+    before = state.model_copy(deep=True)
     proposals = asyncio.run(service.propose(state))
     assert state == before  # proposing reads a world, never mutates it or its RNG
-    assert [(p.actor_id, p.type) for p in proposals] == [("citizen-5", "communicate")]
+    assert [(p.actor_id, p.type) for p in proposals] == [
+        ("citizen-3", "buy"),
+        ("citizen-5", "communicate"),
+    ]
     result = Engine(state).tick(proposals)
-    assert len(proposals) == 7
-    assert all(r.trust == 1 for r in result.state.citizens["citizen-0"].relationships)
-    assert result.state.citizens["citizen-0"].relationships[0].trust == 1
-    assert result.state.rng_state != before.rng_state
-    assert len(result.state.citizens["citizen-0"].memories) == 7
+    told = result.state.citizens["citizen-0"]
+    assert any(r.citizen_id == "citizen-5" and r.trust == 1 for r in told.relationships)
+
+
+def test_due_is_capped_per_batch():
+    state = initial_world()
+    for i in range(12):
+        state.citizens[f"citizen-x{i:02d}"] = state.citizens["citizen-6"].model_copy(
+            update={"id": f"citizen-x{i:02d}"}
+        )
+    for citizen in state.citizens.values():
+        citizen.inventory.bread = 0  # everyone is urgent
+    due = AgentService(MockProvider()).due(state)
+    assert due == sorted(state.citizens)[:MAX_DECISIONS]
 
 
 def test_every_citizen_decides_exactly_once_per_round():

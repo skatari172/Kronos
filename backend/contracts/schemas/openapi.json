@@ -3334,9 +3334,6 @@
                         "$ref": "#/components/schemas/LotLeased"
                       },
                       {
-                        "$ref": "#/components/schemas/PlotOpened"
-                      },
-                      {
                         "$ref": "#/components/schemas/RentChanged"
                       },
                       {
@@ -3401,14 +3398,12 @@
                         "policy_changed": "#/components/schemas/PolicyChanged",
                         "tax_collected": "#/components/schemas/TaxCollected",
                         "lot_leased": "#/components/schemas/LotLeased",
-                        "plot_opened": "#/components/schemas/PlotOpened",
                         "rent_changed": "#/components/schemas/RentChanged",
                         "rent_missed": "#/components/schemas/RentMissed",
                         "rent_covered": "#/components/schemas/RentCovered",
                         "tenant_evicted": "#/components/schemas/TenantEvicted",
                         "citizen_interacted": "#/components/schemas/CitizenInteracted",
                         "tick_completed": "#/components/schemas/TickCompleted"
-                        "citizen_interacted": "#/components/schemas/CitizenInteracted"
                       }
                     }
                   },
@@ -3431,81 +3426,6 @@
       }
     },
     "/api/events": {
-      "get": {
-        "tags": [
-          "History"
-        ],
-        "summary": "Page through the event log",
-        "description": "Events oldest first. Pass the returned `next_after` as `after` to read the next page.\n\nDefaults to the active branch.",
-        "operationId": "event_log_api_events_get",
-        "parameters": [
-          {
-            "name": "after",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "description": "Return events with a sequence greater than this",
-              "default": 0,
-              "title": "After"
-            },
-            "description": "Return events with a sequence greater than this"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 100,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "branch_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Branch Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EventPage"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/history/snapshots": {
       "get": {
         "tags": [
           "History"
@@ -4205,9 +4125,6 @@
                         "$ref": "#/components/schemas/LotLeased"
                       },
                       {
-                        "$ref": "#/components/schemas/PlotOpened"
-                      },
-                      {
                         "$ref": "#/components/schemas/RentChanged"
                       },
                       {
@@ -4272,14 +4189,12 @@
                         "policy_changed": "#/components/schemas/PolicyChanged",
                         "tax_collected": "#/components/schemas/TaxCollected",
                         "lot_leased": "#/components/schemas/LotLeased",
-                        "plot_opened": "#/components/schemas/PlotOpened",
                         "rent_changed": "#/components/schemas/RentChanged",
                         "rent_missed": "#/components/schemas/RentMissed",
                         "rent_covered": "#/components/schemas/RentCovered",
                         "tenant_evicted": "#/components/schemas/TenantEvicted",
                         "citizen_interacted": "#/components/schemas/CitizenInteracted",
                         "tick_completed": "#/components/schemas/TickCompleted"
-                        "citizen_interacted": "#/components/schemas/CitizenInteracted"
                       }
                     }
                   },
@@ -4781,7 +4696,37 @@
                 }
               },
               {
-                "$ref": "#/components/schemas/PriceIntervention"
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PriceIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WageIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GrantIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResourceIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/HungerIntervention"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PolicyIntervention"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "adjust_hunger": "#/components/schemas/HungerIntervention",
+                    "adjust_resource": "#/components/schemas/ResourceIntervention",
+                    "grant_money": "#/components/schemas/GrantIntervention",
+                    "modify_price": "#/components/schemas/PriceIntervention",
+                    "set_policy": "#/components/schemas/PolicyIntervention",
+                    "set_wage": "#/components/schemas/WageIntervention"
+                  }
+                }
               }
             ],
             "title": "Action"
@@ -5628,7 +5573,6 @@
           "recent_events",
           "loans",
           "incoming_offers",
-          "ties"
           "ties",
           "open_jobs",
           "businesses"
@@ -6830,7 +6774,6 @@
           "reputation",
           "research_invention_id",
           "research_start_tick",
-          "research_until_tick"
           "research_until_tick",
           "destitute_days",
           "memory_summary",
@@ -6839,90 +6782,6 @@
         "title": "Citizen"
       },
       "CitizenInteracted": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id"
-          },
-          "tick": {
-            "type": "integer",
-            "title": "Tick"
-          },
-          "sequence": {
-            "type": "integer",
-            "title": "Sequence"
-          },
-          "actor_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Actor Id"
-          },
-          "rationale": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rationale"
-          },
-          "causal_refs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Causal Refs"
-          },
-          "action_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Action Id"
-          },
-          "type": {
-            "type": "string",
-            "const": "citizen_interacted",
-            "title": "Type",
-            "default": "citizen_interacted"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/InteractionPayload"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "branch_id",
-          "tick",
-          "sequence",
-          "actor_id",
-          "rationale",
-          "causal_refs",
-          "action_id",
-          "type",
-          "payload"
-        ],
-        "title": "CitizenInteracted"
-      },
-      "CitizenMoved": {
         "properties": {
           "id": {
             "type": "string",
@@ -8021,240 +7880,6 @@
           "level"
         ],
         "title": "EntityPayload"
-      },
-      "EventPage": {
-        "properties": {
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id"
-          },
-          "events": {
-            "items": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/PriceChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/TransactionCompleted"
-                },
-                {
-                  "$ref": "#/components/schemas/ResourceProduced"
-                },
-                {
-                  "$ref": "#/components/schemas/ResourceConsumed"
-                },
-                {
-                  "$ref": "#/components/schemas/CitizenMoved"
-                },
-                {
-                  "$ref": "#/components/schemas/CitizenSpawned"
-                },
-                {
-                  "$ref": "#/components/schemas/CitizenRemoved"
-                },
-                {
-                  "$ref": "#/components/schemas/BuildingConstructed"
-                },
-                {
-                  "$ref": "#/components/schemas/BuildingUpgraded"
-                },
-                {
-                  "$ref": "#/components/schemas/BuildingRemoved"
-                },
-                {
-                  "$ref": "#/components/schemas/AgentSpoke"
-                },
-                {
-                  "$ref": "#/components/schemas/RelationshipChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/ActionRejected"
-                },
-                {
-                  "$ref": "#/components/schemas/GoalsChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/EmploymentChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/WageChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/InterventionApplied"
-                },
-                {
-                  "$ref": "#/components/schemas/ResourceGathered"
-                },
-                {
-                  "$ref": "#/components/schemas/ResourceRegenerated"
-                },
-                {
-                  "$ref": "#/components/schemas/JobApplied"
-                },
-                {
-                  "$ref": "#/components/schemas/JobApplicationResolved"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanOffered"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanAccepted"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanDeclined"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanRepaid"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanExpired"
-                },
-                {
-                  "$ref": "#/components/schemas/LoanDefaulted"
-                },
-                {
-                  "$ref": "#/components/schemas/TradeOffered"
-                },
-                {
-                  "$ref": "#/components/schemas/TradeAccepted"
-                },
-                {
-                  "$ref": "#/components/schemas/TradeDeclined"
-                },
-                {
-                  "$ref": "#/components/schemas/TradeExpired"
-                },
-                {
-                  "$ref": "#/components/schemas/ResearchContributed"
-                },
-                {
-                  "$ref": "#/components/schemas/InventionUnlocked"
-                },
-                {
-                  "$ref": "#/components/schemas/LicenseOffered"
-                },
-                {
-                  "$ref": "#/components/schemas/LicenseResolved"
-                },
-                {
-                  "$ref": "#/components/schemas/InventionAdopted"
-                },
-                {
-                  "$ref": "#/components/schemas/VoteProposed"
-                },
-                {
-                  "$ref": "#/components/schemas/VoteCast"
-                },
-                {
-                  "$ref": "#/components/schemas/VoteClosed"
-                },
-                {
-                  "$ref": "#/components/schemas/PolicyChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/TaxCollected"
-                },
-                {
-                  "$ref": "#/components/schemas/LotLeased"
-                },
-                {
-                  "$ref": "#/components/schemas/PlotOpened"
-                },
-                {
-                  "$ref": "#/components/schemas/RentChanged"
-                },
-                {
-                  "$ref": "#/components/schemas/RentMissed"
-                },
-                {
-                  "$ref": "#/components/schemas/RentCovered"
-                },
-                {
-                  "$ref": "#/components/schemas/TenantEvicted"
-                },
-                {
-                  "$ref": "#/components/schemas/CitizenInteracted"
-                }
-              ],
-              "discriminator": {
-                "propertyName": "type",
-                "mapping": {
-                  "action_rejected": "#/components/schemas/ActionRejected",
-                  "agent_spoke": "#/components/schemas/AgentSpoke",
-                  "building_constructed": "#/components/schemas/BuildingConstructed",
-                  "building_removed": "#/components/schemas/BuildingRemoved",
-                  "building_upgraded": "#/components/schemas/BuildingUpgraded",
-                  "citizen_interacted": "#/components/schemas/CitizenInteracted",
-                  "citizen_moved": "#/components/schemas/CitizenMoved",
-                  "citizen_removed": "#/components/schemas/CitizenRemoved",
-                  "citizen_spawned": "#/components/schemas/CitizenSpawned",
-                  "employment_changed": "#/components/schemas/EmploymentChanged",
-                  "goals_changed": "#/components/schemas/GoalsChanged",
-                  "intervention_applied": "#/components/schemas/InterventionApplied",
-                  "invention_adopted": "#/components/schemas/InventionAdopted",
-                  "invention_unlocked": "#/components/schemas/InventionUnlocked",
-                  "job_application_resolved": "#/components/schemas/JobApplicationResolved",
-                  "job_applied": "#/components/schemas/JobApplied",
-                  "license_offered": "#/components/schemas/LicenseOffered",
-                  "license_resolved": "#/components/schemas/LicenseResolved",
-                  "loan_accepted": "#/components/schemas/LoanAccepted",
-                  "loan_declined": "#/components/schemas/LoanDeclined",
-                  "loan_defaulted": "#/components/schemas/LoanDefaulted",
-                  "loan_expired": "#/components/schemas/LoanExpired",
-                  "loan_offered": "#/components/schemas/LoanOffered",
-                  "loan_repaid": "#/components/schemas/LoanRepaid",
-                  "lot_leased": "#/components/schemas/LotLeased",
-                  "plot_opened": "#/components/schemas/PlotOpened",
-                  "policy_changed": "#/components/schemas/PolicyChanged",
-                  "price_changed": "#/components/schemas/PriceChanged",
-                  "relationship_changed": "#/components/schemas/RelationshipChanged",
-                  "rent_changed": "#/components/schemas/RentChanged",
-                  "rent_covered": "#/components/schemas/RentCovered",
-                  "rent_missed": "#/components/schemas/RentMissed",
-                  "research_contributed": "#/components/schemas/ResearchContributed",
-                  "resource_consumed": "#/components/schemas/ResourceConsumed",
-                  "resource_gathered": "#/components/schemas/ResourceGathered",
-                  "resource_produced": "#/components/schemas/ResourceProduced",
-                  "resource_regenerated": "#/components/schemas/ResourceRegenerated",
-                  "tax_collected": "#/components/schemas/TaxCollected",
-                  "tenant_evicted": "#/components/schemas/TenantEvicted",
-                  "trade_accepted": "#/components/schemas/TradeAccepted",
-                  "trade_declined": "#/components/schemas/TradeDeclined",
-                  "trade_expired": "#/components/schemas/TradeExpired",
-                  "trade_offered": "#/components/schemas/TradeOffered",
-                  "transaction_completed": "#/components/schemas/TransactionCompleted",
-                  "vote_cast": "#/components/schemas/VoteCast",
-                  "vote_closed": "#/components/schemas/VoteClosed",
-                  "vote_proposed": "#/components/schemas/VoteProposed",
-                  "wage_changed": "#/components/schemas/WageChanged"
-                }
-              }
-            },
-            "type": "array",
-            "title": "Events"
-          },
-          "next_after": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Next After",
-            "description": "Sequence of the last event returned, or the requested `after` if none"
-          },
-          "has_more": {
-            "type": "boolean",
-            "title": "Has More",
-            "description": "More events exist after `next_after`"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "branch_id",
-          "events",
-          "next_after",
-          "has_more"
-        ],
-        "title": "EventPage",
-        "description": "One page of the event log, oldest first. Pass `next_after` as `after` to read on."
       },
       "Evict-Input": {
         "properties": {
@@ -9427,115 +9052,6 @@
         ],
         "title": "Interact",
         "description": "Bounded relationship change; amount is only used by gift."
-      },
-      "InteractRequest": {
-        "properties": {
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id"
-          },
-          "expected_sequence": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Expected Sequence"
-          },
-          "target_id": {
-            "type": "string",
-            "title": "Target Id"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "befriend",
-              "gift",
-              "ally",
-              "argue",
-              "insult",
-              "betray",
-              "mentor"
-            ],
-            "title": "Kind"
-          },
-          "amount": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "exclusiveMinimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Amount",
-            "description": "Cents; required for gift only"
-          },
-          "rationale": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 300
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rationale"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "branch_id",
-          "expected_sequence",
-          "target_id",
-          "kind"
-        ],
-        "title": "InteractRequest"
-      },
-      "InteractionPayload": {
-        "properties": {
-          "recipient_id": {
-            "type": "string",
-            "title": "Recipient Id"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "befriend",
-              "gift",
-              "ally",
-              "argue",
-              "insult",
-              "betray",
-              "mentor"
-            ],
-            "title": "Kind"
-          },
-          "amount": {
-            "type": "integer",
-            "title": "Amount",
-            "default": 0
-          },
-          "actor_reputation": {
-            "type": "integer",
-            "title": "Actor Reputation"
-          },
-          "recipient_reputation": {
-            "type": "integer",
-            "title": "Recipient Reputation"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "recipient_id",
-          "kind",
-          "amount",
-          "actor_reputation",
-          "recipient_reputation"
-        ],
-        "title": "InteractionPayload",
-        "description": "One interact action. Reputations are after the interaction's side effects."
       },
       "InteractRequest": {
         "properties": {
@@ -12720,170 +12236,7 @@
             "default": "plot_opened"
           },
           "payload": {
-            "$ref": "#/components/schemas/PlotOpenedPayload"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "branch_id",
-          "tick",
-          "sequence",
-          "actor_id",
-          "rationale",
-          "causal_refs",
-          "action_id",
-          "type",
-          "payload"
-        ],
-        "title": "PlotOpened",
-        "description": "The village grew: a new town-land lot opened on the outer ring."
-      },
-      "PlotOpenedPayload": {
-        "properties": {
-          "plot_id": {
-            "type": "string",
-            "title": "Plot Id"
-          },
-          "owner_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Id"
-          },
-          "tenant_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tenant Id"
-          },
-          "rent": {
-            "type": "integer",
-            "title": "Rent"
-          },
-          "arrears": {
-            "type": "integer",
-            "title": "Arrears",
-            "default": 0
-          },
-          "missed_periods": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Missed Periods",
-            "description": "Rent periods missed since arrears were last cleared",
-            "default": 0
-          },
-          "prepaid_periods": {
-            "type": "integer",
-            "maximum": 4.0,
-            "minimum": 0.0,
-            "title": "Prepaid Periods",
-            "description": "Future rent periods the tenant already paid",
-            "default": 0
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "position",
-          "owner_id",
-          "tenant_id",
-          "rent",
-          "arrears",
-          "missed_periods",
-          "prepaid_periods"
-        ],
-        "title": "Plot",
-        "description": "A lot. Unowned lots are town land: anyone may build there, nobody collects rent."
-      },
-      "PlotOpened": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "branch_id": {
-            "type": "string",
-            "title": "Branch Id"
-          },
-          "tick": {
-            "type": "integer",
-            "title": "Tick"
-          },
-          "sequence": {
-            "type": "integer",
-            "title": "Sequence"
-          },
-          "actor_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Actor Id"
-          },
-          "rationale": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rationale"
-          },
-          "causal_refs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Causal Refs"
-          },
-          "action_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Action Id"
-          },
-          "type": {
-            "type": "string",
-            "const": "plot_opened",
-            "title": "Type",
-            "default": "plot_opened"
-          },
-          "payload": {
             "$ref": "#/components/schemas/EntityPayload"
-            "title": "Missed Periods",
-            "default": 0
-          },
-          "prepaid_periods": {
-            "type": "integer",
-            "title": "Prepaid Periods",
-            "default": 0
-          },
-          "position": {
-            "$ref": "#/components/schemas/Position"
           }
         },
         "additionalProperties": false,
@@ -12901,16 +12254,6 @@
           "payload"
         ],
         "title": "PlotOpened"
-          "plot_id",
-          "owner_id",
-          "tenant_id",
-          "rent",
-          "arrears",
-          "missed_periods",
-          "prepaid_periods",
-          "position"
-        ],
-        "title": "PlotOpenedPayload"
       },
       "Policies": {
         "properties": {
@@ -16386,9 +15729,6 @@
                   "$ref": "#/components/schemas/LotLeased"
                 },
                 {
-                  "$ref": "#/components/schemas/PlotOpened"
-                },
-                {
                   "$ref": "#/components/schemas/RentChanged"
                 },
                 {
@@ -18917,9 +18257,6 @@
                 },
                 {
                   "$ref": "#/components/schemas/LotLeased"
-                },
-                {
-                  "$ref": "#/components/schemas/PlotOpened"
                 },
                 {
                   "$ref": "#/components/schemas/RentChanged"

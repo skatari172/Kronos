@@ -214,6 +214,10 @@ class MockProvider:
         }
 
 
+# Decisions per post-tick batch; bounds latency however large the town grows.
+MAX_DECISIONS = 8
+
+
 class AgentService:
     def __init__(
         self,
@@ -222,11 +226,19 @@ class AgentService:
         retries: int = 1,
         round_ticks: int = 3,
         fallback: FallbackPolicy | None = None,
+        calls_per_tick: int | None = None,
+        concurrency: int | None = None,
+        strategic_ids: list[str] | None = None,
+        strategic_limit: int | None = None,
     ):
         self.provider, self.timeout, self.retries = provider, timeout, min(max(retries, 0), 2)
         self.round_ticks = max(round_ticks, 1)
         # Used when the provider fails; None keeps the old behavior (ProviderError propagates).
         self.fallback = fallback
+        # Cost controls for the tick loop (None = unlimited): provider calls per tick, calls
+        # in flight at once, and which citizens are strategic (the rest use the fallback).
+        self.calls_per_tick, self.concurrency = calls_per_tick, concurrency
+        self.strategic_ids, self.strategic_limit = strategic_ids, strategic_limit
 
     async def _validated(self, task, observation, adapter):
         for attempt in range(self.retries + 1):
@@ -253,14 +265,20 @@ class AgentService:
         """One proposal for the observed citizen. The engine still decides if it is valid."""
         return (await self.proposal(observation)).action
 
-    async def proposal(self, observation: AgentObservation) -> Proposal:
+    async def proposal(
+        self, observation: AgentObservation, *, use_provider: bool = True
+    ) -> Proposal:
         """Like `decide`, plus who chose: the provider (`llm`/`mock`) or the `fallback`.
 
         A provider error, timeout, invalid output or a proposal for another citizen engages
         the fallback policy when one is configured. The source is prefixed to the rationale
         ("[fallback] safety: ...") so event history shows it without a schema change.
+        `use_provider=False` (non-strategic citizen, or over the call budget) goes straight
+        to the fallback.
         """
         try:
+            if not use_provider:
+                raise ProviderError("Provider skipped (tier or call budget)")
             action = await self._validated(
                 "decision", observation.model_dump(mode="json"), TypeAdapter(AgentAction)
             )
@@ -287,29 +305,6 @@ class AgentService:
             raise ProviderError("Answer cited events outside the citizen's history")
         return result
 
-    async def propose(
-        self, world: WorldState, events: list[SimulationEvent] | None = None
-    ) -> list[AgentAction]:
-        """A small post-tick decision budget; every result is a next-day proposal.
-
-        Each provider sees only its own copied observation. gather preserves citizen
-        order even when network calls finish in a different order. A failed decision
-        does not discard other citizens' decisions or interrupt the clock.
-        """
-        candidates = [
-            cid
-            for cid in sorted(world.citizens)
-            if (
-                world.citizens[cid].inventory.bread == 0
-                or any(offer.recipient_id == cid for offer in world.trade_offers.values())
-                or (world.tick > 0 and world.tick % 3 == 0)
-            )
-        ][:8]
-        selected = [observe(world, cid, events) for cid in candidates]
-        outcomes = await asyncio.gather(
-            *(self.decide(observation) for observation in selected), return_exceptions=True
-        )
-        return [outcome for outcome in outcomes if not isinstance(outcome, BaseException)]
 
     def scheduled(self, world: WorldState) -> list[str]:
         """Citizens whose slot falls on the coming day, in stable ID order.
@@ -322,21 +317,61 @@ class AgentService:
         due = (world.tick + 1) % rounds
         return [c for c in sorted(world.citizens) if decision_slot(c, rounds) == due]
 
-    async def propose(self, world: WorldState) -> list[AgentAction]:
-        """One strategic proposal per scheduled citizen; routine mechanics never call an LLM.
+    def strategic(self, world: WorldState) -> set[str]:
+        """Citizens whose decisions may use the provider (agent tiers).
 
-        Calls run concurrently and fail independently: a citizen whose provider call fails
-        is skipped for this round. Nothing here touches the world's seeded RNG.
+        An explicit `strategic_ids` list wins. Otherwise business owners come first, then
+        everyone else by ID, up to `strategic_limit` (no limit: everyone is strategic).
         """
+        if self.strategic_ids is not None:
+            return {c for c in self.strategic_ids if c in world.citizens}
+        owners = {b.owner_id for b in world.buildings.values()}
+        ranked = sorted(world.citizens, key=lambda c: (c not in owners, c))
+        return set(ranked if self.strategic_limit is None else ranked[: self.strategic_limit])
+
+    def due(self, world: WorldState) -> list[str]:
+        """Who decides after this day, at most MAX_DECISIONS per batch, in ID order.
+
+        Urgent citizens (no bread, or an offer waiting for their answer) decide now; everyone
+        else decides once per round on their staggered slot (see `scheduled`).
+        """
+        urgent = {
+            cid
+            for cid, citizen in world.citizens.items()
+            if citizen.inventory.bread == 0
+            or any(offer.recipient_id == cid for offer in world.trade_offers.values())
+        }
+        return sorted(urgent | set(self.scheduled(world)))[:MAX_DECISIONS]
+
+    async def propose(
+        self, world: WorldState, events: list[SimulationEvent] | None = None
+    ) -> list[AgentAction]:
+        """Next-day proposals for the citizens `due` after this day; daily mechanics never
+        call an LLM, and each provider sees only its own copied observation.
+
+        Strategic citizens ask the provider, up to `calls_per_tick` of them in ID order;
+        the rest decide with the fallback. At most `concurrency` calls are in flight. Calls
+        fail independently: a citizen with no usable decision is skipped this round.
+        Nothing here touches the world's seeded RNG.
+        """
+        due = self.due(world)
+        strategic = [c for c in due if c in self.strategic(world)]
+        budget = len(strategic) if self.calls_per_tick is None else self.calls_per_tick
+        callers = set(strategic[: max(budget, 0)])
+        limit = asyncio.Semaphore(self.concurrency or max(len(callers), 1))
 
         async def one(citizen_id: str) -> AgentAction | None:
             try:
-                return await self.decide(observe(world, citizen_id))
+                observation = observe(world, citizen_id, events)
+                if citizen_id not in callers:
+                    return (await self.proposal(observation, use_provider=False)).action
+                async with limit:
+                    return (await self.proposal(observation)).action
             except Exception as exc:  # One citizen's failure never stops others.
                 logger.warning("Skipping %s's decision this round: %s", citizen_id, exc)
                 return None
 
-        actions = await asyncio.gather(*(one(c) for c in self.scheduled(world)))
+        actions = await asyncio.gather(*(one(c) for c in due))
         return [action for action in actions if action is not None]
 
 

@@ -1241,13 +1241,6 @@ export interface paths {
         };
         /** Read new village events */
         get: operations["events_after_api_events_get"];
-        /**
-         * Page through the event log
-         * @description Events oldest first. Pass the returned `next_after` as `after` to read the next page.
-         *
-         *     Defaults to the active branch.
-         */
-        get: operations["event_log_api_events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1440,7 +1433,7 @@ export interface components {
              */
             status: "queued" | "applied" | "rejected";
             /** Action */
-            action: (components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"] | components["schemas"]["RejectApplication-Output"] | components["schemas"]["RespondLoan-Output"] | components["schemas"]["RespondLicense-Output"]) | components["schemas"]["PriceIntervention"];
+            action: (components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"] | components["schemas"]["RejectApplication-Output"] | components["schemas"]["RespondLoan-Output"] | components["schemas"]["RespondLicense-Output"]) | (components["schemas"]["PriceIntervention"] | components["schemas"]["WageIntervention"] | components["schemas"]["GrantIntervention"] | components["schemas"]["ResourceIntervention"] | components["schemas"]["HungerIntervention"] | components["schemas"]["PolicyIntervention"]);
             /**
              * Source
              * @default agent
@@ -2100,31 +2093,6 @@ export interface components {
             type: "citizen_interacted";
             payload: components["schemas"]["InteractionPayload"];
         };
-        /** CitizenInteracted */
-        CitizenInteracted: {
-            /** Id */
-            id: string;
-            /** Branch Id */
-            branch_id: string;
-            /** Tick */
-            tick: number;
-            /** Sequence */
-            sequence: number;
-            /** Actor Id */
-            actor_id: string | null;
-            /** Rationale */
-            rationale: string | null;
-            /** Causal Refs */
-            causal_refs: string[];
-            /** Action Id */
-            action_id: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "citizen_interacted";
-            payload: components["schemas"]["InteractionPayload"];
-        };
         /** CitizenMoved */
         CitizenMoved: {
             /** Id */
@@ -2418,26 +2386,6 @@ export interface components {
             position: components["schemas"]["Position"] | null;
             /** Level */
             level: number | null;
-        };
-        /**
-         * EventPage
-         * @description One page of the event log, oldest first. Pass `next_after` as `after` to read on.
-         */
-        EventPage: {
-            /** Branch Id */
-            branch_id: string;
-            /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["PlotOpened"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"])[];
-            /**
-             * Next After
-             * @description Sequence of the last event returned, or the requested `after` if none
-             */
-            next_after: number;
-            /**
-             * Has More
-             * @description More events exist after `next_after`
-             */
-            has_more: boolean;
         };
         /** Evict */
         "Evict-Input": {
@@ -3048,11 +2996,9 @@ export interface components {
         };
         /** InterventionResult */
         InterventionResult: {
-            command: components["schemas"]["PriceIntervention"];
-            result: components["schemas"]["ActionResult"];
             /** Command */
             command: components["schemas"]["PriceIntervention"] | components["schemas"]["WageIntervention"] | components["schemas"]["GrantIntervention"] | components["schemas"]["ResourceIntervention"] | components["schemas"]["HungerIntervention"] | components["schemas"]["PolicyIntervention"];
-            update: components["schemas"]["WorldUpdate"];
+            result: components["schemas"]["ActionResult"];
         };
         /**
          * Invention
@@ -4096,61 +4042,6 @@ export interface components {
              */
             type: "plot_opened";
             payload: components["schemas"]["EntityPayload"];
-        };
-        /**
-         * PlotOpened
-         * @description The village grew: a new town-land lot opened on the outer ring.
-         */
-        PlotOpened: {
-            /** Id */
-            id: string;
-            /** Branch Id */
-            branch_id: string;
-            /** Tick */
-            tick: number;
-            /** Sequence */
-            sequence: number;
-            /** Actor Id */
-            actor_id: string | null;
-            /** Rationale */
-            rationale: string | null;
-            /** Causal Refs */
-            causal_refs: string[];
-            /** Action Id */
-            action_id: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "plot_opened";
-            payload: components["schemas"]["PlotOpenedPayload"];
-        };
-        /** PlotOpenedPayload */
-        PlotOpenedPayload: {
-            /** Plot Id */
-            plot_id: string;
-            /** Owner Id */
-            owner_id: string | null;
-            /** Tenant Id */
-            tenant_id: string | null;
-            /** Rent */
-            rent: number;
-            /**
-             * Arrears
-             * @default 0
-             */
-            arrears: number;
-            /**
-             * Missed Periods
-             * @default 0
-             */
-            missed_periods: number;
-            /**
-             * Prepaid Periods
-             * @default 0
-             */
-            prepaid_periods: number;
-            position: components["schemas"]["Position"];
         };
         /**
          * Policies
@@ -5441,7 +5332,6 @@ export interface components {
             state: components["schemas"]["WorldState"];
             /** Events */
             events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["PlotOpened"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"])[];
             /** Rejected Actions */
             rejected_actions: string[];
             /** Action Results */
@@ -6292,7 +6182,6 @@ export interface components {
             state: components["schemas"]["WorldState"];
             /** Events */
             events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["PlotOpened"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"])[];
         };
     };
     responses: never;
@@ -8393,7 +8282,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
-                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["PlotOpened"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"])[];
                 };
             };
             /** @description Validation Error */
@@ -8412,13 +8300,6 @@ export interface operations {
             query?: {
                 after?: number;
                 limit?: number;
-    event_log_api_events_get: {
-        parameters: {
-            query?: {
-                /** @description Return events with a sequence greater than this */
-                after?: number;
-                limit?: number;
-                branch_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -8433,7 +8314,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
-                    "application/json": components["schemas"]["EventPage"];
                 };
             };
             /** @description Validation Error */
@@ -8646,7 +8526,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["PlotOpened"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"] | components["schemas"]["TickCompleted"])[];
-                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["EmploymentChanged"] | components["schemas"]["WageChanged"] | components["schemas"]["InterventionApplied"] | components["schemas"]["ResourceGathered"] | components["schemas"]["ResourceRegenerated"] | components["schemas"]["JobApplied"] | components["schemas"]["JobApplicationResolved"] | components["schemas"]["LoanOffered"] | components["schemas"]["LoanAccepted"] | components["schemas"]["LoanDeclined"] | components["schemas"]["LoanRepaid"] | components["schemas"]["LoanExpired"] | components["schemas"]["LoanDefaulted"] | components["schemas"]["TradeOffered"] | components["schemas"]["TradeAccepted"] | components["schemas"]["TradeDeclined"] | components["schemas"]["TradeExpired"] | components["schemas"]["ResearchContributed"] | components["schemas"]["InventionUnlocked"] | components["schemas"]["LicenseOffered"] | components["schemas"]["LicenseResolved"] | components["schemas"]["InventionAdopted"] | components["schemas"]["VoteProposed"] | components["schemas"]["VoteCast"] | components["schemas"]["VoteClosed"] | components["schemas"]["PolicyChanged"] | components["schemas"]["TaxCollected"] | components["schemas"]["LotLeased"] | components["schemas"]["PlotOpened"] | components["schemas"]["RentChanged"] | components["schemas"]["RentMissed"] | components["schemas"]["RentCovered"] | components["schemas"]["TenantEvicted"] | components["schemas"]["CitizenInteracted"])[];
                 };
             };
             /** @description Validation Error */

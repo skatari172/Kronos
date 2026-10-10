@@ -1,14 +1,11 @@
 import { Suspense, useRef, useState, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
 import type { Group } from "three";
-import type { Plot, WorldState } from "../api/types";
-import { coins } from "../api/format";
+import type { Plot } from "../api/types";
 import { usePresentation, useWorld } from "../stores/world";
 import { HEX_SCALE, hex } from "./assets";
 import { Dust, StaticModel } from "./Models";
-import { residentsOf } from "./routine";
-import { Selection, type LabelPortal } from "./Selection";
+import { Selection } from "./Selection";
 import { stepSpring, type Spring } from "./spring";
 import type { Piece, Town } from "./town";
 
@@ -17,7 +14,7 @@ import type { Piece, Town } from "./town";
  * simulation's lots. Pieces that appear after the first frame (a new district,
  * a new home) rise from the ground in a wave from the town centre.
  */
-export function Ground({ portal, town }: { portal: LabelPortal; town: Town }) {
+export function Ground({ town }: { town: Town }) {
   const mountedAt = useRef(performance.now());
   // Anything mounting later than this belongs to a growth step and animates.
   const grows = () => performance.now() - mountedAt.current > 600;
@@ -42,7 +39,7 @@ export function Ground({ portal, town }: { portal: LabelPortal; town: Town }) {
           animate={grows()}
         >
           {piece.place ? (
-            <TownBuilding piece={piece} portal={portal} town={town} />
+            <TownBuilding piece={piece} />
           ) : (
             <StaticModel
               url={hex(piece.model)}
@@ -51,7 +48,7 @@ export function Ground({ portal, town }: { portal: LabelPortal; town: Town }) {
           )}
         </Grow>
       ))}
-      <Lots portal={portal} animate={grows} />
+      <Lots animate={grows} />
     </group>
   );
 }
@@ -102,27 +99,10 @@ function Grow({
 }
 
 /** A selectable house or landmark. Scenery: it has no simulated state. */
-function TownBuilding({
-  piece,
-  portal,
-  town,
-}: {
-  piece: Piece;
-  portal: LabelPortal;
-  town: Town;
-}) {
+function TownBuilding({ piece }: { piece: Piece }) {
   const place = piece.place!;
   const selected = usePresentation((s) => s.selectedId === place.id);
   const select = usePresentation((s) => s.select);
-  const residents = useWorld((s) =>
-    place.kind === "home"
-      ? residentsOf(place, s.update!.state, town).join(" & ")
-      : "",
-  );
-  const title =
-    place.kind === "home" && residents ? `${residents}'s home` : place.name;
-  const detail =
-    place.kind === "home" ? (residents ? "Home" : "Empty cottage") : "Landmark";
   return (
     <group
       onClick={(e) => {
@@ -131,39 +111,8 @@ function TownBuilding({
       }}
     >
       <StaticModel url={hex(piece.model)} rotation={[0, piece.rotation, 0]} />
-      {selected && (
-        <>
-          <Selection radius={1.25} />
-          <Label portal={portal} title={title} detail={detail} height={2.4} />
-        </>
-      )}
+      {selected && <Selection radius={1.25} />}
     </group>
-  );
-}
-
-function Label({
-  portal,
-  title,
-  detail,
-  height,
-}: {
-  portal: LabelPortal;
-  title: string;
-  detail: string;
-  height: number;
-}) {
-  return (
-    <Html
-      portal={portal}
-      zIndexRange={[10, 0]}
-      center
-      position={[0, height, 0]}
-    >
-      <span className="scene-label selected">
-        {title}
-        <span>{detail}</span>
-      </span>
-    </Html>
   );
 }
 
@@ -175,29 +124,8 @@ function lotUse(plot: Plot): LotUse {
   return plot.owner_id ? "for-lease" : "town-land";
 }
 
-function lotLabel(plot: Plot, use: LotUse, state: WorldState) {
-  const name = (id?: string | null) => (id && state.citizens[id]?.name) || "—";
-  if (use === "home")
-    return {
-      title: `${name(plot.tenant_id)}'s home`,
-      detail: `Leased lot · ${coins(plot.rent)} rent / week`,
-    };
-  if (use === "for-lease")
-    return {
-      title: "Lot for lease",
-      detail: `Owned by ${name(plot.owner_id)} · ${coins(plot.rent)} / week`,
-    };
-  return { title: "Town land", detail: "Open for anyone to build on" };
-}
-
 /** Lots without a business: a tenant's home, a for-lease lot, or open land. */
-function Lots({
-  portal,
-  animate,
-}: {
-  portal: LabelPortal;
-  animate: () => boolean;
-}) {
+function Lots({ animate }: { animate: () => boolean }) {
   const state = useWorld((s) => s.update!.state);
   const selectedId = usePresentation((s) => s.selectedId);
   const select = usePresentation((s) => s.select);
@@ -207,7 +135,6 @@ function Lots({
     .map((plot) => {
       const use = lotUse(plot);
       const id = `lot:${plot.id}`;
-      const label = lotLabel(plot, use, state);
       return (
         <Grow
           // A new tenant (or a new owner) rebuilds what stands on the lot.
@@ -241,15 +168,7 @@ function Lots({
               />
             )}
             {selectedId === id && (
-              <>
-                <Selection radius={use === "home" ? 1.25 : 1.05} />
-                <Label
-                  portal={portal}
-                  title={label.title}
-                  detail={label.detail}
-                  height={use === "home" ? 2.4 : 1}
-                />
-              </>
+              <Selection radius={use === "home" ? 1.25 : 1.05} />
             )}
           </group>
         </Grow>

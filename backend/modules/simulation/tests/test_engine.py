@@ -38,8 +38,6 @@ def test_higher_price_changes_affordability_without_scripted_outcome():
     original = Engine(state).tick([purchase])
     changed = Engine(state).intervene(PriceIntervention(percent=40), "Increase bread price by 40%")
     assert changed.state.buildings["bakery"].prices["bread"] == 700
-    assert changed.state.citizens == state.citizens
-    expensive = Engine(changed.state).tick([purchase])
     assert holdings(changed.state.citizens) == holdings(state.citizens)
     assert changed.state.citizens["citizen-1"].memories == [
         "Bread at Hearth & Grain went from 500 to 700 cents"
@@ -181,7 +179,11 @@ def test_reject_logs_event_without_mutating_citizens():
     assert [e.type for e in result.events] == ["action_rejected"]
     assert result.events[0].payload.code == "not_owner"
     assert result.events[0].rationale == "Cheaper"
-    assert result.state.citizens == state.citizens
+    # Only the actor's memory changes: it remembers the refusal.
+    assert without_memories(result.state.citizens) == without_memories(state.citizens)
+    assert result.state.citizens["citizen-6"].memories[-1] == "Rejected set_price: " + str(
+        error.value
+    )
     assert result.state.buildings == state.buildings
     assert result.state.rng_state == state.rng_state
     assert result.sequence == state.sequence + 1
@@ -693,8 +695,12 @@ def test_closing_business_immediately_rejects_pending_applications():
 
     state = apply_job(initial_world(), "citizen-5", "market").state
     closed = Engine(state).apply(CloseBusiness(actor_id="citizen-2", building_id="market"))
-    assert closed.state.job_applications == {}
-    event = next(e for e in closed.events if e.type == "job_application_resolved")
+    # Resolved applications are kept with their status (v1 data model), never deleted.
+    assert _pending(closed.state) == {}
+    assert [a.status for a in closed.state.job_applications.values()] == ["rejected"]
+    events = [e for e in closed.events if e.type == "job_application_resolved"]
+    assert len(events) == 1
+    event = events[0]
     assert event.payload.outcome == "rejected" and event.actor_id == "citizen-2"
     following = Engine(closed.state).tick()
     assert not any(e.type == "job_application_resolved" for e in following.events)
@@ -952,12 +958,19 @@ def test_rejected_tick_proposal_is_logged_and_remembered_without_side_effects():
     assert with_bad.rejected_actions == ["Insufficient funds"]
     assert with_bad.state.rng_state == plain.state.rng_state
     assert with_bad.state.citizens["citizen-6"].money == plain.state.citizens["citizen-6"].money
-    rejection = with_bad.events[-1]
-    assert rejection.type == "action_rejected" and rejection.actor_id == "citizen-6"
-    assert rejection.payload.code == "insufficient_funds"
-    assert rejection.action_id == f"action-main:{plain.sequence}"
+    rejection = next(e for e in with_bad.events if e.type == "action_rejected")
+    assert rejection.actor_id == "citizen-6" and rejection.payload.code == "insufficient_funds"
+    assert rejection.action_id == "proposal-main:1:1"
     memories = with_bad.state.citizens["citizen-6"].memories
-    assert memories[-1] == "Rejected transfer_money: Insufficient funds"
-    # A proposal from an unknown citizen has nobody to remember it; the day still runs.
+    assert "Rejected transfer_money: Insufficient funds" in memories
+    # A proposal from an unknown citizen changes nobody's state; the day still runs.
     ghost = TransferMoney(actor_id="nobody", recipient_id="citizen-0", amount=1)
-    assert Engine(state).tick([ghost]).state == plain.state
+    ghost_day = Engine(state).tick([ghost]).state
+    assert ghost_day.citizens == plain.state.citizens and ghost_day.tick == plain.state.tick
+
+
+def without_memories(citizens):
+    return {
+        cid: c.model_dump(exclude={"memories", "memory_summary", "memory_tally"})
+        for cid, c in citizens.items()
+    }

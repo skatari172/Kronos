@@ -1,9 +1,13 @@
 import asyncio
+import hashlib
+import logging
 from contextlib import suppress
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, WebSocket
 from kronos_agents.fallback import UtilityPolicy
+from kronos_agents.middleware import CachingProvider, LoggingProvider
 from kronos_agents.provider import AgentService, LLMProvider, MockProvider, ProviderError
 from kronos_history.store import HistoryStore
 from kronos_sim.engine import Engine, InvalidAction
@@ -27,6 +31,26 @@ from kronos_sim.seed import initial_world
 
 from kronos.config import Settings
 
+logger = logging.getLogger(__name__)
+
+
+def prompt_version() -> str:
+    """Short hash of the prompt templates, so cached replies expire when prompts change."""
+    from kronos_agents import prompts
+
+    return hashlib.sha256(Path(prompts.__file__).read_bytes()).hexdigest()[:12]
+
+
+def _wrap(provider: LLMProvider, config: Settings, tag: str) -> LLMProvider:
+    """Debug log innermost (real calls only), response cache outermost."""
+    if config.llm_log:
+        provider = LoggingProvider(provider, config.llm_log)
+    if config.llm_cache:
+        provider = CachingProvider(
+            provider, config.llm_cache, tag=tag, replay_only=config.llm_cache_only
+        )
+    return provider
+
 
 def build_provider(config: Settings) -> tuple[LLMProvider, float]:
     """Pick the provider from KRONOS_LLM_PROVIDER. `mock` (default) needs no key or network."""
@@ -45,7 +69,17 @@ def build_provider(config: Settings) -> tuple[LLMProvider, float]:
         )
         model = DEFAULT_MODEL if config.llm_model == "deterministic-v1" else config.llm_model
         try:
-            return AnthropicProvider(model, timeout=timeout), timeout
+            if timeout < DEFAULT_TIMEOUT / 2:
+                logger.warning(
+                    "KRONOS_LLM_TIMEOUT=%s s is short for Claude; unset it to use %s s",
+                    timeout,
+                    DEFAULT_TIMEOUT,
+                )
+            key = config.anthropic_api_key
+            provider = AnthropicProvider(
+                model, timeout=timeout, api_key=key.get_secret_value() if key else None
+            )
+            return _wrap(provider, config, tag=f"{model}:{prompt_version()}"), timeout
         except ProviderError as exc:
             raise ValueError(str(exc)) from exc
     raise ValueError(
@@ -64,9 +98,18 @@ class Service:
             )
             self.store.activate("main")
         self.state = self.store.world(self.store.active_id())
-        self.agents = AgentService(provider, timeout, config.llm_retries)
-        self.agents.round_ticks = config.agent_round_ticks
-        self.agents.fallback = UtilityPolicy()  # A failed provider call falls back, never stalls.
+        strategic = [c.strip() for c in config.strategic_agents.split(",") if c.strip()]
+        self.agents = AgentService(
+            provider,
+            timeout,
+            config.llm_retries,
+            round_ticks=config.agent_round_ticks,
+            fallback=UtilityPolicy(),  # A failed provider call falls back, never stalls.
+            calls_per_tick=config.llm_calls_per_tick,
+            concurrency=config.llm_concurrency,
+            strategic_ids=strategic or None,
+            strategic_limit=config.strategic_limit,
+        )
         self.lock = asyncio.Lock()
         self.branch_epoch = 0
         # V1 attempts live only in this API session; committed Events are durable history.
@@ -198,7 +241,9 @@ class Service:
         raise KeyError("Unknown action in this API session; read committed Events for history")
 
     async def intervene(self, body):
-        command = await self.agents.parse(body.text)
+        # Names let the parser resolve "give 5 coins to Ada" to a citizen ID.
+        citizens = {cid: c.name for cid, c in self.state.citizens.items()}
+        command = await self.agents.parse(body.text, citizens)
         async with self.lock:
             self.check(body)
             result = self.enqueue(command, "player", body.text)
@@ -220,24 +265,14 @@ class Service:
                 ),
             )
             epoch = self.branch_epoch
-        action = await self.agents.decide(observation)
+        action, source = await self.agents.proposal(observation)
         async with self.lock:
             if self.branch_epoch != epoch or self.state.branch_id != observation.branch_id:
                 raise HTTPException(409, "Active branch changed during deliberation")
             if action.actor_id not in self.state.citizens:
                 raise KeyError("Unknown citizen")
             result = self.enqueue(action, "agent")
-        return DecisionResult(action=action, result=result)
-            observation = observe(self.state, citizen_id)
-        action, source = await self.agents.proposal(observation)
-        body = ActionRequest(
-            branch_id=observation.branch_id,
-            expected_sequence=observation.sequence,
-            action=action,
-        )
-        return DecisionResult(
-            action=action, result=await self.submit_agent_action(body, citizen_id), source=source
-        )
+        return DecisionResult(action=action, result=result, source=source)
 
     async def ask(self, citizen_id: str, question: str) -> AskResult:
         """Read-only grounded Q&A over the citizen's own events on the active branch."""
@@ -300,37 +335,6 @@ class Service:
             self.decision_task.cancel()
             with suppress(asyncio.CancelledError):
                 await self.decision_task
-        """Advance one day. Agent proposals are gathered outside the lock (see `_advance`).
-
-        With a `request` (the manual tick route) the caller's version is checked before and
-        after the provider calls, so a world that moved on meanwhile is a 409, like `/decide`.
-        """
-        async with self.lock:
-            if request is not None:
-                self.check(request)
-            world = self.state.model_copy(deep=True)
-        return await self._advance(world, request)
-
-    async def _advance(self, world: WorldState, request: MutationRequest | None = None):
-        """Gather proposals for `world` (a private copy) without the lock, then apply them.
-
-        A slow provider never blocks other API calls. If the world changed meanwhile (any
-        commit, seek or branch switch moves `branch_id`/`sequence`), the stale proposals are
-        dropped: the clock still advances the day with no proposals (when it is still
-        playing), and the citizens whose slot it was wait for their next round.
-        """
-        try:
-            proposals = await self.agents.propose(world)
-        except ProviderError:
-            proposals = []  # Failed strategy never prevents routine food/economy mechanics.
-        async with self.lock:
-            if request is not None:
-                self.check(request)
-            elif not self.playing:
-                return None  # Paused (or the branch switched) while proposals were gathered.
-            if (world.branch_id, world.sequence) != (self.state.branch_id, self.state.sequence):
-                proposals = []
-            return await self.commit(Engine(self.state).tick(proposals))
 
     async def fork(self, snapshot_id: str, name: str):
         original = self.store.restore(snapshot_id)
@@ -355,12 +359,3 @@ class Service:
                 except Exception as exc:
                     self.playing = False
                     self.error = f"Simulation paused: {type(exc).__name__}"
-            async with self.lock:
-                if not self.playing:
-                    continue
-                world = self.state.model_copy(deep=True)
-            try:
-                await self._advance(world)
-            except Exception as exc:
-                self.playing = False
-                self.error = f"Simulation paused: {type(exc).__name__}"

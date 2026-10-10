@@ -2,12 +2,17 @@ import type { WorldUpdate } from "./types";
 import { useWorld } from "../stores/world";
 
 export const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
-export async function request<T>(path: string, body?: unknown): Promise<T> {
+/** `timeoutMs` defaults to 8 s; calls that wait on an AI model pass more. */
+export async function request<T>(
+  path: string,
+  body?: unknown,
+  timeoutMs = 8000,
+): Promise<T> {
   const response = await fetch(`${API}${path}`, {
     method: body === undefined ? "GET" : "POST",
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) {
     const error = await response
