@@ -223,6 +223,14 @@ def test_sdk_errors_are_mapped_without_leaking_the_key():
             ),
             "rate limit",
         ),
+        (
+            anthropic.BadRequestError(
+                "low credit",
+                response=httpx2.Response(400, request=request),
+                body={"error": {"message": "Your credit balance is too low"}},
+            ),
+            "credit balance is too low",
+        ),
     ]
     for error, message in errors:
         provider = AnthropicProvider(client=FakeClient(error))

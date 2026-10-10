@@ -117,6 +117,13 @@ def output_schema(task: str, observation: dict) -> tuple[dict, bool]:
     return wrapped, True
 
 
+def _api_detail(exc: Exception) -> str:
+    body = getattr(exc, "body", None)
+    error = body.get("error") if isinstance(body, dict) else None
+    message = error.get("message") if isinstance(error, dict) else None
+    return message[:200] if isinstance(message, str) else ""
+
+
 def _error_message(exc: Exception) -> str:
     """Map SDK failures to short messages. Never includes request headers or the API key."""
     try:
@@ -133,7 +140,9 @@ def _error_message(exc: Exception) -> str:
         if isinstance(exc, anthropic.RateLimitError):
             return "Claude rate limit reached"
         if isinstance(exc, anthropic.BadRequestError):
-            return "Claude rejected the request (bad request)"
+            # The API's own explanation (e.g. "credit balance is too low") never holds the key.
+            detail = _api_detail(exc)
+            return "Claude rejected the request" + (f": {detail}" if detail else " (bad request)")
         if isinstance(exc, anthropic.APIStatusError):
             return f"Claude API error (HTTP {exc.status_code})"
         if isinstance(exc, anthropic.APIConnectionError):

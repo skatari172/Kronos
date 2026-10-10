@@ -1,8 +1,12 @@
 import asyncio
+import hashlib
+import logging
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, WebSocket
 from kronos_agents.fallback import UtilityPolicy
+from kronos_agents.middleware import CachingProvider, LoggingProvider
 from kronos_agents.provider import AgentService, LLMProvider, MockProvider, ProviderError
 from kronos_history.store import HistoryStore
 from kronos_sim.engine import Engine, InvalidAction
@@ -25,6 +29,26 @@ from kronos_sim.seed import initial_world
 
 from kronos.config import Settings
 
+logger = logging.getLogger(__name__)
+
+
+def prompt_version() -> str:
+    """Short hash of the prompt templates, so cached replies expire when prompts change."""
+    from kronos_agents import prompts
+
+    return hashlib.sha256(Path(prompts.__file__).read_bytes()).hexdigest()[:12]
+
+
+def _wrap(provider: LLMProvider, config: Settings, tag: str) -> LLMProvider:
+    """Debug log innermost (real calls only), response cache outermost."""
+    if config.llm_log:
+        provider = LoggingProvider(provider, config.llm_log)
+    if config.llm_cache:
+        provider = CachingProvider(
+            provider, config.llm_cache, tag=tag, replay_only=config.llm_cache_only
+        )
+    return provider
+
 
 def build_provider(config: Settings) -> tuple[LLMProvider, float]:
     """Pick the provider from KRONOS_LLM_PROVIDER. `mock` (default) needs no key or network."""
@@ -43,7 +67,17 @@ def build_provider(config: Settings) -> tuple[LLMProvider, float]:
         )
         model = DEFAULT_MODEL if config.llm_model == "deterministic-v1" else config.llm_model
         try:
-            return AnthropicProvider(model, timeout=timeout), timeout
+            if timeout < DEFAULT_TIMEOUT / 2:
+                logger.warning(
+                    "KRONOS_LLM_TIMEOUT=%s s is short for Claude; unset it to use %s s",
+                    timeout,
+                    DEFAULT_TIMEOUT,
+                )
+            key = config.anthropic_api_key
+            provider = AnthropicProvider(
+                model, timeout=timeout, api_key=key.get_secret_value() if key else None
+            )
+            return _wrap(provider, config, tag=f"{model}:{prompt_version()}"), timeout
         except ProviderError as exc:
             raise ValueError(str(exc)) from exc
     raise ValueError(
@@ -62,9 +96,18 @@ class Service:
             )
             self.store.activate("main")
         self.state = self.store.world(self.store.active_id())
-        self.agents = AgentService(provider, timeout, config.llm_retries)
-        self.agents.round_ticks = config.agent_round_ticks
-        self.agents.fallback = UtilityPolicy()  # A failed provider call falls back, never stalls.
+        strategic = [c.strip() for c in config.strategic_agents.split(",") if c.strip()]
+        self.agents = AgentService(
+            provider,
+            timeout,
+            config.llm_retries,
+            round_ticks=config.agent_round_ticks,
+            fallback=UtilityPolicy(),  # A failed provider call falls back, never stalls.
+            calls_per_tick=config.llm_calls_per_tick,
+            concurrency=config.llm_concurrency,
+            strategic_ids=strategic or None,
+            strategic_limit=config.strategic_limit,
+        )
         self.lock = asyncio.Lock()
         self.clients: set[WebSocket] = set()
         self.playing = False
