@@ -1244,6 +1244,13 @@ export interface paths {
         };
         /**
          * Read new village events
+         * @description Read committed events, oldest first, without a realtime connection.
+         *
+         *     The cursor is exclusive and scoped to the active branch. Pass the last returned
+         *     sequence as `after`; an empty list means the reader has caught up.
+         */
+        /**
+         * Read new village events
          * @description Events with sequence greater than `after`, oldest first, matching every filter.
          *     Page by passing the last returned sequence as `after`.
          */

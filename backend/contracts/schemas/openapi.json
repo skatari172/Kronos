@@ -3433,6 +3433,7 @@
         ],
         "summary": "Read new village events",
         "description": "Events with sequence greater than `after`, oldest first, matching every filter.\nPage by passing the last returned sequence as `after`.",
+        "description": "Read committed events, oldest first, without a realtime connection.\n\nThe cursor is exclusive and scoped to the active branch. Pass the last returned\nsequence as `after`; an empty list means the reader has caught up.",
         "operationId": "events_after_api_events_get",
         "parameters": [
           {

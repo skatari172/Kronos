@@ -2,7 +2,7 @@
 
 **This is the single source of truth for codebase context and repository working rules. Every coding agent must read it before changing this repository and update it before declaring its work complete.** The root `AGENTS.md` directs agents here. This requirement applies to implementation, fixes, refactors, tests, configuration, dependencies, assets, generated contracts, and documentation changes.
 
-Last reviewed: **2026-10-10**, against code commit **`446bcff`** (`Merge branch 'main' into viggy`). This describes the inspected checkout, including its integration problems; it does not claim that all present code works.
+Last reviewed: **2026-10-10**, against code commit **`8950da7`** plus the event-persistence changes described below. Earlier integration failures were repaired in intervening commits; current verification and remaining limitations are recorded here.
 
 ## 1. Mandatory workflow for every coding agent
 
@@ -35,19 +35,11 @@ Keep the root organized around `frontend/`, `backend/`, `docs/`, `scripts/` and 
 
 ## 3. Current checkout health — read before running
 
-**The reviewed checkout has unresolved integration errors. Backend startup and frontend compilation are currently blocked.** Earlier passing test counts in older documents describe earlier code and are not a current verification result.
+The earlier Python syntax errors, duplicated tick/provider/growth implementations, mixed intervention contracts and malformed frontend artifacts recorded at `446bcff` are no longer the current checkout. Python sources parse, and the queued engine/API loop passes the tests below.
 
-| Confirmed problem                  | Evidence / consequence                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Python engine syntax               | Static parsing of `backend/modules/simulation/src/kronos_sim/engine.py` fails at line 1397: an `if` at 1396 has no body. Additional malformed merged code is visible in `_spawn` and the earlier `intervene`; the parser stops at the first error.                                                                                                                                                                                         |
-| Python service syntax              | Static parsing of `backend/api/src/kronos/service.py` fails at line 231 with unexpected indentation after an earlier return.                                                                                                                                                                                                                                                                                                               |
-| Frontend entry component syntax    | TypeScript reports unmatched JSX and unexpected tokens in `frontend/src/app/App.tsx`; it also contains duplicated imports and older control logic mixed with `useSimulation`.                                                                                                                                                                                                                                                              |
-| Generated contracts invalid        | TypeScript reports a missing closing brace in `backend/contracts/generated/api.ts` and malformed JSON in `backend/contracts/generated/initial-world.json`. These must eventually be regenerated from repaired Python/API sources, not manually patched.                                                                                                                                                                                    |
-| Competing provider/tick flows      | `AgentService` defines `propose` twice. The later signature takes only `world`, while `Service._deliberate` passes `(snapshot, events)`. `Service.loop` contains both a queued `tick()` path and an `_advance()` path; `stop_decisions` includes leftover tick logic referencing `request`. Reconcile these before assuming one day per clock cycle.                                                                                       |
-| Competing growth/intervention code | Engine contains both `_grow` and `_growth_rules`, duplicate `_open_land`/`_welcome_newcomer`/`intervene` methods, and two `PlotOpened` classes in `models.py`. Later class methods override earlier definitions once the file can parse. The queue handles only `PriceIntervention`, despite a wider `Intervention` union. `InterventionResult` mixes queued `result` and immediate `update` fields, while Service supplies only `result`. |
-| Duplicate event endpoint           | `routes/history.py` registers `GET /api/events` twice: a list response and an `EventPage` response. Runtime route matching and generated OpenAPI can disagree until this is reconciled.                                                                                                                                                                                                                                                    |
+The event-persistence task removed a remaining duplicate `/api/events` handler that referenced the now-absent `EventPage` model and prevented importing the API. There is now one list-returning handler matching the existing consumers and regenerated OpenAPI. Committed events remain queryable even when realtime transport fails or is disabled.
 
-These are recorded existing issues, not fixes made by the documentation task. Line numbers are observations, not permanent identifiers. A repair must reconcile the intended single flow, preserve ownership and compatibility, regenerate contracts, run checks, and update this section. Do not delete a failing test merely to hide a competing implementation.
+Current verification: **361 Python tests passed, 4 skipped; 23 frontend tests passed.** `make contracts` succeeds. `make check` stops at existing Ruff formatting differences in `backend/modules/agents/src/kronos_agents/provider.py` and `backend/modules/simulation/tests/test_growth.py`; those unrelated files were not edited. Frontend ESLint passes; the production build stops at the existing `frontend/src/app/useSimulation.ts:149` reference to `InterventionResult.update` (the current response has `result`). This feature changes only event-route documentation in generated types and does not introduce that mismatch. Targeted documentation checks are recorded in the latest maintenance record. Do not cite the older syntax failures or older test counts as current results.
 
 ## 4. Toolchain and repository map
 
@@ -99,16 +91,17 @@ Player / provider
   → daily rules + deterministic growth + typed Events
   → existing SQLite world/Event/checkpoint transaction
   → install live state and resolve runtime attempts
-  → full WorldUpdate over WebSocket
+  → persisted Events queried through GET /api/events
+  → optional full WorldUpdate over WebSocket
   → frontend snapshot + Event presentation
   → copied citizen observation → later proposal
 ```
 
-This is the queued path currently present in `Service.tick`; the competing code listed in section 3 prevents claiming that it is integrated successfully.
+This is the queued path in `Service.tick`. Engine event creation and database persistence do not require a browser or WebSocket connection. The HTTP event endpoint reads the database directly.
 
 - **Engine owns mutations.** It copies input state; `apply` validates and executes a typed action on a candidate. `reject` emits a refusal. `tick` returns candidate state, Events and action outcomes. Engine imports no database, HTTP or rendering subsystem.
 - **Service owns orchestration.** Its `asyncio.Lock` serializes admission, active world changes and commits. Provider I/O happens outside that lock. One shared local service, branch, playback speed and client set serve all tabs. Use one API process/worker.
-- **Commit before publication.** `Service.commit` passes a plain `WorldUpdate` to the existing `HistoryStore.commit`, installs the candidate and runtime outcomes after save succeeds, then broadcasts. A failed save must leave live gameplay state/attempts unchanged and send no success frame.
+- **Commit before publication.** `Service.commit` passes a plain `WorldUpdate` to the existing `HistoryStore.commit`, installs the candidate and runtime outcomes after save succeeds, then attempts a best-effort broadcast. Unexpected broadcast errors are logged without failing the saved operation; client send errors are already isolated. A failed database save still propagates, leaves live gameplay state/attempts unchanged, and sends no success frame.
 - **Actions are intentions.** HTTP submission does not authorize a purchase to bypass the tick. Admission validates branch/version and route identity; execution rechecks funds, inventory, ownership, capacity and timing against the latest candidate state.
 - **Frontend state is a snapshot.** Refs, local errands, models, camera, selection, tier and animations are presentation. They must never determine economic outcomes or authoritative plot coordinates.
 - **Providers propose only.** Schema-valid output can still be rejected by engine rules. A model has no direct state or database access. The local API's caller groups and `actor_id` are not authentication.
@@ -123,7 +116,7 @@ This is the queued path currently present in `Service.tick`; the competing code 
 | `Citizen`         | Stable ID/name, occupation/employer, backend `position`, money, hunger, nested inventory; goal weights, relationships, reputation, research; current model also has `destitute_days`, recent memories, `memory_summary`, `memory_tally` |
 | `Building`        | Farm/bakery/market; owner, plot, position, cash, level 1–3, inventory, price mapping, wage, job capacity, missed-payroll counter                                                                                                        |
 | `Plot`            | Position, nullable owner/tenant, rent, arrears, missed/prepaid periods; owner null means town land                                                                                                                                      |
-| `JobApplication`  | Citizen/business, submission tick/sequence, current explicit `pending                                                                                                                                                                   | hired | rejected`status; current`_resolve` retains resolved records |
+| `JobApplication`  | Citizen/business, submission tick/sequence, explicit pending, hired or rejected status; resolved records remain available                                                                                                               |
 | `SimulationEvent` | Typed discriminated outcome: branch-local ID, tick/sequence, actor, rationale, action link, causal references and typed JSON payload                                                                                                    |
 | `ActionResult`    | Session attempt ID, original action, source, admission order, scheduled day, queued/applied/rejected status, Event IDs and rejection details                                                                                            |
 
@@ -131,7 +124,7 @@ Money is **integer cents** throughout (100 cents = one coin). Wheat and bread in
 
 One active building per plot. Construction requires town land, owned land or rented land. Owner-only actions include setting price/wage, hiring/rejecting applicants, upgrading and closing. Hiring respects `job_slots`. Closing releases employees and resolves pending applications. Backend owns plot positions. `Engine.result` revalidates nested state and includes duplicate-plot and job-capacity checks.
 
-Important current source differences from older guides: `destitute_days` **now exists**, as do retained JobApplication statuses and memory summary fields. Do not repeat the older claim that those fields are absent. Their runtime integration remains subject to section 3. `playing` and `speed` remain Service settings, not fields on the persisted `WorldState`; Event does not currently declare `created_at`.
+Important current source differences from older guides: `destitute_days` **now exists**, as do retained JobApplication statuses and memory summary fields. Do not repeat the older claim that those fields are absent. The current daily/growth path uses those fields; see the verified limitations in section 3. `playing` and `speed` remain Service settings, not fields on the persisted `WorldState`; Event does not currently declare `created_at`.
 
 Citizen defaults include practical personality, reputation 50 and four equal goal weights (`wealth`, `influence`, `safety`, `reputation`). Weights total 100; requested adjustments are bounded to ±10 percentage points per goal. `queries.profile` derives `business_owner` from building ownership and employment from a valid employer; lot ownership is separate. Wealth tiers use personal money: rich ≥10,000 cents, middle ≥3,000, otherwise poor. Influence uses integer basis points: 50% of wealth share (personal money plus owned business cash), 30% normalized reputation and 20% average incoming trust. Unknown relationships count as neutral. Open vote tallies use current influence; closed votes retain their recorded weights. `queries.roles` publishes permissions, but engine action-specific ownership checks remain the authority.
 
@@ -143,13 +136,13 @@ The queued `Engine.tick` increments candidate tick, freezes eligible attempts, o
 
 The daily path present in `_automatic_rules` resolves due job applications before production/wages, then performs farm/bakery input purchases and production, wages, hunger, owned-bread consumption, seeded movement, bankruptcy after three missed payroll days, regrowth, existing loan/trade/research/vote deadlines and weekly rent. Newly submitted applications wait for the next day's owner/fallback round. Current automatic code does **not** buy bread for citizens; provider prompts/older descriptions that say otherwise are stale.
 
-The small `_growth_rules` path presently called by `tick` opens two town plots when all existing plots have a building or tenant; adds one newcomer every third day when average hunger is below 50 and a job slot is open; lets a saver holding more than 8,000 cents fund a least-common-kind business with 5,000 cents on vacant town land; upgrades full businesses with cash above 10,000 cents for 2,500 business cents and two extra slots; and leases affordable owned homes for employed citizens with more than 2,000 cents. It reuses engine commands/helpers. Manual upgrades preserve the owner's personal 2,500-cent cost and gain two slots, within model capacity.
+The single `_growth_rules` path called by `tick` opens two town plots when all existing plots have a building or tenant; adds one newcomer every third day when average hunger is below 50 and a job slot is open; lets a saver holding more than 8,000 cents fund a least-common-kind business with 5,000 cents on vacant town land; upgrades full businesses with cash above 10,000 cents for 2,500 business cents and two extra slots; and leases affordable owned homes for employed citizens with more than 2,000 cents. It reuses engine commands/helpers. Manual upgrades preserve the owner's personal 2,500-cent cost and gain two slots, within model capacity.
 
-A separate `_grow` implementation contains outer-ring plots, named newcomers, three-day `destitute_days` departures for citizens who own no building/plot, non-owner-only automatic founding, busy upgrades, renting, and a **20,000-cent business cash cap** that distributes surplus to staff with remainder to the owner. This code exists but is not the `_growth_rules` path called by the inspected tick. Some method names overlap and later definitions override them. **Do not claim departure, cash redistribution or a particular expansion layout is integrated until the competing paths are reconciled and tested.** Those are current code conflicts, not permission to invent another monetary policy or growth system.
+After housing, that same growth path checks three-day destitution for citizens who own no building/plot, emits departure/reference-cleanup outcomes, then applies the **20,000-cent business cash cap**, distributing surplus to staff with the remainder to the owner. Expansion extends the seed's three-column plot grid; newcomer IDs/names and all authoritative coordinates come from the engine. These helpers now share one path; do not recreate a second growth implementation.
 
 The action vocabulary includes 36 existing types: `buy`, `sell`, `transfer_money`, `set_price`, `produce`, `consume`, `communicate`, `construct_building`, `upgrade_building`, `move_to`, `adjust_goals`, `found_business`, `close_business`, `set_wage`, `hire`, `fire`, `gather_resource`, `apply_job`, `quit_job`, `reject_application`, `lend`, `respond_loan`, `repay`, `trade`, `respond_trade`, `research`, `license_invention`, `respond_license`, `adopt_invention`, `propose_vote`, `vote`, `lease_lot`, `set_rent`, `pay_rent`, `evict`, `interact`. Reuse those names instead of adding duplicate build/close/talk aliases.
 
-Existing advanced rules include directed trust/grudges, interaction cooldowns, flat-interest loans and defaults, two-day trade offers, money/time research and production multipliers, license offers, weighted town votes, price/minimum-wage/tax policies and seven-day rent. Read the matching engine branches and tests before changing them. Memory code derives bounded recent first-person lines and routine-event summaries without LLM calls; current engine rejection handling and older promises of no citizen mutation must be reconciled with that memory behavior when restoring the integrated loop.
+Existing advanced rules include directed trust/grudges, interaction cooldowns, flat-interest loans and defaults, two-day trade offers, money/time research and production multipliers, license offers, weighted town votes, price/minimum-wage/tax policies and seven-day rent. Read the matching engine branches and tests before changing them. Memory code derives bounded recent first-person lines and routine-event summaries without LLM calls; rejection preserves economic effects, inventory and RNG, while adding an explanatory memory and a sequenced `action_rejected` Event. A whole tick also runs daily rules, so distinguish the rejected action from unrelated wages/hunger changes.
 
 ## 8. Seed world
 
@@ -178,13 +171,15 @@ Six plots use x −4/0/4 and z −3/+3. Business plots belong to their owners; p
 | `prompts.py`                                           | Task prompts and schema-valid seed examples; static prompt caching                                                      |
 | `fallback.py`                                          | Deterministic `UtilityPolicy`, weighted by goals with hunger/food priority and stable tie-breaking                      |
 
-`queries.observe` is the shared builder: own copied citizen state; derived role/wealth tier; bounded public bakery prices/stock and neighbor names; supported action names; relevant Events; own loans, incoming offers and strongest ties; public job openings and owned business views. Do not expose other citizens' private balances/goals as a shortcut.
+`middleware.py` supplies optional filesystem response caching and local JSONL provider logging. `Service._wrap` applies these only to the real provider; cache tags include model and prompt hash. Replay-only misses use the utility fallback. This is provider tooling, not an event database. Logs contain observations/replies and must remain local.
+
+`queries.observe` is the shared builder: own copied citizen state with full relationship/tally lists stripped; derived role/wealth tier; up to 12 public bakery prices/stocks; eight neighbor names with strongest ties first; role/state-filtered action names; eight relevant Events; up to eight own loans/incoming offers, strongest ties, three highest-paid openings when able to apply, and three owned businesses. Do not expose other citizens' private balances/goals as a shortcut.
 
 Provider tasks are `decision`, `ask`, `intervention`. AgentService validates JSON against the task schema, checks acting-citizen identity and grounds Ask citations in the supplied Events. Timeout/retries are bounded. `proposal()` labels source `llm|mock|fallback` and prefixes the rationale; `decide()` returns the action. Service configures `UtilityPolicy` as fallback. Do not confuse proposal-source labels with ActionResult caller sources `agent|player|backend`.
 
-The later provider scheduler assigns each citizen a stable CRC32-derived slot once per `agent_round_ticks` days (default three), with concurrent calls and independent failures. The earlier eight-citizen needs-based `propose(world, events)` definition is still in the file but shadowed. Service still calls that older signature in its post-tick task: see the integration blocker rather than assuming either cadence works end to end.
+One post-tick `propose(world, events)` batch considers urgent citizens (no bread or an incoming trade offer) plus stable CRC32-derived round slots, at most eight citizens. The default round is three days. Strategy results queue for the next tick; a branch switch discards a stale batch. Configured strategic citizens may call the provider within the per-tick budget/concurrency limit; others use the utility fallback. By default owners rank first, then citizen ID, up to 12 strategic citizens. Independent failures skip only the affected citizen.
 
-Mock decisions consume owned food, buy affordable stocked bread, or communicate. The expanded mock intervention parser covers price percentages, wages, giving/taking money, wheat stock/regrowth, hunger/feast/famine and policies. The wider union and parser exist, but queued ActionResult/tick integration still only recognizes price interventions; targeted citizen parsing also needs the citizen-name map that the inspected Service does not currently pass. Do not advertise all expanded interventions as working API features yet.
+Mock decisions consume owned food, buy affordable stocked bread, or communicate. The mock parser covers price percentages, wages, giving/taking money, wheat stock/regrowth, hunger/feast/famine and policies. Service now supplies citizen names to resolve targeted text; the same queue/engine path handles the existing intervention union. Provider output remains a proposal validated against current world rules.
 
 The optional Anthropic adapter is selected explicitly by `build_provider`. Its default model string and schema adaptation live in `anthropic_provider.py`; model-name presence in code does not verify current remote availability. Optional calls can cost money. Default/offline tests must not require network access or credentials. Never record API keys in source, fixtures, this file, or logs.
 
@@ -226,6 +221,7 @@ Stale context returns 409; malformed input/dry-run rule failure/provider failure
 
 `GET /api/world` and WebSocket frames use **`{branch_id, tick, sequence, state, events}`**. `state` is the complete serialized WorldState, not a delta. WebSocket sends an initial snapshot/recent Events, then new saved state plus the committed Event batch. Tick HTTP results additionally include `action_results` and `rejected_actions`. Events describe outcomes, carry sequence and optional action/causal links, and are the source for the feed. Never infer a completed trade from browser movement or snapshot differences.
 
+`GET /api/events?after=N&limit=100` has one handler returning a JSON array of persisted typed Events on the active branch. `after` is exclusive and nonnegative; `limit` defaults to 100 and is bounded to 1–500. Results are ascending by sequence. Advance the cursor to the last returned sequence; an empty array means caught up. There is no `EventPage` envelope or separate counter. Keep a separate cursor per branch. `/api/history/events?branch_id=...&through=...&limit=...` remains the explicit historical branch query.
 `GET /api/events?after=N&limit=100` returns a plain list of events, ascending, with sequence greater than `after` (the duplicate `EventPage` handler was removed). `/api/history/events` remains the explicit branch/through historical route.
 
 Play requires branch/version and speed 1/2/4; pause uses an empty body; manual tick uses branch/version. Backend playback starts paused/1 after restart. The newer frontend hook auto-starts play once on visiting a connected live village, then respects later pauses. Shared playback affects all tabs.
@@ -234,24 +230,36 @@ Play requires branch/version and speed 1/2/4; pause uses an empty body; manual t
 
 **The database is separately owned. The standing scope restriction is no database/schema/model/migration changes without explicit authorization superseding that restriction.** Inspect and use existing interfaces; do not silently alter tables, persisted fields, repositories or seed structure to make an engine task easier. Missing capabilities belong under “Database dependencies / handoff.” Do not introduce a second engine-owned database.
 
-`backend/modules/history/src/kronos_history/store.py` defines SQLAlchemy Core tables `branches`, `snapshots`, `events`, `settings`, and the legacy `actions` table. Branch worlds and typed Event data are serialized JSON; this is not one SQL row per Citizen/Building. Snapshots include integrity hashes and full world state. `settings` stores the active branch pointer. The runtime queue uses no legacy action writes in the queued Service path, although old enqueue/pending/lookup helpers remain database-owned.
+`backend/modules/history/src/kronos_history/store.py` defines SQLAlchemy Core tables `branches`, `snapshots`, `events`, `settings`, and the legacy `actions` table. Branch worlds and typed Event data are serialized JSON. The current database owner also synchronizes relational world, citizen, building, plot, resource, application, loan, trade, invention, license and vote projections in `_sync_relational`; those tables are not a new engine persistence interface. Branch history reads use existing branch/checkpoint JSON. Snapshots contain integrity-hash metadata and full world state; current `restore` validates the saved JSON but does not check that hash. `settings` stores the active branch pointer. The runtime queue uses no legacy action writes in the queued Service path, although old enqueue/pending/lookup helpers remain database-owned.
 
 `HistoryStore.commit(result, expected_sequence)` checks current branch sequence, contiguous Events and final state/Event version, writes the world/Events and an immutable checkpoint in one transaction. Other public helpers create/activate/read branches, restore/check snapshots and query Events. Service must call these rather than inventing another repository. Forks preserve stable entity IDs, tick and RNG, and reset branch-local sequence; saved snapshots reconstruct without calling providers.
 
 **Starting the existing backend can write to the tracked database even before a tick:** `HistoryStore.__init__` invokes `metadata.create_all`, and Service seeds/activates a world if empty. Auto-reload can repeat startup after source edits. The live frontend can auto-play and add world changes. Do not start or leave a reloading server against a protected developer database while promising not to change it. Use an explicitly selected disposable test database through the existing interface when runtime verification is authorized; tests already do this.
 
+### Durable events and HTTP reads
+
+`Engine.emit` creates existing typed outcomes and advances the saved world's sequence. `Engine.tick` returns accepted/rejected action outcomes plus daily/growth Events and `tick_completed`. `Service.commit` passes those Events in a plain `WorldUpdate` to **the existing** `HistoryStore.commit`; the store atomically inserts Events, updates the world and saves a checkpoint. No additional event writer, counter, queue or database is introduced.
+
+The existing `events` table has `id`, `branch_id`, `sequence`, `tick`, `type`, `actor_id`, JSON `payload`, serialized typed `data`, and `created_at`. The store stamps `created_at` at insertion; typed read helpers deserialize `data`, so current API Events do not expose that SQL timestamp. Tick/sequence provide equivalent simulation ordering. This feature leaves the schema and persisted models unchanged.
+
+`GET /api/events?after=120&limit=100` uses `HistoryStore.list_events_after`, which filters the active branch and `sequence > 120`, orders ascending and applies the limit. Restarting the API restores the same saved Events even though runtime action attempts disappear. No socket subscription is needed. Successful admission alone produces no Event; the next tick persists the actual outcome. Rejections produce `action_rejected` without the attempted economic effect, while existing memory and daily mechanics continue.
+
+Database failures abort normally; publication failures after a successful commit are logged and do not change its HTTP success, saved state or action outcomes. Existing optional realtime behavior is retained. The feature does not add a frontend feed or polling implementation.
+
+`backend/api/tests/test_event_persistence.py` verifies real engine/queue/SQLite/HTTP behavior in temporary databases for no clients, failed broadcast, disabled broadcast and a disconnected client, plus restart/cursor ordering and a single handler/schema contract. It uses the existing `route_only` fixture to isolate action economic effects; existing queue tests separately verify full daily mechanics and save-failure rollback.
+
 `backend/database/kronos.db` is tracked. `make reset` deletes the default database and sidecars (and old root-level equivalents), regardless of a custom database URL; it does not reset an arbitrary configured database. `make db-init` runs existing initialization. Both are mutation tools, not harmless validation commands. Stop the backend before an explicitly authorized reset.
 
 ### Database dependencies / handoff
 
-- `Citizen.destitute_days`, JobApplication status and memory-summary fields are now declared in the current entity contract. Coordinate compatibility with saved worlds; do not add duplicate `starvation_days` merely because an older PRD named it differently. Departure integration is currently an engine merge issue, not proof of a missing current field.
-- Persistent playback settings and Event wall-clock timestamps are not represented on current WorldState/Event contracts. Hand them off if requested; current tick/sequence already represent simulation ordering.
-- Legacy action-table retirement, startup schema creation, migrations, tracked-database policy and snapshot retention belong to the persistence owner.
-- Models have changed while malformed generated artifacts remain in the tree. Repair the integration and regenerate contracts before claiming DB/world/frontend compatibility.
+- **Event persistence: none.** The existing table, atomic commit and branch/sequence read helper are compatible; no database-owned code, schema, model or migration changes are needed for this feature.
+- SQL Event timestamps exist, but typed Events do not expose them. Adding a required timestamp to the shared/persisted model would need coordinated ownership; it is not required for sequence-based event reads.
+- Startup schema creation/migrations, relational projection policy, integrity-hash verification, legacy action-table retirement, tracked-database policy and snapshot retention remain persistence-owner concerns. Do not silently repair them from the engine/API layer.
+- Service playback settings still reset on restart. The relational `world` table has playing/speed columns, but the current Service does not persist them through its commit interface; coordinate that separately if requested.
 
 ## 12. Frontend architecture and assets
 
-`frontend/src/main.tsx` mounts App. The newer full-screen App/HUD uses `useSimulation`; `Dashboard.tsx` preserves the earlier panel layout, and Inspector/EventLedger components remain available. Current App contains mixed versions and cannot compile; the following describes the separate modules present, not a verified working entry component.
+`frontend/src/main.tsx` mounts App. The newer full-screen App/HUD uses `useSimulation`; `Dashboard.tsx` preserves the earlier panel layout, and Inspector/EventLedger components remain available. The entry component has been reconciled since the older guide; current frontend validation is recorded in section 3 and the latest maintenance record.
 
 | File(s) under `frontend/src/`                     | Purpose                                                                                                                     |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -275,25 +283,30 @@ Town tiers and prosperity score are derived presentation, with hysteresis/epoch 
 
 Committed assets are under `frontend/public/models/kaykit/`: the medieval hexagon set and rig-compatible characters/animation clips. `assets.ts` is the registry. Preserve accompanying licenses and linked `.gltf`/`.bin`/texture or `.glb` dependencies. The asset README records CC0 licensing and pinned origins. Keep replacement models compatible with stable IDs, x/z ground coordinates, selection and existing animation groups. No proprietary assets are required.
 
-The development preview works without an API by intention: VITE_OFFLINE or connection failure loads generated seed plus a labeled fixture story. Production requires the backend. Invalid generated JSON currently blocks even that preview's compilation. WebGL is required; large bundles/many scene objects remain optimization considerations, not grounds to rewrite authority boundaries.
+The development preview works without an API by intention: VITE_OFFLINE or connection failure loads generated seed plus a labeled fixture story. Production requires the backend. WebGL is required; large bundles/many scene objects remain optimization considerations, not grounds to rewrite authority boundaries.
 
 ## 13. Configuration and development commands
 
 Settings live in `backend/api/src/kronos/config.py`; Pydantic reads root `.env` with prefix `KRONOS_`. Vite reads root env files via `envDir: ".."`. Do not inspect or copy private `.env` values just to update documentation.
 
-| Variable                   | Current default / meaning                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------ |
-| `KRONOS_DATABASE_URL`      | `sqlite:///./backend/database/kronos.db`                                                   |
-| `KRONOS_SEED`              | 42; affects newly seeded worlds, not a rewrite of existing worlds                          |
-| `KRONOS_TICK_SECONDS`      | 2; divided by playback speed, clock sleep floored at 0.1 seconds                           |
-| `KRONOS_LLM_PROVIDER`      | `mock`; optional `anthropic` selection                                                     |
-| `KRONOS_LLM_MODEL`         | `deterministic-v1`; real adapter substitutes its code-defined default for this placeholder |
-| `KRONOS_LLM_TIMEOUT`       | 3 seconds for mock; Anthropic selection uses 20 seconds unless explicitly configured       |
-| `KRONOS_LLM_RETRIES`       | 1; AgentService clamps to at most 2 retries                                                |
-| `KRONOS_AGENT_ROUND_TICKS` | 3; stable scheduled decision round length (integration issue noted above)                  |
-| `ANTHROPIC_API_KEY`        | Required only when explicitly opting into the optional paid provider; secret               |
-| `VITE_API_URL`             | `http://localhost:8000`                                                                    |
-| `VITE_OFFLINE`             | `true` forces the labeled development preview                                              |
+| Variable                                            | Current default / meaning                                                                  |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `KRONOS_DATABASE_URL`                               | `sqlite:///./backend/database/kronos.db`                                                   |
+| `KRONOS_SEED`                                       | 42; affects newly seeded worlds, not a rewrite of existing worlds                          |
+| `KRONOS_TICK_SECONDS`                               | 2; divided by playback speed, clock sleep floored at 0.1 seconds                           |
+| `KRONOS_LLM_PROVIDER`                               | `mock`; optional `anthropic` selection                                                     |
+| `KRONOS_LLM_MODEL`                                  | `deterministic-v1`; real adapter substitutes its code-defined default for this placeholder |
+| `KRONOS_LLM_TIMEOUT`                                | 3 seconds for mock; Anthropic selection uses 20 seconds unless explicitly configured       |
+| `KRONOS_LLM_RETRIES`                                | 1; AgentService clamps to at most 2 retries                                                |
+| `KRONOS_AGENT_ROUND_TICKS`                          | 3; stable scheduled decision round length, with urgent decisions between slots             |
+| `KRONOS_LLM_CALLS_PER_TICK`                         | Unset: no provider-call cap within the bounded decision batch                              |
+| `KRONOS_LLM_CONCURRENCY`                            | 4 concurrent provider decisions                                                            |
+| `KRONOS_STRATEGIC_AGENTS`, `KRONOS_STRATEGIC_LIMIT` | Explicit comma-separated IDs, otherwise owners first up to 12; others use fallback         |
+| `KRONOS_LLM_CACHE`, `KRONOS_LLM_CACHE_ONLY`         | `.cache/llm`, false; optional real-provider replay cache                                   |
+| `KRONOS_LLM_LOG`                                    | Empty; opt-in local real-provider JSONL debug log                                          |
+| `ANTHROPIC_API_KEY`                                 | Required only when explicitly opting into the optional paid provider; secret               |
+| `VITE_API_URL`                                      | `http://localhost:8000`                                                                    |
+| `VITE_OFFLINE`                                      | `true` forces the labeled development preview                                              |
 
 Commands run from the repository root. Python needs 3.12+, Node needs 22.12+, and Make/npm must be available. Bootstrap uses local `.tools/` installations of missing uv/pnpm; no global administrator installation is needed. `uv sync --frozen` and `pnpm install --frozen-lockfile` use committed locks.
 
@@ -337,7 +350,7 @@ seed.py + WorldUpdate
   → backend/contracts/generated/initial-world.json → development preview/tests
 ```
 
-Never hand-edit generated artifacts. Repair Python import/route issues first, regenerate all three outputs, then inspect/validate them. Contract export currently cannot succeed while engine/service imports are syntactically broken. A successful old schema file is not evidence that today's source imports.
+Never hand-edit generated artifacts. Repair Python import/route issues first, regenerate all three outputs, then inspect/validate them. Contract export succeeds after the stale event handler is removed. The generated `/api/events` response is the same JSON array returned at runtime. A successful old schema file is not evidence that today's source imports.
 
 For a new action, extend its DTO/union and supported names, add current-state validation and mutation in the existing Engine path, emit a typed Event, test successful effects and rejection isolation, integrate through the service queue, regenerate contracts, and update this file. New persisted entity fields need database-owner coordination.
 
@@ -345,7 +358,7 @@ For an automatic rule, extend the single reconciled daily/growth path with deter
 
 For a provider, implement `LLMProvider.complete`, validate task outputs and actor identity, integrate selection in `build_provider`, use injected clients for offline tests, keep mock default, and document env/cost/timeout behavior here. For a scene change, reuse the asset registry and separate visual modules; update generated contracts only if wire behavior actually changes.
 
-For any change, reconcile the relevant known issues rather than treating competing implementations as established behavior. Run the appropriate owner tests plus required wider checks, update this document and affected supporting guides, and report remaining limitations honestly.
+For any change, inspect current source and the relevant known issues rather than relying on historical guide claims. Run the appropriate owner tests plus required wider checks, update this document and affected supporting guides, and report remaining limitations honestly.
 
 ## 15. Supporting documentation and troubleshooting
 
@@ -354,7 +367,7 @@ This file is the entry point and maintained overview. Supporting documents are:
 | Document                                                                                                 | Use / caveat                                                                                                      |
 | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | [simulation-engine.md](simulation-engine.md)                                                             | Detailed queued-loop usage; older claims about missing destitution/application fields are superseded by this file |
-| [simulation-design.md](simulation-design.md)                                                             | Domain/growth design; compare with current competing implementation paths                                         |
+| [simulation-design.md](simulation-design.md)                                                             | Domain/growth design; compare with the current single daily/growth path                                           |
 | [api-contracts.md](api-contracts.md), [event-protocol.md](event-protocol.md)                             | Request/Event conventions; verify against repaired routes and regenerated schemas                                 |
 | [frontend-world.md](frontend-world.md)                                                                   | Terrain, models, routines, lifecycle effects and visual extension detail                                          |
 | [architecture.md](architecture.md), [team-workflows.md](team-workflows.md)                               | Module boundaries and team coordination; this file controls current context                                       |
@@ -365,10 +378,10 @@ This file is the entry point and maintained overview. Supporting documents are:
 
 Common diagnoses: 409 means reload branch/version and reconsider the command; queued means wait for a tick on the correct branch/session; 404 after restart means read persisted Events and resubmit only unexecuted work. Job applications need the next-day owner/fallback round and free funded slots. WebSocket issues need full-state resync, branch/sequence checks and successful persistence. A cosmetic visit to a bakery is not a purchase. A growing visual tier is not an authoritative land expansion.
 
-For this checkout, fix the syntax/integration blockers before investigating runtime symptoms. Offline mode does not mean the real backend is healthy. A database changed after “just starting” the app may be startup table initialization or frontend auto-play; inspect without migrations or resetting someone else's state.
+For current failures, use section 3 and rerun the relevant checks; historical syntax failures are not current diagnoses. Offline mode does not mean the real backend is healthy. A database changed after “just starting” the app may be startup table initialization or frontend auto-play; inspect without migrations or resetting someone else's state.
 
 ## 16. Latest maintenance record
 
-- **2026-10-10 — Documentation centralization:** created this codebase reference from current sources, made the read/update requirement mandatory through root `AGENTS.md`, and added a README entry point. Runtime code, generated contracts, database files and persistence implementation were not changed.
-- **Validation performed:** source/path inspection; static parse of backend/script Python; frontend TypeScript check with `--noEmit --incremental false`; targeted Markdown formatting and local-link checks. Python/TypeScript checks found the existing failures in section 3. No full-suite pass is claimed and no backend or paid provider was started.
-- **Outstanding:** reconcile the merged engine/service/provider/frontend paths and generated artifacts, then run `make check` and `make contracts`. Update this record and remove resolved blockers when that authorized repair is complete.
+- **2026-10-10 — Durable event reads:** preserved the existing engine and atomic HistoryStore persistence; removed the stale duplicate event handler; made post-commit broadcasts best effort; added HTTP-only acceptance tests and regenerated contracts. Updated this reference to the repaired current checkout. Database files/schema/models, database-owned implementation, engine and frontend source were not edited by this feature.
+- **Validation performed:** 361 Python tests passed, 4 skipped; 23 frontend tests passed; contracts regenerated successfully. `make check` stopped on existing formatting differences in `provider.py` and `test_growth.py`. Frontend ESLint passes; production build stops at the existing `useSimulation.ts:149` intervention response mismatch. Changed Python files pass Ruff lint/format checks, and changed Markdown/generated contracts pass formatting and local-link checks. Test persistence used disposable SQLite databases, never the tracked developer database; no paid provider or development server was started.
+- **Outstanding:** unrelated repository formatting failures and the frontend intervention response mismatch need their owner's follow-up. Event persistence needs no database handoff. Keep this record and affected sections current in every later change.

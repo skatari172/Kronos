@@ -197,7 +197,17 @@ class Service:
         self.state = result.state
         for outcome in getattr(result, "action_results", []):
             self.actions[outcome.action_id] = outcome
-        await self.broadcast(result)
+        # The transaction is complete. Realtime delivery must not turn a saved outcome
+        # into an HTTP failure; clients can always read the persisted event ledger.
+        try:
+            await self.broadcast(result)
+        except Exception:
+            logger.warning(
+                "World %s:%s committed; realtime broadcast failed",
+                result.branch_id,
+                result.sequence,
+                exc_info=True,
+            )
         return result
 
     def enqueue(self, action, source="agent", text=None, state=None) -> ActionResult:
