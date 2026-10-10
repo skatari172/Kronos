@@ -75,4 +75,4 @@ Run one API process/worker. Active branch and playback are shared across local b
 
 The 3D renderer requires WebGL. Procedural geometry is intentionally replaceable; see `frontend/public/models/README.md`. The initial Three.js bundle is relatively large; optimize assets and code splitting when the scene grows.
 
-See [demo scenarios](docs/demo-scenarios.md), [architecture](docs/architecture.md), and [team workflow](docs/team-workflows.md). Team defaults to review: village-wide one-time price interventions, one day per tick, 1.50-coin wages, 50-coin construction cost, and full-state WebSocket updates.
+See [demo scenarios](docs/demo-scenarios.md), [architecture](docs/architecture.md), [the living village frontend](docs/frontend-world.md), and [team workflow](docs/team-workflows.md). Team defaults to review: village-wide one-time price interventions, one day per tick, 1.50-coin wages, 50-coin construction cost, and full-state WebSocket updates.

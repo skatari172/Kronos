@@ -277,6 +277,7 @@ h1 em {
   color: #5a6e56;
 }
 .scene-label {
+  display: inline-block;
   white-space: nowrap;
   font-size: 10px;
   color: #e6e9dc;
@@ -961,4 +962,202 @@ footer > span:last-child {
 }
 .scene-overlays .scene-label {
   pointer-events: auto;
+}
+
+/* Full-screen village with floating controls. */
+.stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 42%, #cfdac8 0%, #a9b9a3 100%);
+}
+.hud {
+  position: absolute;
+  left: 50%;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 18px;
+  border-radius: 14px;
+  background: #142019e0;
+  border: 1px solid #ffffff1f;
+  box-shadow: 0 12px 32px #0f1d1430;
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+}
+.hud-day {
+  display: grid;
+  gap: 2px;
+  margin-right: 4px;
+}
+.hud-day strong {
+  font:
+    600 15px Georgia,
+    serif;
+  color: #f1f0e4;
+}
+.hud-day small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  color: #a9b6a5;
+}
+.hud-day i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8a8f86;
+}
+.hud-day i.online {
+  background: #9fd38a;
+  box-shadow: 0 0 8px #9fd38a;
+}
+.hud-divider {
+  width: 1px;
+  height: 28px;
+  background: #ffffff1c;
+  margin: 0 4px;
+}
+.hud-button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 10px;
+}
+.hud-button.primary {
+  background: #d9c58c;
+  border-color: #d9c58c;
+  color: #1b261f;
+}
+.hud-button.primary:hover:not(:disabled) {
+  background: #e8d6a0;
+  border-color: #e8d6a0;
+}
+.hud select {
+  height: 38px;
+  border-radius: 10px;
+}
+.hud-error {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(20px, env(safe-area-inset-bottom)) + 66px);
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 9px 14px;
+  border-radius: 10px;
+  background: #4a2420e8;
+  border: 1px solid #c47a6a66;
+  color: #f6dcd5;
+  font-size: 12px;
+}
+
+.hud-button.active {
+  background: #3f5a47;
+  border-color: #d9c58c;
+  color: #f1e3b5;
+}
+
+/* Settlement growth (world/progress.ts). */
+.growth {
+  position: absolute;
+  top: max(20px, env(safe-area-inset-top));
+  left: 24px;
+  z-index: 5;
+  display: grid;
+  gap: 4px;
+  min-width: 170px;
+  padding: 12px 16px 13px;
+  border-radius: 14px;
+  background: #142019d9;
+  border: 1px solid #ffffff1f;
+  box-shadow: 0 12px 32px #0f1d1430;
+  backdrop-filter: blur(10px);
+}
+.growth span {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #a9b6a5;
+}
+.growth strong {
+  font:
+    600 20px Georgia,
+    serif;
+  color: #f1f0e4;
+}
+.growth-bar {
+  height: 4px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: #ffffff1a;
+  overflow: hidden;
+}
+.growth-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #c9b06a, #ecd99b);
+  transition: width 0.6s ease;
+}
+.growth small {
+  font-size: 10px;
+  color: #a9b6a5;
+}
+.tier-banner {
+  position: absolute;
+  top: 22%;
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 18px 36px 20px;
+  border-radius: 16px;
+  background: #142019e6;
+  border: 1px solid #d9c58c66;
+  box-shadow: 0 20px 50px #0f1d1440;
+  pointer-events: none;
+  animation: tier-banner 4.2s ease forwards;
+}
+.tier-banner small {
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #d9c58c;
+}
+.tier-banner strong {
+  font:
+    600 40px Georgia,
+    serif;
+  color: #f8f2dc;
+}
+@keyframes tier-banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.96);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(1);
+  }
+}
+@media (max-width: 520px) {
+  .growth {
+    left: 16px;
+    min-width: 140px;
+    padding: 10px 12px;
+  }
+  .tier-banner strong {
+    font-size: 30px;
+  }
 }

@@ -3,6 +3,7 @@ export type WorldState = components["schemas"]["WorldState"];
 export type WorldUpdate = components["schemas"]["WorldUpdate"];
 export type Citizen = components["schemas"]["Citizen"];
 export type Building = components["schemas"]["Building"];
+export type Plot = components["schemas"]["Plot"];
 export type SimulationEvent = WorldUpdate["events"][number];
 export type Branch = components["schemas"]["BranchMetadata"];
 export type Snapshot = components["schemas"]["SnapshotMetadata"];
