@@ -192,10 +192,13 @@ export function Dashboard() {
     setNotice("A new timeline begins. The original history is preserved.");
   }
   async function demonstrate() {
-    const { mockEvent } = await import("../api/mock");
-    useWorld
-      .getState()
-      .ingest(mockEvent(useWorld.getState().update!, demoIndex.current++));
+    const { initialMock, mockEvent } = await import("../api/mock");
+    const next = mockEvent(useWorld.getState().update!, demoIndex.current++);
+    if (next) useWorld.getState().ingest(next);
+    else {
+      useWorld.getState().replace(initialMock());
+      demoIndex.current = 0;
+    }
   }
   async function construct() {
     const state = useWorld.getState().update!.state;

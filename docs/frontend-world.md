@@ -89,7 +89,7 @@ The simulation changes a building instantly; the frontend stages that real chang
 | Bakery | Tavern-style bakery, barrel, sacks   | Cottage annex, crates       | Second annex, flag, pallet |
 | Market | Market stall, crates, barrel         | Tent, long crate            | Second tent, flags, stone  |
 
-- **Facing:** businesses on the south side of the main street are turned to face it.
+- **Facing:** businesses on the south side of the main street are turned to face it. Their dressing stays on the street side, because anything behind them would stand between the building and the camera (which looks from the south-east) and hide it.
 - **Label:** name, kind, level, and the bread price for bakeries.
 
 **Extend:** add a building kind by giving it a model in `BUILDING_MODELS` (`assets.ts`) and a `DRESSING` entry. The kind itself comes from `BuildingKind` in `models.py` (simulation owner).
@@ -110,7 +110,7 @@ Lots are not tied to any hard-coded layout: each one renders at its own `positio
 
 ## Villagers — models from the snapshot, routes presentation only
 
-- **Model per occupation** (`assets.ts`): Farmer → Farmer_A, Baker → Helper_B, Merchant → Lorekeeper, Farmhand → Farmer_B, Miller → Protagonist_B, Builder → Engineer, Weaver → Hiker. Other occupations (spawned citizens) get Druid or Protagonist_A.
+- **Models** (`assets.ts`). The seven founders (`citizen-0` … `citizen-6`) look like their trade: Farmer → Farmer_A, Baker → Helper_B, Merchant → Lorekeeper, Farmhand → Farmer_B, Miller → Protagonist_B, Builder → Engineer, Weaver → Hiker. Everyone who arrives later gets a varied look from a pool of 12 (Druid, Protagonist_A, Cleric, Ranger, Helper_A first, then the founders' looks), chosen by ID.
 - **Animations** come from four KayKit `Rig_Medium` sets: General, MovementBasic, Simulation, Tools. Every character shares the rig, so any clip plays on any character. `CharacterModel` blends the standing pose with walk and run from the current speed.
 
 | Pose     | Clip             | Used for                        |
@@ -123,7 +123,8 @@ Lots are not tied to any hard-coded layout: each one renders at its own `positio
 | `work`   | `Interact`       | At the workplace or the bakery  |
 | `hammer` | `Hammering`      | Construction and upgrade sites  |
 
-- **Daily routine** (`routine.ts`). Each villager starts at its simulated position, then repeats errands along the road graph of the current tier:
+- **Starting spots** (`startSpot`). When the scene loads, each villager stands in front of their home. If an earlier villager (by ID) already starts there, they start at another cottage, landmark, or business, picked in strides so neighbours begin far apart.
+- **Daily routine** (`routine.ts`). From there, each villager repeats errands along the road graph of the current tier:
 
 | Errand                                                     | Chance | Break at the destination      |
 | ---------------------------------------------------------- | ------ | ----------------------------- |
@@ -151,7 +152,7 @@ Villagers sometimes stop on the way (4% per road segment). Each has its own pace
 
   Then submit actions with `POST /api/actions`, for example `found_business` (Mira, 5,000 capital, on `plot-3`), `upgrade_building`, or `close_business`. Watch the construction, upgrades, and ruins play out.
 
-- `VITE_OFFLINE=true make frontend` runs without the API. The ⏭ button cycles labelled fixture events (construction, upgrade, arrival, move, price, departure).
+- `VITE_OFFLINE=true make frontend` runs without the API (it also falls back to this when the API is unreachable). The ⏭ button plays a scripted, clearly labelled fixture story (`src/api/mock.ts`, `STORY`), one step per click, with the step shown in the HUD. In 22 steps it grows the seed hamlet into a City: a new bakery, upgrades to level 3, a leased home, cheaper bread, a bankruptcy, a rebuild on the empty lot, and a bigger wave of newcomers at each tier (3, then 5, then 8: population 7 → 10 → 15 → 23). It reaches Village at step 3, Town at step 8, and City at step 18. The next click after the last step restarts from the seed world. `world.test.ts` checks the story reaches City, grows the population 7 → 10 → 15 → 23 by tier, and then ends.
 
 ## Known limits and requests for other owners
 

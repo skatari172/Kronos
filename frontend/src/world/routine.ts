@@ -76,6 +76,40 @@ export function residentsOf(place: Place, state: WorldState, town: Town) {
     .map((c) => c.name);
 }
 
+/**
+ * Where a villager is standing when the scene loads: in front of their home,
+ * or, if an earlier villager already starts there, at another cottage,
+ * landmark, or business spread across the town. Presentation only.
+ */
+export function startSpot(
+  citizen: Citizen,
+  state: WorldState,
+  town: Town,
+  lane: number,
+): Point {
+  const ids = Object.keys(state.citizens).sort();
+  const rank = Math.max(0, ids.indexOf(citizen.id));
+  const spot = (goal: Goal) => `${goal.road}`;
+  const homes = ids.map((id) => homeOf(state.citizens[id], state, town));
+  const spots: Goal[] = [
+    ...town.places,
+    ...Object.values(state.buildings).map((b) => ({
+      road: nearestRoad(town, b.position),
+      at: b.position,
+    })),
+  ];
+  const home = homes[rank];
+  const shared =
+    home && homes.slice(0, rank).some((h) => h && spot(h) === spot(home));
+  // Step through the list in strides so neighbours start far apart.
+  const goal =
+    home && !shared
+      ? home
+      : (spots[(rank * 5 + 2) % Math.max(1, spots.length)] ?? home);
+  if (!goal || !town.roads.has(goal.road)) return { ...citizen.position };
+  return waypoints(town, [goal.road], lane, goal.at).at(-1)!;
+}
+
 export function startRoutine(town: Town, start: Point, seed: number): Routine {
   return {
     points: [],

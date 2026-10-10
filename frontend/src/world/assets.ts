@@ -113,11 +113,18 @@ const BY_OCCUPATION: Record<string, string> = {
   Builder: "Engineer",
   Weaver: "Hiker",
 };
-const VISITORS = ["Druid", "Protagonist_A"];
-export const CHARACTER_FILES = [
+/** Newcomers draw from every look, starting with ones the founders do not use. */
+const NEWCOMERS = [
+  "Druid",
+  "Protagonist_A",
+  "Cleric",
+  "Ranger",
+  "Helper_A",
   ...Object.values(BY_OCCUPATION),
-  ...VISITORS,
-].map((name) => `${CHARACTERS}/${name}.glb`);
+];
+export const CHARACTER_FILES = [...new Set(NEWCOMERS)].map(
+  (name) => `${CHARACTERS}/${name}.glb`,
+);
 
 /** Stable per-entity number for presentation-only variation. */
 export function hash(id: string) {
@@ -126,9 +133,13 @@ export function hash(id: string) {
   return h;
 }
 
+/** The seed's seven founders (`citizen-0` … `citizen-6`). */
+const FOUNDER = /^citizen-[0-6]$/;
+
 export function characterModel(citizen: Citizen) {
-  const name =
-    BY_OCCUPATION[citizen.occupation] ??
-    VISITORS[hash(citizen.id) % VISITORS.length];
+  // Founders look like their trade; everyone who arrives later varies.
+  const name = FOUNDER.test(citizen.id)
+    ? (BY_OCCUPATION[citizen.occupation] ?? NEWCOMERS[0])
+    : NEWCOMERS[hash(citizen.id) % NEWCOMERS.length];
   return `${CHARACTERS}/${name}.glb`;
 }
