@@ -369,7 +369,7 @@ export interface components {
             /** Expected Sequence */
             expected_sequence: number;
             /** Action */
-            action: components["schemas"]["Buy-Input"] | components["schemas"]["Sell-Input"] | components["schemas"]["TransferMoney-Input"] | components["schemas"]["SetPrice-Input"] | components["schemas"]["Produce-Input"] | components["schemas"]["Consume-Input"] | components["schemas"]["Communicate-Input"] | components["schemas"]["ConstructBuilding-Input"] | components["schemas"]["UpgradeBuilding-Input"] | components["schemas"]["MoveTo-Input"];
+            action: components["schemas"]["Buy-Input"] | components["schemas"]["Sell-Input"] | components["schemas"]["TransferMoney-Input"] | components["schemas"]["SetPrice-Input"] | components["schemas"]["Produce-Input"] | components["schemas"]["Consume-Input"] | components["schemas"]["Communicate-Input"] | components["schemas"]["ConstructBuilding-Input"] | components["schemas"]["UpgradeBuilding-Input"] | components["schemas"]["MoveTo-Input"] | components["schemas"]["FoundBusiness-Input"] | components["schemas"]["CloseBusiness-Input"] | components["schemas"]["SetWage-Input"] | components["schemas"]["Hire-Input"] | components["schemas"]["Fire-Input"] | components["schemas"]["ApplyJob-Input"] | components["schemas"]["QuitJob-Input"] | components["schemas"]["Trade-Input"] | components["schemas"]["RespondTrade-Input"] | components["schemas"]["LeaseLot-Input"] | components["schemas"]["SetRent-Input"] | components["schemas"]["PayRent-Input"] | components["schemas"]["Evict-Input"] | components["schemas"]["Interact-Input"] | components["schemas"]["Research-Input"] | components["schemas"]["LicenseInvention-Input"] | components["schemas"]["AdoptInvention-Input"] | components["schemas"]["Lend-Input"] | components["schemas"]["Repay-Input"] | components["schemas"]["ProposeVote-Input"] | components["schemas"]["CastVote-Input"] | components["schemas"]["GatherResource-Input"];
         };
         /** ActionValidationResult */
         ActionValidationResult: {
@@ -384,7 +384,39 @@ export interface components {
              */
             valid: true;
             /** Action */
-            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"];
+            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"];
+        };
+        /** AdoptInvention */
+        "AdoptInvention-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "adopt_invention";
+            /** Invention Id */
+            invention_id: string;
+            /** Building Id */
+            building_id: string;
+        };
+        /** AdoptInvention */
+        "AdoptInvention-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "adopt_invention";
+            /** Invention Id */
+            invention_id: string;
+            /** Building Id */
+            building_id: string;
         };
         /** AgentObservation */
         AgentObservation: {
@@ -422,6 +454,34 @@ export interface components {
              */
             type: "agent_spoke";
             payload: components["schemas"]["SpeechPayload"];
+        };
+        /** ApplyJob */
+        "ApplyJob-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "apply_job";
+            /** Building Id */
+            building_id: string;
+        };
+        /** ApplyJob */
+        "ApplyJob-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "apply_job";
+            /** Building Id */
+            building_id: string;
         };
         /** BranchMetadata */
         BranchMetadata: {
@@ -472,7 +532,7 @@ export interface components {
              * @default 1
              */
             level: number;
-            inventory: components["schemas"]["ResourceInventory"];
+            inventory: components["schemas"]["ResourceInventory-Output"];
             /** Prices */
             prices: {
                 [key: string]: number;
@@ -593,6 +653,44 @@ export interface components {
             /** Max Unit Price */
             max_unit_price: number;
         };
+        /** CastVote */
+        "CastVote-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "vote";
+            /** Vote Id */
+            vote_id: string;
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "yes" | "no";
+        };
+        /** CastVote */
+        "CastVote-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "vote";
+            /** Vote Id */
+            vote_id: string;
+            /**
+             * Choice
+             * @enum {string}
+             */
+            choice: "yes" | "no";
+        };
         /** Citizen */
         Citizen: {
             /** Id */
@@ -611,7 +709,7 @@ export interface components {
              * @default 20
              */
             hunger: number;
-            inventory: components["schemas"]["ResourceInventory"];
+            inventory: components["schemas"]["ResourceInventory-Output"];
             /** Goals */
             goals: string[];
             /**
@@ -692,6 +790,34 @@ export interface components {
              */
             type: "citizen_spawned";
             payload: components["schemas"]["EntityPayload"];
+        };
+        /** CloseBusiness */
+        "CloseBusiness-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "close_business";
+            /** Building Id */
+            building_id: string;
+        };
+        /** CloseBusiness */
+        "CloseBusiness-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "close_business";
+            /** Building Id */
+            building_id: string;
         };
         /** Communicate */
         "Communicate-Input": {
@@ -795,10 +921,240 @@ export interface components {
             /** Level */
             level: number | null;
         };
+        /** Evict */
+        "Evict-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "evict";
+            /** Plot Id */
+            plot_id: string;
+        };
+        /** Evict */
+        "Evict-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "evict";
+            /** Plot Id */
+            plot_id: string;
+        };
+        /** Fire */
+        "Fire-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "fire";
+            /** Building Id */
+            building_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+        };
+        /** Fire */
+        "Fire-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "fire";
+            /** Building Id */
+            building_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+        };
+        /**
+         * FoundBusiness
+         * @description Fund a new business from the founder's money; capital becomes business cash.
+         */
+        "FoundBusiness-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "found_business";
+            /** Plot Id */
+            plot_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "farm" | "bakery" | "market";
+            /** Capital */
+            capital: number;
+        };
+        /**
+         * FoundBusiness
+         * @description Fund a new business from the founder's money; capital becomes business cash.
+         */
+        "FoundBusiness-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "found_business";
+            /** Plot Id */
+            plot_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "farm" | "bakery" | "market";
+            /** Capital */
+            capital: number;
+        };
+        /** GatherResource */
+        "GatherResource-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "gather_resource";
+            /** Building Id */
+            building_id: string;
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "bread" | "wheat";
+            /** Quantity */
+            quantity: number;
+        };
+        /** GatherResource */
+        "GatherResource-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "gather_resource";
+            /** Building Id */
+            building_id: string;
+            /**
+             * Resource
+             * @enum {string}
+             */
+            resource: "bread" | "wheat";
+            /** Quantity */
+            quantity: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** Hire */
+        "Hire-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hire";
+            /** Building Id */
+            building_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+        };
+        /** Hire */
+        "Hire-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "hire";
+            /** Building Id */
+            building_id: string;
+            /** Citizen Id */
+            citizen_id: string;
+        };
+        /**
+         * Interact
+         * @description Bounded relationship change; amount is only used by gift.
+         */
+        "Interact-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interact";
+            /** Recipient Id */
+            recipient_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "befriend" | "gift" | "ally" | "argue" | "insult" | "betray" | "mentor";
+            /** Amount */
+            amount?: number | null;
+        };
+        /**
+         * Interact
+         * @description Bounded relationship change; amount is only used by gift.
+         */
+        "Interact-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "interact";
+            /** Recipient Id */
+            recipient_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "befriend" | "gift" | "ally" | "argue" | "insult" | "betray" | "mentor";
+            /** Amount */
+            amount: number | null;
         };
         /** InterventionApplied */
         InterventionApplied: {
@@ -850,6 +1206,116 @@ export interface components {
             command: components["schemas"]["PriceIntervention"];
             update: components["schemas"]["WorldUpdate"];
         };
+        /** LeaseLot */
+        "LeaseLot-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lease_lot";
+            /** Plot Id */
+            plot_id: string;
+        };
+        /** LeaseLot */
+        "LeaseLot-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lease_lot";
+            /** Plot Id */
+            plot_id: string;
+        };
+        /**
+         * Lend
+         * @description Loan offer; rate is basis points per term so money stays integral.
+         */
+        "Lend-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lend";
+            /** Recipient Id */
+            recipient_id: string;
+            /** Principal */
+            principal: number;
+            /** Rate Bps */
+            rate_bps: number;
+            /** Due Tick */
+            due_tick: number;
+        };
+        /**
+         * Lend
+         * @description Loan offer; rate is basis points per term so money stays integral.
+         */
+        "Lend-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "lend";
+            /** Recipient Id */
+            recipient_id: string;
+            /** Principal */
+            principal: number;
+            /** Rate Bps */
+            rate_bps: number;
+            /** Due Tick */
+            due_tick: number;
+        };
+        /** LicenseInvention */
+        "LicenseInvention-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "license_invention";
+            /** Invention Id */
+            invention_id: string;
+            /** Recipient Id */
+            recipient_id: string;
+            /** Fee */
+            fee: number;
+        };
+        /** LicenseInvention */
+        "LicenseInvention-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "license_invention";
+            /** Invention Id */
+            invention_id: string;
+            /** Recipient Id */
+            recipient_id: string;
+            /** Fee */
+            fee: number;
+        };
         /** MoveTo */
         "MoveTo-Input": {
             /** Actor Id */
@@ -884,6 +1350,34 @@ export interface components {
             branch_id: string;
             /** Expected Sequence */
             expected_sequence: number;
+        };
+        /** PayRent */
+        "PayRent-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "pay_rent";
+            /** Plot Id */
+            plot_id: string;
+        };
+        /** PayRent */
+        "PayRent-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "pay_rent";
+            /** Plot Id */
+            plot_id: string;
         };
         /** PlayRequest */
         PlayRequest: {
@@ -996,6 +1490,74 @@ export interface components {
             /** Building Id */
             building_id: string;
         };
+        /**
+         * ProposeVote
+         * @description value is basis points for market_tax and cents for price caps and minimum wage.
+         */
+        "ProposeVote-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "propose_vote";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "market_tax" | "bread_price_cap" | "min_wage";
+            /** Value */
+            value: number;
+        };
+        /**
+         * ProposeVote
+         * @description value is basis points for market_tax and cents for price caps and minimum wage.
+         */
+        "ProposeVote-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "propose_vote";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "market_tax" | "bread_price_cap" | "min_wage";
+            /** Value */
+            value: number;
+        };
+        /** QuitJob */
+        "QuitJob-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quit_job";
+        };
+        /** QuitJob */
+        "QuitJob-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "quit_job";
+        };
         /** Relationship */
         Relationship: {
             /** Citizen Id */
@@ -1036,6 +1598,90 @@ export interface components {
             /** Trust */
             trust: number;
         };
+        /** Repay */
+        "Repay-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "repay";
+            /** Loan Id */
+            loan_id: string;
+            /** Amount */
+            amount: number;
+        };
+        /** Repay */
+        "Repay-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "repay";
+            /** Loan Id */
+            loan_id: string;
+            /** Amount */
+            amount: number;
+        };
+        /**
+         * Research
+         * @description Money mode spends amount; time mode forfeits wages for ticks.
+         */
+        "Research-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "research";
+            /** Invention Id */
+            invention_id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "money" | "time";
+            /** Amount */
+            amount?: number | null;
+            /** Ticks */
+            ticks?: number | null;
+        };
+        /**
+         * Research
+         * @description Money mode spends amount; time mode forfeits wages for ticks.
+         */
+        "Research-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "research";
+            /** Invention Id */
+            invention_id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "money" | "time";
+            /** Amount */
+            amount: number | null;
+            /** Ticks */
+            ticks: number | null;
+        };
         /** ResourceConsumed */
         ResourceConsumed: {
             /** Id */
@@ -1060,7 +1706,20 @@ export interface components {
             payload: components["schemas"]["ResourcePayload"];
         };
         /** ResourceInventory */
-        ResourceInventory: {
+        "ResourceInventory-Input": {
+            /**
+             * Wheat
+             * @default 0
+             */
+            wheat: number;
+            /**
+             * Bread
+             * @default 0
+             */
+            bread: number;
+        };
+        /** ResourceInventory */
+        "ResourceInventory-Output": {
             /**
              * Wheat
              * @default 0
@@ -1103,6 +1762,38 @@ export interface components {
              */
             type: "resource_produced";
             payload: components["schemas"]["ResourcePayload"];
+        };
+        /** RespondTrade */
+        "RespondTrade-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "respond_trade";
+            /** Offer Id */
+            offer_id: string;
+            /** Accept */
+            accept: boolean;
+        };
+        /** RespondTrade */
+        "RespondTrade-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "respond_trade";
+            /** Offer Id */
+            offer_id: string;
+            /** Accept */
+            accept: boolean;
         };
         /** Sell */
         "Sell-Input": {
@@ -1188,6 +1879,76 @@ export interface components {
             /** Price */
             price: number;
         };
+        /**
+         * SetRent
+         * @description Owner only; the engine limits each change to 20% of the current rent.
+         */
+        "SetRent-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "set_rent";
+            /** Plot Id */
+            plot_id: string;
+            /** Rent */
+            rent: number;
+        };
+        /**
+         * SetRent
+         * @description Owner only; the engine limits each change to 20% of the current rent.
+         */
+        "SetRent-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "set_rent";
+            /** Plot Id */
+            plot_id: string;
+            /** Rent */
+            rent: number;
+        };
+        /** SetWage */
+        "SetWage-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "set_wage";
+            /** Building Id */
+            building_id: string;
+            /** Wage */
+            wage: number;
+        };
+        /** SetWage */
+        "SetWage-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "set_wage";
+            /** Building Id */
+            building_id: string;
+            /** Wage */
+            wage: number;
+        };
         /** SimulationStatus */
         SimulationStatus: {
             /** Playing */
@@ -1234,6 +1995,62 @@ export interface components {
             recipient_id: string;
             /** Message */
             message: string;
+        };
+        /**
+         * Trade
+         * @description Offer goods or money to another citizen; the recipient answers with respond_trade.
+         */
+        "Trade-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "trade";
+            /** Recipient Id */
+            recipient_id: string;
+            give: components["schemas"]["TradeBundle-Input"];
+            get: components["schemas"]["TradeBundle-Input"];
+        };
+        /**
+         * Trade
+         * @description Offer goods or money to another citizen; the recipient answers with respond_trade.
+         */
+        "Trade-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "trade";
+            /** Recipient Id */
+            recipient_id: string;
+            give: components["schemas"]["TradeBundle-Output"];
+            get: components["schemas"]["TradeBundle-Output"];
+        };
+        /** TradeBundle */
+        "TradeBundle-Input": {
+            /**
+             * Money
+             * @default 0
+             */
+            money: number;
+            goods?: components["schemas"]["ResourceInventory-Input"];
+        };
+        /** TradeBundle */
+        "TradeBundle-Output": {
+            /**
+             * Money
+             * @default 0
+             */
+            money: number;
+            goods: components["schemas"]["ResourceInventory-Output"];
         };
         /** TransactionCompleted */
         TransactionCompleted: {

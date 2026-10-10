@@ -886,22 +886,110 @@
               },
               {
                 "$ref": "#/components/schemas/MoveTo-Input"
+              },
+              {
+                "$ref": "#/components/schemas/FoundBusiness-Input"
+              },
+              {
+                "$ref": "#/components/schemas/CloseBusiness-Input"
+              },
+              {
+                "$ref": "#/components/schemas/SetWage-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Hire-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Fire-Input"
+              },
+              {
+                "$ref": "#/components/schemas/ApplyJob-Input"
+              },
+              {
+                "$ref": "#/components/schemas/QuitJob-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Trade-Input"
+              },
+              {
+                "$ref": "#/components/schemas/RespondTrade-Input"
+              },
+              {
+                "$ref": "#/components/schemas/LeaseLot-Input"
+              },
+              {
+                "$ref": "#/components/schemas/SetRent-Input"
+              },
+              {
+                "$ref": "#/components/schemas/PayRent-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Evict-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Interact-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Research-Input"
+              },
+              {
+                "$ref": "#/components/schemas/LicenseInvention-Input"
+              },
+              {
+                "$ref": "#/components/schemas/AdoptInvention-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Lend-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Repay-Input"
+              },
+              {
+                "$ref": "#/components/schemas/ProposeVote-Input"
+              },
+              {
+                "$ref": "#/components/schemas/CastVote-Input"
+              },
+              {
+                "$ref": "#/components/schemas/GatherResource-Input"
               }
             ],
             "title": "Action",
             "discriminator": {
               "propertyName": "type",
               "mapping": {
+                "adopt_invention": "#/components/schemas/AdoptInvention-Input",
+                "apply_job": "#/components/schemas/ApplyJob-Input",
                 "buy": "#/components/schemas/Buy-Input",
+                "close_business": "#/components/schemas/CloseBusiness-Input",
                 "communicate": "#/components/schemas/Communicate-Input",
                 "construct_building": "#/components/schemas/ConstructBuilding-Input",
                 "consume": "#/components/schemas/Consume-Input",
+                "evict": "#/components/schemas/Evict-Input",
+                "fire": "#/components/schemas/Fire-Input",
+                "found_business": "#/components/schemas/FoundBusiness-Input",
+                "gather_resource": "#/components/schemas/GatherResource-Input",
+                "hire": "#/components/schemas/Hire-Input",
+                "interact": "#/components/schemas/Interact-Input",
+                "lease_lot": "#/components/schemas/LeaseLot-Input",
+                "lend": "#/components/schemas/Lend-Input",
+                "license_invention": "#/components/schemas/LicenseInvention-Input",
                 "move_to": "#/components/schemas/MoveTo-Input",
+                "pay_rent": "#/components/schemas/PayRent-Input",
                 "produce": "#/components/schemas/Produce-Input",
+                "propose_vote": "#/components/schemas/ProposeVote-Input",
+                "quit_job": "#/components/schemas/QuitJob-Input",
+                "repay": "#/components/schemas/Repay-Input",
+                "research": "#/components/schemas/Research-Input",
+                "respond_trade": "#/components/schemas/RespondTrade-Input",
                 "sell": "#/components/schemas/Sell-Input",
                 "set_price": "#/components/schemas/SetPrice-Input",
+                "set_rent": "#/components/schemas/SetRent-Input",
+                "set_wage": "#/components/schemas/SetWage-Input",
+                "trade": "#/components/schemas/Trade-Input",
                 "transfer_money": "#/components/schemas/TransferMoney-Input",
-                "upgrade_building": "#/components/schemas/UpgradeBuilding-Input"
+                "upgrade_building": "#/components/schemas/UpgradeBuilding-Input",
+                "vote": "#/components/schemas/CastVote-Input"
               }
             }
           }
@@ -962,22 +1050,110 @@
               },
               {
                 "$ref": "#/components/schemas/MoveTo-Output"
+              },
+              {
+                "$ref": "#/components/schemas/FoundBusiness-Output"
+              },
+              {
+                "$ref": "#/components/schemas/CloseBusiness-Output"
+              },
+              {
+                "$ref": "#/components/schemas/SetWage-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Hire-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Fire-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ApplyJob-Output"
+              },
+              {
+                "$ref": "#/components/schemas/QuitJob-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Trade-Output"
+              },
+              {
+                "$ref": "#/components/schemas/RespondTrade-Output"
+              },
+              {
+                "$ref": "#/components/schemas/LeaseLot-Output"
+              },
+              {
+                "$ref": "#/components/schemas/SetRent-Output"
+              },
+              {
+                "$ref": "#/components/schemas/PayRent-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Evict-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Interact-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Research-Output"
+              },
+              {
+                "$ref": "#/components/schemas/LicenseInvention-Output"
+              },
+              {
+                "$ref": "#/components/schemas/AdoptInvention-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Lend-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Repay-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ProposeVote-Output"
+              },
+              {
+                "$ref": "#/components/schemas/CastVote-Output"
+              },
+              {
+                "$ref": "#/components/schemas/GatherResource-Output"
               }
             ],
             "title": "Action",
             "discriminator": {
               "propertyName": "type",
               "mapping": {
+                "adopt_invention": "#/components/schemas/AdoptInvention-Output",
+                "apply_job": "#/components/schemas/ApplyJob-Output",
                 "buy": "#/components/schemas/Buy-Output",
+                "close_business": "#/components/schemas/CloseBusiness-Output",
                 "communicate": "#/components/schemas/Communicate-Output",
                 "construct_building": "#/components/schemas/ConstructBuilding-Output",
                 "consume": "#/components/schemas/Consume-Output",
+                "evict": "#/components/schemas/Evict-Output",
+                "fire": "#/components/schemas/Fire-Output",
+                "found_business": "#/components/schemas/FoundBusiness-Output",
+                "gather_resource": "#/components/schemas/GatherResource-Output",
+                "hire": "#/components/schemas/Hire-Output",
+                "interact": "#/components/schemas/Interact-Output",
+                "lease_lot": "#/components/schemas/LeaseLot-Output",
+                "lend": "#/components/schemas/Lend-Output",
+                "license_invention": "#/components/schemas/LicenseInvention-Output",
                 "move_to": "#/components/schemas/MoveTo-Output",
+                "pay_rent": "#/components/schemas/PayRent-Output",
                 "produce": "#/components/schemas/Produce-Output",
+                "propose_vote": "#/components/schemas/ProposeVote-Output",
+                "quit_job": "#/components/schemas/QuitJob-Output",
+                "repay": "#/components/schemas/Repay-Output",
+                "research": "#/components/schemas/Research-Output",
+                "respond_trade": "#/components/schemas/RespondTrade-Output",
                 "sell": "#/components/schemas/Sell-Output",
                 "set_price": "#/components/schemas/SetPrice-Output",
+                "set_rent": "#/components/schemas/SetRent-Output",
+                "set_wage": "#/components/schemas/SetWage-Output",
+                "trade": "#/components/schemas/Trade-Output",
                 "transfer_money": "#/components/schemas/TransferMoney-Output",
-                "upgrade_building": "#/components/schemas/UpgradeBuilding-Output"
+                "upgrade_building": "#/components/schemas/UpgradeBuilding-Output",
+                "vote": "#/components/schemas/CastVote-Output"
               }
             }
           }
@@ -991,6 +1167,92 @@
           "action"
         ],
         "title": "ActionValidationResult"
+      },
+      "AdoptInvention-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "adopt_invention",
+            "title": "Type",
+            "default": "adopt_invention"
+          },
+          "invention_id": {
+            "type": "string",
+            "title": "Invention Id"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "invention_id",
+          "building_id"
+        ],
+        "title": "AdoptInvention"
+      },
+      "AdoptInvention-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "adopt_invention",
+            "title": "Type",
+            "default": "adopt_invention"
+          },
+          "invention_id": {
+            "type": "string",
+            "title": "Invention Id"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "invention_id",
+          "building_id"
+        ],
+        "title": "AdoptInvention"
       },
       "AgentObservation": {
         "properties": {
@@ -1099,6 +1361,82 @@
           "payload"
         ],
         "title": "AgentSpoke"
+      },
+      "ApplyJob-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "apply_job",
+            "title": "Type",
+            "default": "apply_job"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id"
+        ],
+        "title": "ApplyJob"
+      },
+      "ApplyJob-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "apply_job",
+            "title": "Type",
+            "default": "apply_job"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id"
+        ],
+        "title": "ApplyJob"
       },
       "BranchMetadata": {
         "properties": {
@@ -1214,7 +1552,7 @@
             "default": 1
           },
           "inventory": {
-            "$ref": "#/components/schemas/ResourceInventory"
+            "$ref": "#/components/schemas/ResourceInventory-Output"
           },
           "prices": {
             "additionalProperties": {
@@ -1576,6 +1914,100 @@
         ],
         "title": "Buy"
       },
+      "CastVote-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "vote",
+            "title": "Type",
+            "default": "vote"
+          },
+          "vote_id": {
+            "type": "string",
+            "title": "Vote Id"
+          },
+          "choice": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Choice"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "vote_id",
+          "choice"
+        ],
+        "title": "CastVote"
+      },
+      "CastVote-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "vote",
+            "title": "Type",
+            "default": "vote"
+          },
+          "vote_id": {
+            "type": "string",
+            "title": "Vote Id"
+          },
+          "choice": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Choice"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "vote_id",
+          "choice"
+        ],
+        "title": "CastVote"
+      },
       "Citizen": {
         "properties": {
           "id": {
@@ -1617,7 +2049,7 @@
             "default": 20
           },
           "inventory": {
-            "$ref": "#/components/schemas/ResourceInventory"
+            "$ref": "#/components/schemas/ResourceInventory-Output"
           },
           "goals": {
             "items": {
@@ -1879,6 +2311,82 @@
           "payload"
         ],
         "title": "CitizenSpawned"
+      },
+      "CloseBusiness-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "close_business",
+            "title": "Type",
+            "default": "close_business"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id"
+        ],
+        "title": "CloseBusiness"
+      },
+      "CloseBusiness-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "close_business",
+            "title": "Type",
+            "default": "close_business"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id"
+        ],
+        "title": "CloseBusiness"
       },
       "Communicate-Input": {
         "properties": {
@@ -2169,6 +2677,386 @@
         ],
         "title": "EntityPayload"
       },
+      "Evict-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "evict",
+            "title": "Type",
+            "default": "evict"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "plot_id"
+        ],
+        "title": "Evict"
+      },
+      "Evict-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "evict",
+            "title": "Type",
+            "default": "evict"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "plot_id"
+        ],
+        "title": "Evict"
+      },
+      "Fire-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "fire",
+            "title": "Type",
+            "default": "fire"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id",
+          "citizen_id"
+        ],
+        "title": "Fire"
+      },
+      "Fire-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "fire",
+            "title": "Type",
+            "default": "fire"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id",
+          "citizen_id"
+        ],
+        "title": "Fire"
+      },
+      "FoundBusiness-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "found_business",
+            "title": "Type",
+            "default": "found_business"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "farm",
+              "bakery",
+              "market"
+            ],
+            "title": "Kind"
+          },
+          "capital": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Capital"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "plot_id",
+          "kind",
+          "capital"
+        ],
+        "title": "FoundBusiness",
+        "description": "Fund a new business from the founder's money; capital becomes business cash."
+      },
+      "FoundBusiness-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "found_business",
+            "title": "Type",
+            "default": "found_business"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "farm",
+              "bakery",
+              "market"
+            ],
+            "title": "Kind"
+          },
+          "capital": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Capital"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "plot_id",
+          "kind",
+          "capital"
+        ],
+        "title": "FoundBusiness",
+        "description": "Fund a new business from the founder's money; capital becomes business cash."
+      },
+      "GatherResource-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "gather_resource",
+            "title": "Type",
+            "default": "gather_resource"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id",
+          "resource",
+          "quantity"
+        ],
+        "title": "GatherResource"
+      },
+      "GatherResource-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "gather_resource",
+            "title": "Type",
+            "default": "gather_resource"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id",
+          "resource",
+          "quantity"
+        ],
+        "title": "GatherResource"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2181,6 +3069,223 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "Hire-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "hire",
+            "title": "Type",
+            "default": "hire"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id",
+          "citizen_id"
+        ],
+        "title": "Hire"
+      },
+      "Hire-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "hire",
+            "title": "Type",
+            "default": "hire"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id",
+          "citizen_id"
+        ],
+        "title": "Hire"
+      },
+      "Interact-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "interact",
+            "title": "Type",
+            "default": "interact"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "befriend",
+              "gift",
+              "ally",
+              "argue",
+              "insult",
+              "betray",
+              "mentor"
+            ],
+            "title": "Kind"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "recipient_id",
+          "kind"
+        ],
+        "title": "Interact",
+        "description": "Bounded relationship change; amount is only used by gift."
+      },
+      "Interact-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "interact",
+            "title": "Type",
+            "default": "interact"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "befriend",
+              "gift",
+              "ally",
+              "argue",
+              "insult",
+              "betray",
+              "mentor"
+            ],
+            "title": "Kind"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "recipient_id",
+          "kind",
+          "amount"
+        ],
+        "title": "Interact",
+        "description": "Bounded relationship change; amount is only used by gift."
       },
       "InterventionApplied": {
         "properties": {
@@ -2324,6 +3429,296 @@
         ],
         "title": "InterventionResult"
       },
+      "LeaseLot-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "lease_lot",
+            "title": "Type",
+            "default": "lease_lot"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "plot_id"
+        ],
+        "title": "LeaseLot"
+      },
+      "LeaseLot-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "lease_lot",
+            "title": "Type",
+            "default": "lease_lot"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "plot_id"
+        ],
+        "title": "LeaseLot"
+      },
+      "Lend-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "lend",
+            "title": "Type",
+            "default": "lend"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "principal": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Principal"
+          },
+          "rate_bps": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Rate Bps"
+          },
+          "due_tick": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Due Tick"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "recipient_id",
+          "principal",
+          "rate_bps",
+          "due_tick"
+        ],
+        "title": "Lend",
+        "description": "Loan offer; rate is basis points per term so money stays integral."
+      },
+      "Lend-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "lend",
+            "title": "Type",
+            "default": "lend"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "principal": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Principal"
+          },
+          "rate_bps": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Rate Bps"
+          },
+          "due_tick": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Due Tick"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "recipient_id",
+          "principal",
+          "rate_bps",
+          "due_tick"
+        ],
+        "title": "Lend",
+        "description": "Loan offer; rate is basis points per term so money stays integral."
+      },
+      "LicenseInvention-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "license_invention",
+            "title": "Type",
+            "default": "license_invention"
+          },
+          "invention_id": {
+            "type": "string",
+            "title": "Invention Id"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "fee": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Fee"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "invention_id",
+          "recipient_id",
+          "fee"
+        ],
+        "title": "LicenseInvention"
+      },
+      "LicenseInvention-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "license_invention",
+            "title": "Type",
+            "default": "license_invention"
+          },
+          "invention_id": {
+            "type": "string",
+            "title": "Invention Id"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "fee": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Fee"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "invention_id",
+          "recipient_id",
+          "fee"
+        ],
+        "title": "LicenseInvention"
+      },
       "MoveTo-Input": {
         "properties": {
           "actor_id": {
@@ -2419,6 +3814,82 @@
           "expected_sequence"
         ],
         "title": "MutationRequest"
+      },
+      "PayRent-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "pay_rent",
+            "title": "Type",
+            "default": "pay_rent"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "plot_id"
+        ],
+        "title": "PayRent"
+      },
+      "PayRent-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "pay_rent",
+            "title": "Type",
+            "default": "pay_rent"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "plot_id"
+        ],
+        "title": "PayRent"
       },
       "PlayRequest": {
         "properties": {
@@ -2701,6 +4172,174 @@
         ],
         "title": "Produce"
       },
+      "ProposeVote-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "propose_vote",
+            "title": "Type",
+            "default": "propose_vote"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "market_tax",
+              "bread_price_cap",
+              "min_wage"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "kind",
+          "value"
+        ],
+        "title": "ProposeVote",
+        "description": "value is basis points for market_tax and cents for price caps and minimum wage."
+      },
+      "ProposeVote-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "propose_vote",
+            "title": "Type",
+            "default": "propose_vote"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "market_tax",
+              "bread_price_cap",
+              "min_wage"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "kind",
+          "value"
+        ],
+        "title": "ProposeVote",
+        "description": "value is basis points for market_tax and cents for price caps and minimum wage."
+      },
+      "QuitJob-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "quit_job",
+            "title": "Type",
+            "default": "quit_job"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id"
+        ],
+        "title": "QuitJob"
+      },
+      "QuitJob-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "quit_job",
+            "title": "Type",
+            "default": "quit_job"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type"
+        ],
+        "title": "QuitJob"
+      },
       "Relationship": {
         "properties": {
           "citizen_id": {
@@ -2814,6 +4453,242 @@
         ],
         "title": "RelationshipPayload"
       },
+      "Repay-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "repay",
+            "title": "Type",
+            "default": "repay"
+          },
+          "loan_id": {
+            "type": "string",
+            "title": "Loan Id"
+          },
+          "amount": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "loan_id",
+          "amount"
+        ],
+        "title": "Repay"
+      },
+      "Repay-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "repay",
+            "title": "Type",
+            "default": "repay"
+          },
+          "loan_id": {
+            "type": "string",
+            "title": "Loan Id"
+          },
+          "amount": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "loan_id",
+          "amount"
+        ],
+        "title": "Repay"
+      },
+      "Research-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "research",
+            "title": "Type",
+            "default": "research"
+          },
+          "invention_id": {
+            "type": "string",
+            "title": "Invention Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "money",
+              "time"
+            ],
+            "title": "Mode"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "ticks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 30.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "invention_id",
+          "mode"
+        ],
+        "title": "Research",
+        "description": "Money mode spends amount; time mode forfeits wages for ticks."
+      },
+      "Research-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "research",
+            "title": "Type",
+            "default": "research"
+          },
+          "invention_id": {
+            "type": "string",
+            "title": "Invention Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "money",
+              "time"
+            ],
+            "title": "Mode"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "ticks": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 30.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "invention_id",
+          "mode",
+          "amount",
+          "ticks"
+        ],
+        "title": "Research",
+        "description": "Money mode spends amount; time mode forfeits wages for ticks."
+      },
       "ResourceConsumed": {
         "properties": {
           "id": {
@@ -2886,7 +4761,26 @@
         ],
         "title": "ResourceConsumed"
       },
-      "ResourceInventory": {
+      "ResourceInventory-Input": {
+        "properties": {
+          "wheat": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Wheat",
+            "default": 0
+          },
+          "bread": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Bread",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ResourceInventory"
+      },
+      "ResourceInventory-Output": {
         "properties": {
           "wheat": {
             "type": "integer",
@@ -3004,6 +4898,92 @@
           "payload"
         ],
         "title": "ResourceProduced"
+      },
+      "RespondTrade-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "respond_trade",
+            "title": "Type",
+            "default": "respond_trade"
+          },
+          "offer_id": {
+            "type": "string",
+            "title": "Offer Id"
+          },
+          "accept": {
+            "type": "boolean",
+            "title": "Accept"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "offer_id",
+          "accept"
+        ],
+        "title": "RespondTrade"
+      },
+      "RespondTrade-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "respond_trade",
+            "title": "Type",
+            "default": "respond_trade"
+          },
+          "offer_id": {
+            "type": "string",
+            "title": "Offer Id"
+          },
+          "accept": {
+            "type": "boolean",
+            "title": "Accept"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "offer_id",
+          "accept"
+        ],
+        "title": "RespondTrade"
       },
       "Sell-Input": {
         "properties": {
@@ -3221,6 +5201,188 @@
         ],
         "title": "SetPrice"
       },
+      "SetRent-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "set_rent",
+            "title": "Type",
+            "default": "set_rent"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "rent": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Rent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "plot_id",
+          "rent"
+        ],
+        "title": "SetRent",
+        "description": "Owner only; the engine limits each change to 20% of the current rent."
+      },
+      "SetRent-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "set_rent",
+            "title": "Type",
+            "default": "set_rent"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "rent": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Rent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "plot_id",
+          "rent"
+        ],
+        "title": "SetRent",
+        "description": "Owner only; the engine limits each change to 20% of the current rent."
+      },
+      "SetWage-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "set_wage",
+            "title": "Type",
+            "default": "set_wage"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "wage": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Wage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id",
+          "wage"
+        ],
+        "title": "SetWage"
+      },
+      "SetWage-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "set_wage",
+            "title": "Type",
+            "default": "set_wage"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "wage": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Wage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id",
+          "wage"
+        ],
+        "title": "SetWage"
+      },
       "SimulationStatus": {
         "properties": {
           "playing": {
@@ -3416,6 +5578,136 @@
           "message"
         ],
         "title": "SpeechPayload"
+      },
+      "Trade-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "trade",
+            "title": "Type",
+            "default": "trade"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "give": {
+            "$ref": "#/components/schemas/TradeBundle-Input"
+          },
+          "get": {
+            "$ref": "#/components/schemas/TradeBundle-Input"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "recipient_id",
+          "give",
+          "get"
+        ],
+        "title": "Trade",
+        "description": "Offer goods or money to another citizen; the recipient answers with respond_trade."
+      },
+      "Trade-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "trade",
+            "title": "Type",
+            "default": "trade"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "give": {
+            "$ref": "#/components/schemas/TradeBundle-Output"
+          },
+          "get": {
+            "$ref": "#/components/schemas/TradeBundle-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "recipient_id",
+          "give",
+          "get"
+        ],
+        "title": "Trade",
+        "description": "Offer goods or money to another citizen; the recipient answers with respond_trade."
+      },
+      "TradeBundle-Input": {
+        "properties": {
+          "money": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Money",
+            "default": 0
+          },
+          "goods": {
+            "$ref": "#/components/schemas/ResourceInventory-Input"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TradeBundle"
+      },
+      "TradeBundle-Output": {
+        "properties": {
+          "money": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Money",
+            "default": 0
+          },
+          "goods": {
+            "$ref": "#/components/schemas/ResourceInventory-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "money",
+          "goods"
+        ],
+        "title": "TradeBundle"
       },
       "TransactionCompleted": {
         "properties": {

@@ -227,9 +227,7 @@
       },
       "wage": 6,
       "job_slots": 2,
-      "employees": [
-        "lucia"
-      ]
+      "employees": ["lucia"]
     },
     {
       "id": "bakery",
@@ -267,9 +265,7 @@
       },
       "wage": 7,
       "job_slots": 2,
-      "employees": [
-        "sofia"
-      ]
+      "employees": ["sofia"]
     },
     {
       "id": "smithy",
@@ -322,9 +318,7 @@
       "wage": 0,
       "crop_share": 0.5,
       "job_slots": 2,
-      "employees": [
-        "pietro"
-      ]
+      "employees": ["pietro"]
     }
   ],
   "lots": [
@@ -555,11 +549,7 @@
   "town_vote": {
     "every_ticks": 10,
     "open_ticks": 3,
-    "kinds": [
-      "market_tax",
-      "bread_price_cap",
-      "min_wage"
-    ],
+    "kinds": ["market_tax", "bread_price_cap", "min_wage"],
     "influence_formula": {
       "wealth_share": 0.5,
       "reputation": 0.3,
