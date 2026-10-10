@@ -1,0 +1,18 @@
+{
+  "name": "kronos",
+  "private": true,
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "dev": "pnpm --filter @kronos/web dev",
+    "build": "pnpm --filter @kronos/web build",
+    "test": "pnpm --filter @kronos/web test",
+    "lint": "pnpm --filter @kronos/web lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "contracts": "python scripts/export_contracts.py && openapi-typescript backend/contracts/schemas/openapi.json -o backend/contracts/generated/api.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.10.1",
+    "prettier": "^3.6.2"
+  }
+}

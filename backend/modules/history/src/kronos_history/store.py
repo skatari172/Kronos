@@ -1,0 +1,188 @@
+import hashlib
+import json
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from kronos_sim.models import (
+    BranchMetadata,
+    SimulationEvent,
+    SnapshotMetadata,
+    WorldState,
+    WorldUpdate,
+)
+from pydantic import TypeAdapter
+from sqlalchemy import (
+    Column,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    insert,
+    select,
+    update,
+)
+
+metadata = MetaData()
+branches = Table(
+    "branches",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("metadata", String, nullable=False),
+    Column("state", String, nullable=False),
+)
+snapshots = Table(
+    "snapshots",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("branch_id", String, nullable=False),
+    Column("sequence", Integer),
+    Column("metadata", String, nullable=False),
+    Column("state", String, nullable=False),
+)
+events = Table(
+    "events",
+    metadata,
+    Column("id", String, primary_key=True),
+    Column("branch_id", String, nullable=False),
+    Column("sequence", Integer, nullable=False),
+    Column("data", String, nullable=False),
+)
+settings = Table(
+    "settings", metadata, Column("key", String, primary_key=True), Column("value", String)
+)
+
+
+class HistoryStore:
+    def __init__(self, url: str):
+        self.engine = create_engine(url, connect_args={"check_same_thread": False})
+        metadata.create_all(self.engine)
+
+    def close(self):
+        self.engine.dispose()
+
+    def active_id(self) -> str | None:
+        with self.engine.connect() as db:
+            return db.execute(select(settings.c.value).where(settings.c.key == "active")).scalar()
+
+    def activate(self, branch_id: str):
+        self.world(branch_id)
+        with self.engine.begin() as db:
+            exists = db.execute(select(settings.c.key).where(settings.c.key == "active")).scalar()
+            if exists:
+                db.execute(
+                    update(settings).where(settings.c.key == "active").values(value=branch_id)
+                )
+            else:
+                db.execute(insert(settings).values(key="active", value=branch_id))
+
+    def _snapshot(self, db, state: WorldState) -> SnapshotMetadata:
+        raw = state.model_dump_json()
+        meta = SnapshotMetadata(
+            id=str(uuid4()),
+            branch_id=state.branch_id,
+            tick=state.tick,
+            sequence=state.sequence,
+            created_at=datetime.now(UTC).isoformat(),
+            integrity_hash=hashlib.sha256(raw.encode()).hexdigest(),
+        )
+        db.execute(
+            insert(snapshots).values(
+                id=meta.id,
+                branch_id=state.branch_id,
+                sequence=state.sequence,
+                metadata=meta.model_dump_json(),
+                state=raw,
+            )
+        )
+        return meta
+
+    def create(self, state: WorldState, meta: BranchMetadata):
+        with self.engine.begin() as db:
+            db.execute(
+                insert(branches).values(
+                    id=meta.id, metadata=meta.model_dump_json(), state=state.model_dump_json()
+                )
+            )
+            self._snapshot(db, state)
+
+    def commit(self, result: WorldUpdate, expected_sequence: int):
+        state = result.state
+        with self.engine.begin() as db:
+            current = db.execute(
+                select(branches.c.state).where(branches.c.id == state.branch_id)
+            ).scalar()
+            if current is None or json.loads(current)["sequence"] != expected_sequence:
+                raise ValueError("Concurrent or stale world update")
+            if not result.events or result.events[0].sequence != expected_sequence + 1:
+                raise ValueError("Commit requires contiguous events")
+            for index, event in enumerate(result.events, expected_sequence + 1):
+                if event.sequence != index or event.branch_id != state.branch_id:
+                    raise ValueError("Event stream mismatch")
+                db.execute(
+                    insert(events).values(
+                        id=event.id,
+                        branch_id=event.branch_id,
+                        sequence=event.sequence,
+                        data=event.model_dump_json(),
+                    )
+                )
+            if result.events[-1].sequence != state.sequence:
+                raise ValueError("State and event versions differ")
+            db.execute(
+                update(branches)
+                .where(branches.c.id == state.branch_id)
+                .values(state=state.model_dump_json())
+            )
+            # Every commit is a checkpoint: simple, exact historical reconstruction, no LLM replay.
+            self._snapshot(db, state)
+
+    def world(self, branch_id: str) -> WorldState:
+        with self.engine.connect() as db:
+            raw = db.execute(select(branches.c.state).where(branches.c.id == branch_id)).scalar()
+        if raw is None:
+            raise KeyError("Unknown branch")
+        return WorldState.model_validate_json(raw)
+
+    def list_branches(self) -> list[BranchMetadata]:
+        with self.engine.connect() as db:
+            return [
+                BranchMetadata.model_validate_json(raw)
+                for raw in db.execute(select(branches.c.metadata).order_by(branches.c.id)).scalars()
+            ]
+
+    def list_snapshots(self, branch_id: str) -> list[SnapshotMetadata]:
+        with self.engine.connect() as db:
+            return [
+                SnapshotMetadata.model_validate_json(raw)
+                for raw in db.execute(
+                    select(snapshots.c.metadata)
+                    .where(snapshots.c.branch_id == branch_id)
+                    .order_by(snapshots.c.sequence)
+                ).scalars()
+            ]
+
+    def restore(self, snapshot_id: str) -> WorldState:
+        with self.engine.connect() as db:
+            row = (
+                db.execute(select(snapshots).where(snapshots.c.id == snapshot_id))
+                .mappings()
+                .first()
+            )
+        if row is None:
+            raise KeyError("Unknown snapshot")
+        meta = SnapshotMetadata.model_validate_json(row["metadata"])
+        if hashlib.sha256(row["state"].encode()).hexdigest() != meta.integrity_hash:
+            raise ValueError("Snapshot integrity check failed")
+        return WorldState.model_validate_json(row["state"])
+
+    def list_events(
+        self, branch_id: str, through: int | None = None, limit: int = 100
+    ) -> list[SimulationEvent]:
+        query = select(events.c.data).where(events.c.branch_id == branch_id)
+        if through is not None:
+            query = query.where(events.c.sequence <= through)
+        with self.engine.connect() as db:
+            rows = list(db.execute(query.order_by(events.c.sequence.desc()).limit(limit)).scalars())
+        adapter = TypeAdapter(SimulationEvent)
+        return [adapter.validate_json(raw) for raw in reversed(rows)]

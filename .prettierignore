@@ -1,0 +1,10 @@
+uv.lock
+pnpm-lock.yaml
+backend/contracts/generated/
+backend/contracts/schemas/
+node_modules/
+.venv/
+dist/
+.tools/
+.cache/
+*.tsbuildinfo

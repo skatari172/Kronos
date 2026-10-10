@@ -1,0 +1,3924 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "KRONOS",
+    "description": "Tools organized by caller and responsibility. All mutations are validated by the simulation engine and saved before broadcasting. Caller groups describe intended usage in one trusted local session; they are not authentication boundaries.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/interventions": {
+      "post": {
+        "tags": [
+          "User tools"
+        ],
+        "summary": "Apply a natural-language intervention",
+        "description": "Parse supported text, validate the current version, then persist and broadcast.",
+        "operationId": "intervene_api_interventions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InterventionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterventionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions": {
+      "post": {
+        "tags": [
+          "User tools"
+        ],
+        "summary": "Execute a player-directed action",
+        "description": "Buy, sell, transfer, price, produce, consume, communicate, build, upgrade, or move.\n\nThe player chooses actor_id; the engine still enforces ownership, funds, and stock.",
+        "operationId": "action_api_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldUpdate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{citizen_id}/observation": {
+      "get": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Read a citizen's current observation",
+        "description": "Read personal state and public bakery prices without advancing the simulation.",
+        "operationId": "observation_api_agents__citizen_id__observation_get",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentObservation"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{citizen_id}/actions/validate": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Validate an agent proposal without committing it",
+        "description": "Dry-run against a copied world. Saves no events, state, snapshots, or RNG changes.\n\nValidation is only valid for the returned sequence; execution rechecks that version.",
+        "operationId": "validate_api_agents__citizen_id__actions_validate_post",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionValidationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{citizen_id}/actions": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Submit an agent action for engine execution",
+        "description": "Require actor_id to match citizen_id, then validate, persist, and broadcast.\n\nThis route submits a proposal to the engine; agents never mutate live state themselves.",
+        "operationId": "execute_api_agents__citizen_id__actions_post",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldUpdate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Backend tools"
+        ],
+        "summary": "Check backend health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/simulation/status": {
+      "get": {
+        "tags": [
+          "Backend tools"
+        ],
+        "summary": "Read playback status",
+        "operationId": "status_api_simulation_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/simulation/tick": {
+      "post": {
+        "tags": [
+          "Backend tools"
+        ],
+        "summary": "Advance the simulation by one day",
+        "operationId": "tick_api_simulation_tick_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MutationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationTickResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/simulation/play": {
+      "post": {
+        "tags": [
+          "Backend tools"
+        ],
+        "summary": "Start the simulation clock",
+        "operationId": "play_api_simulation_play_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/simulation/pause": {
+      "post": {
+        "tags": [
+          "Backend tools"
+        ],
+        "summary": "Pause the simulation clock",
+        "operationId": "pause_api_simulation_pause_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/backend/actions": {
+      "post": {
+        "tags": [
+          "Backend tools"
+        ],
+        "summary": "Execute a backend automation action",
+        "description": "Use the same version, engine, and persistence checks as other action callers.\n\nThis endpoint grants no extra capabilities. In-process jobs may call\nService.execute_action directly instead of making an HTTP request to this server.",
+        "operationId": "action_api_backend_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldUpdate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/simulations": {
+      "post": {
+        "tags": [
+          "Backend tools"
+        ],
+        "summary": "Create an independent village",
+        "description": "Persist a new village; explicitly activate its branch to start using it.",
+        "operationId": "new_simulation_api_simulations_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BranchMetadata"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/world": {
+      "get": {
+        "tags": [
+          "World"
+        ],
+        "summary": "Read the active world",
+        "operationId": "world_api_world_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldUpdate"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/events": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Read the event ledger",
+        "operationId": "events_api_history_events_get",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          },
+          {
+            "name": "through",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Through"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/PriceChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TransactionCompleted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResourceProduced"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResourceConsumed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenMoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenSpawned"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenRemoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingConstructed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingUpgraded"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingRemoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/AgentSpoke"
+                      },
+                      {
+                        "$ref": "#/components/schemas/RelationshipChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/InterventionApplied"
+                      }
+                    ],
+                    "discriminator": {
+                      "propertyName": "type",
+                      "mapping": {
+                        "price_changed": "#/components/schemas/PriceChanged",
+                        "transaction_completed": "#/components/schemas/TransactionCompleted",
+                        "resource_produced": "#/components/schemas/ResourceProduced",
+                        "resource_consumed": "#/components/schemas/ResourceConsumed",
+                        "citizen_moved": "#/components/schemas/CitizenMoved",
+                        "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                        "citizen_removed": "#/components/schemas/CitizenRemoved",
+                        "building_constructed": "#/components/schemas/BuildingConstructed",
+                        "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                        "building_removed": "#/components/schemas/BuildingRemoved",
+                        "agent_spoke": "#/components/schemas/AgentSpoke",
+                        "relationship_changed": "#/components/schemas/RelationshipChanged",
+                        "intervention_applied": "#/components/schemas/InterventionApplied"
+                      }
+                    }
+                  },
+                  "title": "Response Events Api History Events Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/snapshots": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "List saved checkpoints",
+        "operationId": "snapshots_api_history_snapshots_get",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SnapshotMetadata"
+                  },
+                  "title": "Response Snapshots Api History Snapshots Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/history/snapshots/{snapshot_id}": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Read a saved world",
+        "operationId": "snapshot_api_history_snapshots__snapshot_id__get",
+        "parameters": [
+          {
+            "name": "snapshot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Snapshot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldUpdate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "List timelines",
+        "operationId": "branches_api_branches_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BranchMetadata"
+                  },
+                  "type": "array",
+                  "title": "Response Branches Api Branches Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Fork a saved checkpoint",
+        "operationId": "fork_api_branches_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BranchMetadata"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/{branch_id}/activate": {
+      "post": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Switch the active timeline",
+        "operationId": "activate_api_branches__branch_id__activate_post",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldUpdate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branches/{branch_id}/world": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Read a timeline's latest state",
+        "operationId": "branch_world_api_branches__branch_id__world_get",
+        "parameters": [
+          {
+            "name": "branch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Branch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorldUpdate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActionRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "action": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Buy-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Sell-Input"
+              },
+              {
+                "$ref": "#/components/schemas/TransferMoney-Input"
+              },
+              {
+                "$ref": "#/components/schemas/SetPrice-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Produce-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Consume-Input"
+              },
+              {
+                "$ref": "#/components/schemas/Communicate-Input"
+              },
+              {
+                "$ref": "#/components/schemas/ConstructBuilding-Input"
+              },
+              {
+                "$ref": "#/components/schemas/UpgradeBuilding-Input"
+              },
+              {
+                "$ref": "#/components/schemas/MoveTo-Input"
+              }
+            ],
+            "title": "Action",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "buy": "#/components/schemas/Buy-Input",
+                "communicate": "#/components/schemas/Communicate-Input",
+                "construct_building": "#/components/schemas/ConstructBuilding-Input",
+                "consume": "#/components/schemas/Consume-Input",
+                "move_to": "#/components/schemas/MoveTo-Input",
+                "produce": "#/components/schemas/Produce-Input",
+                "sell": "#/components/schemas/Sell-Input",
+                "set_price": "#/components/schemas/SetPrice-Input",
+                "transfer_money": "#/components/schemas/TransferMoney-Input",
+                "upgrade_building": "#/components/schemas/UpgradeBuilding-Input"
+              }
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "action"
+        ],
+        "title": "ActionRequest"
+      },
+      "ActionValidationResult": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "valid": {
+            "type": "boolean",
+            "const": true,
+            "title": "Valid",
+            "default": true
+          },
+          "action": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Buy-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Sell-Output"
+              },
+              {
+                "$ref": "#/components/schemas/TransferMoney-Output"
+              },
+              {
+                "$ref": "#/components/schemas/SetPrice-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Produce-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Consume-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Communicate-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ConstructBuilding-Output"
+              },
+              {
+                "$ref": "#/components/schemas/UpgradeBuilding-Output"
+              },
+              {
+                "$ref": "#/components/schemas/MoveTo-Output"
+              }
+            ],
+            "title": "Action",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "buy": "#/components/schemas/Buy-Output",
+                "communicate": "#/components/schemas/Communicate-Output",
+                "construct_building": "#/components/schemas/ConstructBuilding-Output",
+                "consume": "#/components/schemas/Consume-Output",
+                "move_to": "#/components/schemas/MoveTo-Output",
+                "produce": "#/components/schemas/Produce-Output",
+                "sell": "#/components/schemas/Sell-Output",
+                "set_price": "#/components/schemas/SetPrice-Output",
+                "transfer_money": "#/components/schemas/TransferMoney-Output",
+                "upgrade_building": "#/components/schemas/UpgradeBuilding-Output"
+              }
+            }
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "sequence",
+          "valid",
+          "action"
+        ],
+        "title": "ActionValidationResult"
+      },
+      "AgentObservation": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "citizen": {
+            "$ref": "#/components/schemas/Citizen"
+          },
+          "bread_prices": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Bread Prices"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "tick",
+          "sequence",
+          "citizen",
+          "bread_prices"
+        ],
+        "title": "AgentObservation"
+      },
+      "AgentSpoke": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "agent_spoke",
+            "title": "Type",
+            "default": "agent_spoke"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SpeechPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "AgentSpoke"
+      },
+      "BranchMetadata": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "parent_branch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Branch Id"
+          },
+          "source_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Snapshot Id"
+          },
+          "fork_tick": {
+            "type": "integer",
+            "title": "Fork Tick",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "parent_branch_id",
+          "source_snapshot_id",
+          "fork_tick"
+        ],
+        "title": "BranchMetadata"
+      },
+      "BranchRequest": {
+        "properties": {
+          "snapshot_id": {
+            "type": "string",
+            "title": "Snapshot Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "snapshot_id",
+          "name"
+        ],
+        "title": "BranchRequest"
+      },
+      "Building": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "farm",
+              "bakery",
+              "market"
+            ],
+            "title": "Kind"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "Owner Id"
+          },
+          "cash": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Cash",
+            "default": 10000
+          },
+          "level": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "default": 1
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/ResourceInventory"
+          },
+          "prices": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Prices"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "plot_id",
+          "position",
+          "owner_id",
+          "cash",
+          "level",
+          "inventory",
+          "prices"
+        ],
+        "title": "Building"
+      },
+      "BuildingConstructed": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "building_constructed",
+            "title": "Type",
+            "default": "building_constructed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EntityPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "BuildingConstructed"
+      },
+      "BuildingRemoved": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "building_removed",
+            "title": "Type",
+            "default": "building_removed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EntityPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "BuildingRemoved"
+      },
+      "BuildingUpgraded": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "building_upgraded",
+            "title": "Type",
+            "default": "building_upgraded"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EntityPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "BuildingUpgraded"
+      },
+      "Buy-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "buy",
+            "title": "Type",
+            "default": "buy"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          },
+          "max_unit_price": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Unit Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id",
+          "resource",
+          "quantity",
+          "max_unit_price"
+        ],
+        "title": "Buy"
+      },
+      "Buy-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "buy",
+            "title": "Type",
+            "default": "buy"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          },
+          "max_unit_price": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Unit Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id",
+          "resource",
+          "quantity",
+          "max_unit_price"
+        ],
+        "title": "Buy"
+      },
+      "Citizen": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "occupation": {
+            "type": "string",
+            "title": "Occupation"
+          },
+          "employer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employer Id"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "money": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Money"
+          },
+          "hunger": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Hunger",
+            "default": 20
+          },
+          "inventory": {
+            "$ref": "#/components/schemas/ResourceInventory"
+          },
+          "goals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Goals"
+          },
+          "personality": {
+            "type": "string",
+            "title": "Personality",
+            "default": "practical"
+          },
+          "relationships": {
+            "items": {
+              "$ref": "#/components/schemas/Relationship"
+            },
+            "type": "array",
+            "title": "Relationships"
+          },
+          "memories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Memories"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "occupation",
+          "employer_id",
+          "position",
+          "money",
+          "hunger",
+          "inventory",
+          "goals",
+          "personality",
+          "relationships",
+          "memories"
+        ],
+        "title": "Citizen"
+      },
+      "CitizenMoved": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "citizen_moved",
+            "title": "Type",
+            "default": "citizen_moved"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EntityPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "CitizenMoved"
+      },
+      "CitizenRemoved": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "citizen_removed",
+            "title": "Type",
+            "default": "citizen_removed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EntityPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "CitizenRemoved"
+      },
+      "CitizenSpawned": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "citizen_spawned",
+            "title": "Type",
+            "default": "citizen_spawned"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/EntityPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "CitizenSpawned"
+      },
+      "Communicate-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "communicate",
+            "title": "Type",
+            "default": "communicate"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "recipient_id",
+          "message"
+        ],
+        "title": "Communicate"
+      },
+      "Communicate-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "communicate",
+            "title": "Type",
+            "default": "communicate"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "recipient_id",
+          "message"
+        ],
+        "title": "Communicate"
+      },
+      "ConstructBuilding-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "construct_building",
+            "title": "Type",
+            "default": "construct_building"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "farm",
+              "bakery",
+              "market"
+            ],
+            "title": "Kind"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "plot_id",
+          "kind"
+        ],
+        "title": "ConstructBuilding"
+      },
+      "ConstructBuilding-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "construct_building",
+            "title": "Type",
+            "default": "construct_building"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "farm",
+              "bakery",
+              "market"
+            ],
+            "title": "Kind"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "plot_id",
+          "kind"
+        ],
+        "title": "ConstructBuilding"
+      },
+      "Consume-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "consume",
+            "title": "Type",
+            "default": "consume"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id"
+        ],
+        "title": "Consume"
+      },
+      "Consume-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "consume",
+            "title": "Type",
+            "default": "consume"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type"
+        ],
+        "title": "Consume"
+      },
+      "EntityPayload": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Position"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entity_id",
+          "position",
+          "level"
+        ],
+        "title": "EntityPayload"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InterventionApplied": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "intervention_applied",
+            "title": "Type",
+            "default": "intervention_applied"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/InterventionPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "InterventionApplied"
+      },
+      "InterventionPayload": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "scope": {
+            "type": "string",
+            "const": "all_bakeries",
+            "title": "Scope",
+            "default": "all_bakeries"
+          },
+          "percent": {
+            "type": "integer",
+            "title": "Percent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "scope",
+          "percent"
+        ],
+        "title": "InterventionPayload"
+      },
+      "InterventionRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "branch_id",
+          "expected_sequence"
+        ],
+        "title": "InterventionRequest"
+      },
+      "InterventionResult": {
+        "properties": {
+          "command": {
+            "$ref": "#/components/schemas/PriceIntervention"
+          },
+          "update": {
+            "$ref": "#/components/schemas/WorldUpdate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "command",
+          "update"
+        ],
+        "title": "InterventionResult"
+      },
+      "MoveTo-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "move_to",
+            "title": "Type",
+            "default": "move_to"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "plot_id"
+        ],
+        "title": "MoveTo"
+      },
+      "MoveTo-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "move_to",
+            "title": "Type",
+            "default": "move_to"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "plot_id"
+        ],
+        "title": "MoveTo"
+      },
+      "MutationRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence"
+        ],
+        "title": "MutationRequest"
+      },
+      "PlayRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "speed": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              4
+            ],
+            "title": "Speed",
+            "default": 1
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence"
+        ],
+        "title": "PlayRequest"
+      },
+      "Plot": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "position"
+        ],
+        "title": "Plot"
+      },
+      "Position": {
+        "properties": {
+          "x": {
+            "type": "number",
+            "title": "X"
+          },
+          "z": {
+            "type": "number",
+            "title": "Z"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "x",
+          "z"
+        ],
+        "title": "Position"
+      },
+      "PriceChanged": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "price_changed",
+            "title": "Type",
+            "default": "price_changed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/PricePayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "PriceChanged"
+      },
+      "PriceIntervention": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "modify_price",
+            "title": "Type",
+            "default": "modify_price"
+          },
+          "resource": {
+            "type": "string",
+            "const": "bread",
+            "title": "Resource",
+            "default": "bread"
+          },
+          "scope": {
+            "type": "string",
+            "const": "all_bakeries",
+            "title": "Scope",
+            "default": "all_bakeries"
+          },
+          "percent": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": -90.0,
+            "title": "Percent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "resource",
+          "scope",
+          "percent"
+        ],
+        "title": "PriceIntervention"
+      },
+      "PricePayload": {
+        "properties": {
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "title": "Resource"
+          },
+          "old_price": {
+            "type": "integer",
+            "title": "Old Price"
+          },
+          "new_price": {
+            "type": "integer",
+            "title": "New Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "building_id",
+          "resource",
+          "old_price",
+          "new_price"
+        ],
+        "title": "PricePayload"
+      },
+      "Produce-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "produce",
+            "title": "Type",
+            "default": "produce"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id"
+        ],
+        "title": "Produce"
+      },
+      "Produce-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "produce",
+            "title": "Type",
+            "default": "produce"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id"
+        ],
+        "title": "Produce"
+      },
+      "Relationship": {
+        "properties": {
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          },
+          "trust": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "title": "Trust",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "citizen_id",
+          "trust"
+        ],
+        "title": "Relationship"
+      },
+      "RelationshipChanged": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "relationship_changed",
+            "title": "Type",
+            "default": "relationship_changed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/RelationshipPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "RelationshipChanged"
+      },
+      "RelationshipPayload": {
+        "properties": {
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "trust": {
+            "type": "integer",
+            "title": "Trust"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recipient_id",
+          "trust"
+        ],
+        "title": "RelationshipPayload"
+      },
+      "ResourceConsumed": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "resource_consumed",
+            "title": "Type",
+            "default": "resource_consumed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ResourcePayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "ResourceConsumed"
+      },
+      "ResourceInventory": {
+        "properties": {
+          "wheat": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Wheat",
+            "default": 0
+          },
+          "bread": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Bread",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "wheat",
+          "bread"
+        ],
+        "title": "ResourceInventory"
+      },
+      "ResourcePayload": {
+        "properties": {
+          "entity_id": {
+            "type": "string",
+            "title": "Entity Id"
+          },
+          "resource": {
+            "type": "string",
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entity_id",
+          "resource",
+          "quantity"
+        ],
+        "title": "ResourcePayload"
+      },
+      "ResourceProduced": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "resource_produced",
+            "title": "Type",
+            "default": "resource_produced"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ResourcePayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "ResourceProduced"
+      },
+      "Sell-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "sell",
+            "title": "Type",
+            "default": "sell"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id",
+          "resource",
+          "quantity"
+        ],
+        "title": "Sell"
+      },
+      "Sell-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "sell",
+            "title": "Type",
+            "default": "sell"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id",
+          "resource",
+          "quantity"
+        ],
+        "title": "Sell"
+      },
+      "SetPrice-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "set_price",
+            "title": "Type",
+            "default": "set_price"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "price": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id",
+          "resource",
+          "price"
+        ],
+        "title": "SetPrice"
+      },
+      "SetPrice-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "set_price",
+            "title": "Type",
+            "default": "set_price"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          },
+          "resource": {
+            "type": "string",
+            "enum": [
+              "bread",
+              "wheat"
+            ],
+            "title": "Resource"
+          },
+          "price": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Price"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id",
+          "resource",
+          "price"
+        ],
+        "title": "SetPrice"
+      },
+      "SimulationStatus": {
+        "properties": {
+          "playing": {
+            "type": "boolean",
+            "title": "Playing"
+          },
+          "speed": {
+            "type": "integer",
+            "title": "Speed"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "playing",
+          "speed",
+          "branch_id",
+          "error"
+        ],
+        "title": "SimulationStatus"
+      },
+      "SimulationTickResult": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorldState"
+          },
+          "events": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PriceChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TransactionCompleted"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceProduced"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceConsumed"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenMoved"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenSpawned"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingConstructed"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingUpgraded"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/AgentSpoke"
+                },
+                {
+                  "$ref": "#/components/schemas/RelationshipChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/InterventionApplied"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "agent_spoke": "#/components/schemas/AgentSpoke",
+                  "building_constructed": "#/components/schemas/BuildingConstructed",
+                  "building_removed": "#/components/schemas/BuildingRemoved",
+                  "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                  "citizen_moved": "#/components/schemas/CitizenMoved",
+                  "citizen_removed": "#/components/schemas/CitizenRemoved",
+                  "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "intervention_applied": "#/components/schemas/InterventionApplied",
+                  "price_changed": "#/components/schemas/PriceChanged",
+                  "relationship_changed": "#/components/schemas/RelationshipChanged",
+                  "resource_consumed": "#/components/schemas/ResourceConsumed",
+                  "resource_produced": "#/components/schemas/ResourceProduced",
+                  "transaction_completed": "#/components/schemas/TransactionCompleted"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "rejected_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rejected Actions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "tick",
+          "sequence",
+          "state",
+          "events",
+          "rejected_actions"
+        ],
+        "title": "SimulationTickResult"
+      },
+      "SnapshotMetadata": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "integrity_hash": {
+            "type": "string",
+            "title": "Integrity Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "created_at",
+          "integrity_hash"
+        ],
+        "title": "SnapshotMetadata"
+      },
+      "SpeechPayload": {
+        "properties": {
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recipient_id",
+          "message"
+        ],
+        "title": "SpeechPayload"
+      },
+      "TransactionCompleted": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "type": {
+            "type": "string",
+            "const": "transaction_completed",
+            "title": "Type",
+            "default": "transaction_completed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TransactionPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "type",
+          "payload"
+        ],
+        "title": "TransactionCompleted"
+      },
+      "TransactionPayload": {
+        "properties": {
+          "sender_id": {
+            "type": "string",
+            "title": "Sender Id"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "amount": {
+            "type": "integer",
+            "title": "Amount"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sender_id",
+          "recipient_id",
+          "amount",
+          "resource",
+          "quantity"
+        ],
+        "title": "TransactionPayload"
+      },
+      "TransferMoney-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "transfer_money",
+            "title": "Type",
+            "default": "transfer_money"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "amount": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "recipient_id",
+          "amount"
+        ],
+        "title": "TransferMoney"
+      },
+      "TransferMoney-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "transfer_money",
+            "title": "Type",
+            "default": "transfer_money"
+          },
+          "recipient_id": {
+            "type": "string",
+            "title": "Recipient Id"
+          },
+          "amount": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "recipient_id",
+          "amount"
+        ],
+        "title": "TransferMoney"
+      },
+      "UpgradeBuilding-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "upgrade_building",
+            "title": "Type",
+            "default": "upgrade_building"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "building_id"
+        ],
+        "title": "UpgradeBuilding"
+      },
+      "UpgradeBuilding-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "upgrade_building",
+            "title": "Type",
+            "default": "upgrade_building"
+          },
+          "building_id": {
+            "type": "string",
+            "title": "Building Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "building_id"
+        ],
+        "title": "UpgradeBuilding"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WorldState": {
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1,
+            "title": "Schema Version",
+            "default": 1
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick",
+            "default": 0
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence",
+            "default": 0
+          },
+          "seed": {
+            "type": "integer",
+            "title": "Seed"
+          },
+          "rng_state": {
+            "items": {},
+            "type": "array",
+            "title": "Rng State"
+          },
+          "citizens": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Citizen"
+            },
+            "type": "object",
+            "title": "Citizens"
+          },
+          "buildings": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Building"
+            },
+            "type": "object",
+            "title": "Buildings"
+          },
+          "plots": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Plot"
+            },
+            "type": "object",
+            "title": "Plots"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "schema_version",
+          "branch_id",
+          "tick",
+          "sequence",
+          "seed",
+          "rng_state",
+          "citizens",
+          "buildings",
+          "plots"
+        ],
+        "title": "WorldState"
+      },
+      "WorldUpdate": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorldState"
+          },
+          "events": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PriceChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/TransactionCompleted"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceProduced"
+                },
+                {
+                  "$ref": "#/components/schemas/ResourceConsumed"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenMoved"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenSpawned"
+                },
+                {
+                  "$ref": "#/components/schemas/CitizenRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingConstructed"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingUpgraded"
+                },
+                {
+                  "$ref": "#/components/schemas/BuildingRemoved"
+                },
+                {
+                  "$ref": "#/components/schemas/AgentSpoke"
+                },
+                {
+                  "$ref": "#/components/schemas/RelationshipChanged"
+                },
+                {
+                  "$ref": "#/components/schemas/InterventionApplied"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "agent_spoke": "#/components/schemas/AgentSpoke",
+                  "building_constructed": "#/components/schemas/BuildingConstructed",
+                  "building_removed": "#/components/schemas/BuildingRemoved",
+                  "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                  "citizen_moved": "#/components/schemas/CitizenMoved",
+                  "citizen_removed": "#/components/schemas/CitizenRemoved",
+                  "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "intervention_applied": "#/components/schemas/InterventionApplied",
+                  "price_changed": "#/components/schemas/PriceChanged",
+                  "relationship_changed": "#/components/schemas/RelationshipChanged",
+                  "resource_consumed": "#/components/schemas/ResourceConsumed",
+                  "resource_produced": "#/components/schemas/ResourceProduced",
+                  "transaction_completed": "#/components/schemas/TransactionCompleted"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "tick",
+          "sequence",
+          "state",
+          "events"
+        ],
+        "title": "WorldUpdate"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "User tools",
+      "description": "Player interventions and explicit citizen actions."
+    },
+    {
+      "name": "Agent tools",
+      "description": "Citizen observations, proposal validation, and execution."
+    },
+    {
+      "name": "Backend tools",
+      "description": "Simulation clock, village creation, health, and automation."
+    },
+    {
+      "name": "World",
+      "description": "Authoritative world queries. Live updates use WS /ws/world."
+    },
+    {
+      "name": "History",
+      "description": "Events, checkpoints, and alternate timelines."
+    }
+  ]
+}

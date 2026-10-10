@@ -1,0 +1,10 @@
+import type { components } from "../../../backend/contracts/generated/api";
+export type WorldState = components["schemas"]["WorldState"];
+export type WorldUpdate = components["schemas"]["WorldUpdate"];
+export type Citizen = components["schemas"]["Citizen"];
+export type Building = components["schemas"]["Building"];
+export type SimulationEvent = WorldUpdate["events"][number];
+export type Branch = components["schemas"]["BranchMetadata"];
+export type Snapshot = components["schemas"]["SnapshotMetadata"];
+export type Status = components["schemas"]["SimulationStatus"];
+export type InterventionResult = components["schemas"]["InterventionResult"];
