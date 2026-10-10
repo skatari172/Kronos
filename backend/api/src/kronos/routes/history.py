@@ -27,6 +27,8 @@ async def events_after(
     limit: int = Query(100, ge=1, le=500),
 ):
     return service.store.list_events_after(service.state.branch_id, after, limit)
+
+
 @router.get("/events", response_model=m.EventPage, summary="Page through the event log")
 async def event_log(
     service: ServiceDependency,

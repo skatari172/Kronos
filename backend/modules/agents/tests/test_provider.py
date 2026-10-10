@@ -173,6 +173,8 @@ def test_mock_ignores_a_cheaper_empty_bakery():
     assert (
         action.type == "communicate" and action.message == "There is no bread in stock right now."
     )
+
+
 CITIZENS = {"citizen-2": "Ada", "citizen-6": "Finn"}
 
 

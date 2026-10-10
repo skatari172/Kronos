@@ -698,6 +698,8 @@ def test_closing_business_immediately_rejects_pending_applications():
     assert event.payload.outcome == "rejected" and event.actor_id == "citizen-2"
     following = Engine(closed.state).tick()
     assert not any(e.type == "job_application_resolved" for e in following.events)
+
+
 def test_applications_to_vanished_businesses_are_withdrawn():
     state = apply_job(initial_world(), "citizen-5", "market").state
     del state.buildings["market"]  # Gone without _close (e.g. an older saved world).

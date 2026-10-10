@@ -310,6 +310,7 @@ class AgentService:
             *(self.decide(observation) for observation in selected), return_exceptions=True
         )
         return [outcome for outcome in outcomes if not isinstance(outcome, BaseException)]
+
     def scheduled(self, world: WorldState) -> list[str]:
         """Citizens whose slot falls on the coming day, in stable ID order.
 
