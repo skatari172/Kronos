@@ -67,3 +67,29 @@ def test_proposals_are_bounded_and_social_effects_persist():
     assert result.state.citizens["citizen-0"].relationships[0].trust == 1
     assert result.state.rng_state != before.rng_state
     assert len(result.state.citizens["citizen-0"].memories) == 1
+
+
+def test_mock_decisions_follow_needs():
+    from kronos_sim.queries import observe
+
+    state = initial_world()
+    service = AgentService(MockProvider())
+    state.citizens["citizen-6"].hunger = 60
+    assert asyncio.run(service.decide(observe(state, "citizen-6"))).type == "consume"
+    state.citizens["citizen-6"].inventory.bread = 0
+    action = asyncio.run(service.decide(observe(state, "citizen-6")))
+    assert (action.type, action.building_id, action.max_unit_price) == ("buy", "bakery", 500)
+    state.citizens["citizen-6"].money = 10
+    action = asyncio.run(service.decide(observe(state, "citizen-6")))
+    assert (action.type, action.recipient_id) == ("communicate", "citizen-0")
+
+
+def test_ask_rejects_citations_outside_given_events():
+    from kronos_sim.queries import observe
+
+    class Liar:
+        async def complete(self, task, observation):
+            return '{"answer": "Because of the war", "cited_event_ids": ["main:999"]}'
+
+    with pytest.raises(ProviderError):
+        asyncio.run(AgentService(Liar()).ask("Why?", observe(initial_world(), "citizen-0"), []))

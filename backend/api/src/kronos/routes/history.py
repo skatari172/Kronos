@@ -69,3 +69,35 @@ async def activate(branch_id: str, service: ServiceDependency):
 )
 async def branch_world(branch_id: str, service: ServiceDependency):
     return service.update(service.store.world(branch_id))
+
+
+@router.get(
+    "/agents/{citizen_id}/history",
+    response_model=list[m.SimulationEvent],
+    summary="Read events a citizen took part in",
+)
+async def citizen_history(
+    citizen_id: str,
+    service: ServiceDependency,
+    branch_id: str | None = None,
+    through: int | None = None,
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Events where the citizen is the actor, sender, recipient, or subject; oldest first.
+
+    Defaults to the active branch.
+    """
+    branch_id = branch_id or service.state.branch_id
+    if citizen_id not in service.store.world(branch_id).citizens:
+        raise KeyError("Unknown citizen")
+    return service.store.list_citizen_events(branch_id, citizen_id, through, limit)
+
+
+@router.get(
+    "/actions/{action_id}",
+    response_model=m.ActionResult,
+    summary="Read the outcome of an agent action",
+)
+async def action_result(action_id: str, service: ServiceDependency):
+    """Actions apply immediately, so this never reports "queued"; it rebuilds the result."""
+    return service.action_result(action_id)

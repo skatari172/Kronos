@@ -192,3 +192,113 @@ def test_other_callers_report_error_codes_without_logging(client):
     assert response.status_code == 422
     assert response.json()["code"] == "lot_occupied"
     assert client.get("/api/history/events?branch_id=main").json() == []
+
+
+def mutation(sequence=0):
+    return {"branch_id": "main", "expected_sequence": sequence}
+
+
+def test_list_and_read_agents_with_derived_fields(client):
+    agents = client.get("/api/agents").json()
+    assert [a["citizen"]["id"] for a in agents] == [f"citizen-{i}" for i in range(7)]
+    owners = client.get("/api/agents?role=business_owner").json()
+    assert [a["citizen"]["id"] for a in owners] == ["citizen-0", "citizen-1", "citizen-2"]
+    assert all(a["owned_building_ids"] for a in owners)
+    jobless = client.get("/api/agents?employed=false").json()
+    assert [a["citizen"]["id"] for a in jobless] == ["citizen-5", "citizen-6"]
+    poor = client.get("/api/agents?wealth_tier=poor&role=commoner").json()
+    assert [a["citizen"]["id"] for a in poor] == ["citizen-3", "citizen-4", "citizen-6"]
+    one = client.get("/api/agents/citizen-5").json()
+    assert (one["role"], one["wealth_tier"], one["employed"]) == ("commoner", "middle", False)
+    assert one["citizen"]["goal_weights"]["wealth"] == 25
+    assert client.get("/api/agents/missing").status_code == 404
+    assert client.get("/api/agents?role=king").status_code == 422
+
+
+def test_spawn_citizen_through_engine(client):
+    body = {**mutation(), "name": "Nico", "occupation": "Apprentice", "plot_id": "plot-4"}
+    response = client.post("/api/agents", json=body)
+    assert response.status_code == 201
+    result = response.json()
+    assert result["citizen_id"] == "citizen-main-1"
+    assert result["update"]["events"][0]["type"] == "citizen_spawned"
+    nico = client.get("/api/agents/citizen-main-1").json()
+    assert nico["citizen"]["money"] == 0 and nico["role"] == "commoner"
+    assert client.post("/api/agents", json=body).status_code == 409
+    bad = client.post("/api/agents", json={**body, "expected_sequence": 1, "plot_id": "nowhere"})
+    assert bad.status_code == 422 and bad.json()["code"] == "unknown_entity"
+
+
+def test_citizen_history_includes_actor_and_recipient_events(client):
+    say = {
+        **mutation(),
+        "action": {
+            "type": "communicate",
+            "actor_id": "citizen-2",
+            "recipient_id": "citizen-3",
+            "message": "Hello",
+        },
+    }
+    assert client.post("/api/agents/citizen-2/actions", json=say).json()["status"] == "applied"
+    speaker = client.get("/api/agents/citizen-2/history").json()
+    listener = client.get("/api/agents/citizen-3/history").json()
+    assert [e["type"] for e in speaker] == ["agent_spoke", "relationship_changed"]
+    assert [e["type"] for e in listener] == ["agent_spoke", "relationship_changed"]
+    assert client.get("/api/agents/citizen-4/history").json() == []
+    assert client.get("/api/agents/citizen-2/history?limit=1").json() == speaker[-1:]
+    assert client.get("/api/agents/missing/history").status_code == 404
+
+
+def test_action_results_can_be_read_back(client):
+    applied = client.post("/api/agents/citizen-1/actions", json=construct("plot-3")).json()
+    rejected = client.post("/api/agents/citizen-1/actions", json=construct("plot-0", 1)).json()
+    assert client.get(f"/api/actions/{applied['action_id']}").json() == applied
+    assert client.get(f"/api/actions/{rejected['action_id']}").json() == rejected
+    assert client.get("/api/actions/action-main:99").status_code == 404
+    assert client.get("/api/actions/garbage").status_code == 404
+    # User-route actions are not agent actions and have no action ID.
+    client.post("/api/actions", json=construct("plot-4", 2))
+    assert client.get("/api/actions/action-main:2").status_code == 404
+
+
+def test_decide_submits_the_provider_choice(client):
+    state = client.get("/api/agents/citizen-6").json()
+    assert state["citizen"]["inventory"]["bread"] == 1
+    response = client.post("/api/agents/citizen-6/decide", json=mutation())
+    assert response.status_code == 200
+    decision = response.json()
+    assert decision["action"]["type"] == "communicate"
+    assert decision["action"]["actor_id"] == "citizen-6"
+    assert decision["result"]["status"] == "applied"
+    events = client.get("/api/history/events?branch_id=main").json()
+    assert [e["id"] for e in events] == decision["result"]["event_ids"]
+    assert all(e["action_id"] == decision["result"]["action_id"] for e in events)
+    assert client.post("/api/agents/citizen-6/decide", json=mutation()).status_code == 409
+    assert client.post("/api/agents/missing/decide", json=mutation(2)).status_code == 404
+
+
+def test_ask_is_read_only_and_cites_own_events(client):
+    empty = client.post("/api/agents/citizen-4/ask", json={"question": "How are you?"}).json()
+    assert empty == {"answer": "Nothing has happened to me yet.", "cited_event_ids": []}
+    client.post("/api/agents/citizen-6/decide", json=mutation())
+    before = client.get("/api/world").json()
+    answer = client.post("/api/agents/citizen-6/ask", json={"question": "What did you do?"})
+    assert answer.status_code == 200
+    own = {e["id"] for e in client.get("/api/agents/citizen-6/history").json()}
+    assert answer.json()["cited_event_ids"] and set(answer.json()["cited_event_ids"]) <= own
+    assert client.get("/api/world").json() == before
+    assert client.post("/api/agents/citizen-6/ask", json={"question": ""}).status_code == 422
+
+
+def test_goal_update_is_bounded_and_renormalised(client):
+    body = {**mutation(), "changes": {"wealth": 10, "safety": -10}, "rationale": "Saving up"}
+    response = client.patch("/api/agents/citizen-6/goals", json=body)
+    assert response.status_code == 200 and response.json()["status"] == "applied"
+    weights = client.get("/api/agents/citizen-6").json()["citizen"]["goal_weights"]
+    assert weights == {"wealth": 35, "influence": 25, "safety": 15, "reputation": 25}
+    event = client.get("/api/agents/citizen-6/history").json()[-1]
+    assert event["type"] == "goals_changed" and event["rationale"] == "Saving up"
+    too_big = {**mutation(1), "changes": {"wealth": 11}}
+    assert client.patch("/api/agents/citizen-6/goals", json=too_big).status_code == 422
+    nothing = {**mutation(1), "changes": {}}
+    assert client.patch("/api/agents/citizen-6/goals", json=nothing).status_code == 422

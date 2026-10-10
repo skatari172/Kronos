@@ -659,6 +659,12 @@
           "Stay fed",
           "Save for tomorrow"
         ],
+        "goal_weights": {
+          "wealth": 25,
+          "influence": 25,
+          "safety": 25,
+          "reputation": 25
+        },
         "personality": "practical",
         "relationships": [],
         "memories": []
@@ -682,6 +688,12 @@
           "Stay fed",
           "Save for tomorrow"
         ],
+        "goal_weights": {
+          "wealth": 25,
+          "influence": 25,
+          "safety": 25,
+          "reputation": 25
+        },
         "personality": "practical",
         "relationships": [],
         "memories": []
@@ -705,6 +717,12 @@
           "Stay fed",
           "Save for tomorrow"
         ],
+        "goal_weights": {
+          "wealth": 25,
+          "influence": 25,
+          "safety": 25,
+          "reputation": 25
+        },
         "personality": "practical",
         "relationships": [],
         "memories": []
@@ -728,6 +746,12 @@
           "Stay fed",
           "Save for tomorrow"
         ],
+        "goal_weights": {
+          "wealth": 25,
+          "influence": 25,
+          "safety": 25,
+          "reputation": 25
+        },
         "personality": "practical",
         "relationships": [],
         "memories": []
@@ -751,6 +775,12 @@
           "Stay fed",
           "Save for tomorrow"
         ],
+        "goal_weights": {
+          "wealth": 25,
+          "influence": 25,
+          "safety": 25,
+          "reputation": 25
+        },
         "personality": "practical",
         "relationships": [],
         "memories": []
@@ -774,6 +804,12 @@
           "Stay fed",
           "Save for tomorrow"
         ],
+        "goal_weights": {
+          "wealth": 25,
+          "influence": 25,
+          "safety": 25,
+          "reputation": 25
+        },
         "personality": "practical",
         "relationships": [],
         "memories": []
@@ -797,6 +833,12 @@
           "Stay fed",
           "Save for tomorrow"
         ],
+        "goal_weights": {
+          "wealth": 25,
+          "influence": 25,
+          "safety": 25,
+          "reputation": 25
+        },
         "personality": "practical",
         "relationships": [],
         "memories": []

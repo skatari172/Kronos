@@ -9,12 +9,17 @@ from kronos_sim.models import (
     ActionRequest,
     ActionResult,
     ActionValidationResult,
+    AskResult,
     BranchMetadata,
+    DecisionResult,
     MutationRequest,
     SimulationStatus,
+    SpawnCitizenRequest,
+    SpawnResult,
     WorldState,
     WorldUpdate,
 )
+from kronos_sim.queries import observe
 from kronos_sim.seed import initial_world
 
 from kronos.config import Settings
@@ -120,10 +125,10 @@ class Service:
             self._authorize(body, citizen_id)
             action_id = f"action-{self.state.branch_id}:{self.state.sequence}"
             try:
-                result = await self.commit(Engine(self.state).apply(body.action))
+                result = await self.commit(Engine(self.state).apply(body.action, action_id))
                 status, error = "applied", None
             except InvalidAction as exc:
-                result = await self.commit(Engine(self.state).reject(body.action, exc))
+                result = await self.commit(Engine(self.state).reject(body.action, exc, action_id))
                 status, error = "rejected", exc
             return ActionResult(
                 action_id=action_id,
@@ -135,6 +140,66 @@ class Service:
                 error=error.code if error else None,
                 message=str(error) if error else None,
             )
+
+    def action_result(self, action_id: str) -> ActionResult:
+        """Rebuild an agent action's outcome from the events tagged with its ID."""
+        try:
+            branch_id, before = action_id.removeprefix("action-").rsplit(":", 1)
+            after = int(before)
+        except ValueError:
+            raise KeyError("Unknown action") from None
+        tagged = []
+        for event in self.store.list_events_after(branch_id, after, limit=50):
+            if event.action_id != action_id:
+                break
+            tagged.append(event)
+        if not tagged:
+            raise KeyError("Unknown action")
+        rejection = next((e for e in tagged if e.type == "action_rejected"), None)
+        return ActionResult(
+            action_id=action_id,
+            branch_id=branch_id,
+            status="rejected" if rejection else "applied",
+            tick=tagged[0].tick,
+            sequence=tagged[-1].sequence,
+            event_ids=[event.id for event in tagged],
+            error=rejection.payload.code if rejection else None,
+            message=rejection.payload.message if rejection else None,
+        )
+
+    async def decide(self, citizen_id: str, request: MutationRequest) -> DecisionResult:
+        """Ask the provider for one action, then submit it like any other agent action.
+
+        The provider call happens outside the lock; if the world moves on meanwhile, the
+        submission fails the version check (409) instead of applying a stale decision.
+        """
+        async with self.lock:
+            self.check(request)
+            observation = observe(self.state, citizen_id)
+        action = await self.agents.decide(observation)
+        body = ActionRequest(
+            branch_id=observation.branch_id,
+            expected_sequence=observation.sequence,
+            action=action,
+        )
+        return DecisionResult(
+            action=action, result=await self.submit_agent_action(body, citizen_id)
+        )
+
+    async def ask(self, citizen_id: str, question: str) -> AskResult:
+        """Read-only grounded Q&A over the citizen's own events on the active branch."""
+        async with self.lock:
+            observation = observe(self.state, citizen_id)
+        events = self.store.list_citizen_events(
+            observation.branch_id, citizen_id, observation.sequence, limit=20
+        )
+        return await self.agents.ask(question, observation, events)
+
+    async def spawn(self, request: SpawnCitizenRequest) -> SpawnResult:
+        async with self.lock:
+            self.check(request)
+            result = await self.commit(Engine(self.state).spawn(request))
+            return SpawnResult(citizen_id=result.events[0].payload.entity_id, update=result)
 
     async def validate_action(self, body: ActionRequest, citizen_id: str):
         """Run engine checks without changing live state, persistence, or clients."""

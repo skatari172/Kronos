@@ -28,6 +28,8 @@ function describe(event: SimulationEvent) {
       return event.payload.message;
     case "relationship_changed":
       return `Familiarity grows · trust ${event.payload.trust}`;
+    case "goals_changed":
+      return "A citizen rethinks what matters most";
     case "action_rejected":
       return `A plan fell through · ${event.payload.message}`;
     default:

@@ -18,6 +18,7 @@ export function mockEvent(current: WorldUpdate, index: number): WorldUpdate {
     actor_id: null,
     rationale: null,
     causal_refs: [],
+    action_id: null,
   };
   let event: SimulationEvent;
   switch (index % 6) {

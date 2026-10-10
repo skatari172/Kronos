@@ -216,3 +216,58 @@ def test_reject_logs_event_and_memory_without_other_changes():
     assert result.state.buildings == state.buildings
     assert result.state.rng_state == state.rng_state
     assert result.sequence == state.sequence + 1
+
+
+def test_every_action_type_is_supported_or_explicitly_planned():
+    from typing import get_args
+
+    from kronos_sim.engine import SUPPORTED_ACTIONS
+    from kronos_sim.models import AgentAction
+
+    union = get_args(get_args(AgentAction)[0])
+    types = {cls.model_fields["type"].default for cls in union}
+    assert set(SUPPORTED_ACTIONS) <= types
+    assert len(types) == 33
+
+
+@pytest.mark.parametrize(
+    "changes,expected",
+    [
+        ({"wealth": 10}, {"wealth": 32, "influence": 23, "safety": 23, "reputation": 22}),
+        (
+            {"wealth": 10, "influence": -10, "safety": -10, "reputation": -10},
+            {"wealth": 44, "influence": 19, "safety": 19, "reputation": 18},
+        ),
+        (
+            {"safety": 5, "reputation": -5},
+            {"wealth": 25, "influence": 25, "safety": 30, "reputation": 20},
+        ),
+    ],
+)
+def test_goal_adjustment_clamps_and_renormalises_to_100(changes, expected):
+    from kronos_sim.models import AdjustGoals, GoalWeightChanges
+
+    action = AdjustGoals(actor_id="citizen-0", changes=GoalWeightChanges(**changes))
+    result = Engine(initial_world()).apply(action, action_id="action-main:0")
+    assert result.state.citizens["citizen-0"].goal_weights.model_dump() == expected
+    assert result.events[0].type == "goals_changed"
+    assert result.events[0].action_id == "action-main:0"
+
+
+def test_spawn_adds_citizen_with_stable_id():
+    from kronos_sim.models import SpawnCitizenRequest
+
+    request = SpawnCitizenRequest(
+        branch_id="main",
+        expected_sequence=0,
+        name="Nico",
+        occupation="Apprentice",
+        plot_id="plot-2",
+        money=500,
+    )
+    result = Engine(initial_world()).spawn(request)
+    nico = result.state.citizens["citizen-main-1"]
+    assert (nico.name, nico.money, nico.position.x) == ("Nico", 500, 4)
+    assert result.events[0].payload.entity_id == "citizen-main-1"
+    with pytest.raises(InvalidAction):
+        Engine(initial_world()).spawn(request.model_copy(update={"plot_id": "nowhere"}))

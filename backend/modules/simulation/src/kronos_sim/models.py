@@ -29,6 +29,39 @@ class Relationship(Model):
     trust: int = Field(default=0, ge=-100, le=100)
 
 
+GOALS = ("wealth", "influence", "safety", "reputation")
+
+
+class GoalWeights(Model):
+    """Integer percentages that always sum to 100."""
+
+    wealth: int = Field(default=25, ge=0, le=100)
+    influence: int = Field(default=25, ge=0, le=100)
+    safety: int = Field(default=25, ge=0, le=100)
+    reputation: int = Field(default=25, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _sum(self):
+        if sum(getattr(self, goal) for goal in GOALS) != 100:
+            raise ValueError("goal weights must sum to 100")
+        return self
+
+
+class GoalWeightChanges(Model):
+    """Requested change per goal, in percentage points (spec: at most ±0.1 = ±10)."""
+
+    wealth: int = Field(default=0, ge=-10, le=10)
+    influence: int = Field(default=0, ge=-10, le=10)
+    safety: int = Field(default=0, ge=-10, le=10)
+    reputation: int = Field(default=0, ge=-10, le=10)
+
+    @model_validator(mode="after")
+    def _nonzero(self):
+        if not any(getattr(self, goal) for goal in GOALS):
+            raise ValueError("at least one goal must change")
+        return self
+
+
 class Citizen(Model):
     id: str
     name: str
@@ -39,6 +72,7 @@ class Citizen(Model):
     hunger: int = Field(default=20, ge=0, le=100)
     inventory: ResourceInventory = Field(default_factory=ResourceInventory)
     goals: list[str] = Field(default_factory=lambda: ["Stay fed", "Save for tomorrow"])
+    goal_weights: GoalWeights = Field(default_factory=GoalWeights)
     personality: str = "practical"
     relationships: list[Relationship] = Field(default_factory=list)
     memories: list[str] = Field(default_factory=list)
@@ -136,6 +170,13 @@ class UpgradeBuilding(ActionBase):
 class MoveTo(ActionBase):
     type: Literal["move_to"] = "move_to"
     plot_id: str
+
+
+class AdjustGoals(ActionBase):
+    """Shift goal weights by bounded deltas; the engine clamps and renormalises to 100."""
+
+    type: Literal["adjust_goals"] = "adjust_goals"
+    changes: GoalWeightChanges
 
 
 class FoundBusiness(ActionBase):
@@ -316,6 +357,7 @@ AgentAction = Annotated[
     | ConstructBuilding
     | UpgradeBuilding
     | MoveTo
+    | AdjustGoals
     | FoundBusiness
     | CloseBusiness
     | SetWage
@@ -350,6 +392,7 @@ class EventBase(Model):
     actor_id: str | None = None
     rationale: str | None = None
     causal_refs: list[str] = Field(default_factory=list)
+    action_id: str | None = None
 
 
 class PricePayload(Model):
@@ -477,6 +520,17 @@ class ActionRejected(EventBase):
     payload: RejectionPayload
 
 
+class GoalsPayload(Model):
+    citizen_id: str
+    old: GoalWeights
+    new: GoalWeights
+
+
+class GoalsChanged(EventBase):
+    type: Literal["goals_changed"] = "goals_changed"
+    payload: GoalsPayload
+
+
 class InterventionPayload(Model):
     text: str
     scope: Literal["all_bakeries"] = "all_bakeries"
@@ -502,6 +556,7 @@ SimulationEvent = Annotated[
     | AgentSpoke
     | RelationshipChanged
     | ActionRejected
+    | GoalsChanged
     | InterventionApplied,
     Field(discriminator="type"),
 ]
@@ -579,12 +634,32 @@ class ActionRequest(MutationRequest):
     action: AgentAction
 
 
+Role = Literal["commoner", "business_owner"]
+WealthTier = Literal["rich", "middle", "poor"]
+
+
+class CitizenProfile(Model):
+    """A citizen plus values derived from the world (role, tier, employment)."""
+
+    citizen: Citizen
+    role: Role
+    wealth_tier: WealthTier
+    employed: bool
+    owned_building_ids: list[str] = Field(default_factory=list)
+
+
 class AgentObservation(Model):
+    """Everything one agent may see: its own state plus public facts, never other citizens."""
+
     branch_id: str
     tick: int
     sequence: int
     citizen: Citizen
+    role: Role
+    wealth_tier: WealthTier
     bread_prices: dict[str, int]
+    neighbors: dict[str, str] = Field(default_factory=dict, description="Citizen ID to name")
+    available_actions: list[str] = Field(default_factory=list)
 
 
 class ActionValidationResult(Model):
@@ -609,3 +684,38 @@ class ActionResult(Model):
     event_ids: list[str] = Field(default_factory=list)
     error: ActionErrorCode | None = None
     message: str | None = None
+
+
+class SpawnCitizenRequest(MutationRequest):
+    """Setup or intervention only: the starting money enters the economy from outside."""
+
+    name: str = Field(min_length=1, max_length=40)
+    occupation: str = Field(min_length=1, max_length=40)
+    plot_id: str
+    money: int = Field(default=0, ge=0, le=100000)
+    personality: str = Field(default="practical", min_length=1, max_length=200)
+    goal_weights: GoalWeights = Field(default_factory=GoalWeights)
+
+
+class SpawnResult(Model):
+    citizen_id: str
+    update: WorldUpdate
+
+
+class DecisionResult(Model):
+    action: AgentAction
+    result: ActionResult
+
+
+class AskRequest(Model):
+    question: str = Field(min_length=1, max_length=300)
+
+
+class AskResult(Model):
+    answer: str = Field(max_length=1000)
+    cited_event_ids: list[str] = Field(default_factory=list)
+
+
+class GoalsUpdateRequest(MutationRequest):
+    changes: GoalWeightChanges
+    rationale: str | None = Field(default=None, max_length=300)

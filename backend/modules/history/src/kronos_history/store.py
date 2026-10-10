@@ -48,6 +48,8 @@ events = Table(
     Column("sequence", Integer, nullable=False),
     Column("data", String, nullable=False),
 )
+# Payload fields that name the citizen an event happened to.
+INVOLVEMENT_KEYS = ("sender_id", "recipient_id", "entity_id", "citizen_id")
 settings = Table(
     "settings", metadata, Column("key", String, primary_key=True), Column("value", String)
 )
@@ -186,3 +188,41 @@ class HistoryStore:
             rows = list(db.execute(query.order_by(events.c.sequence.desc()).limit(limit)).scalars())
         adapter = TypeAdapter(SimulationEvent)
         return [adapter.validate_json(raw) for raw in reversed(rows)]
+
+    def list_events_after(
+        self, branch_id: str, after: int, limit: int = 100
+    ) -> list[SimulationEvent]:
+        query = (
+            select(events.c.data)
+            .where(events.c.branch_id == branch_id, events.c.sequence > after)
+            .order_by(events.c.sequence)
+            .limit(limit)
+        )
+        with self.engine.connect() as db:
+            rows = list(db.execute(query).scalars())
+        adapter = TypeAdapter(SimulationEvent)
+        return [adapter.validate_json(raw) for raw in rows]
+
+    def list_citizen_events(
+        self, branch_id: str, citizen_id: str, through: int | None = None, limit: int = 100
+    ) -> list[SimulationEvent]:
+        """Events where the citizen is the actor, sender, recipient, or subject; oldest first."""
+        query = select(events.c.data).where(
+            events.c.branch_id == branch_id,
+            # Coarse text prefilter; the exact check below decides.
+            events.c.data.contains(json.dumps(citizen_id), autoescape=True),
+        )
+        if through is not None:
+            query = query.where(events.c.sequence <= through)
+        adapter = TypeAdapter(SimulationEvent)
+        found: list[SimulationEvent] = []
+        with self.engine.connect() as db:
+            for raw in db.execute(query.order_by(events.c.sequence.desc())).scalars():
+                event = adapter.validate_json(raw)
+                payload = event.payload.model_dump()
+                subjects = {payload.get(key) for key in INVOLVEMENT_KEYS}
+                if event.actor_id == citizen_id or citizen_id in subjects:
+                    found.append(event)
+                    if len(found) == limit:
+                        break
+        return list(reversed(found))

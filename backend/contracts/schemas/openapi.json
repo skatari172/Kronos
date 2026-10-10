@@ -90,13 +90,147 @@
         }
       }
     },
+    "/api/agents": {
+      "post": {
+        "tags": [
+          "User tools"
+        ],
+        "summary": "Spawn a citizen (setup or intervention)",
+        "description": "Adds a citizen on a plot. Starting money enters the economy from outside.",
+        "operationId": "spawn_api_agents_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpawnCitizenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpawnResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "World"
+        ],
+        "summary": "List citizens with filters",
+        "operationId": "agents_api_agents_get",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "commoner",
+                    "business_owner"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "name": "employed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Employed"
+            }
+          },
+          {
+            "name": "wealth_tier",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "rich",
+                    "middle",
+                    "poor"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Wealth Tier"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CitizenProfile"
+                  },
+                  "title": "Response Agents Api Agents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{citizen_id}/observation": {
       "get": {
         "tags": [
           "Agent tools"
         ],
         "summary": "Read a citizen's current observation",
-        "description": "Read personal state and public bakery prices without advancing the simulation.",
+        "description": "Own state, role, public bakery prices, neighbor names, and runnable action types.\n\nRead-only; this is the same observation /decide sends to the AI provider.",
         "operationId": "observation_api_agents__citizen_id__observation_get",
         "parameters": [
           {
@@ -211,6 +345,165 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{citizen_id}/decide": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Let the AI layer choose and submit this citizen's next action",
+        "description": "Observation \u2192 provider \u2192 the same path as POST /actions (logged even if rejected).\n\nReturns 409 if the world changed while the provider was thinking, and 422 if the provider\nfails or times out.",
+        "operationId": "decide_api_agents__citizen_id__decide_post",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MutationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{citizen_id}/ask": {
+      "post": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Ask a citizen a question, answered from its own event history",
+        "description": "Read-only. Answers may only cite events in which this citizen took part.",
+        "operationId": "ask_api_agents__citizen_id__ask_post",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{citizen_id}/goals": {
+      "patch": {
+        "tags": [
+          "Agent tools"
+        ],
+        "summary": "Shift a citizen's goal weights by at most 10 points each",
+        "description": "Submitted as an adjust_goals action; weights are clamped and renormalised to 100.",
+        "operationId": "goals_api_agents__citizen_id__goals_patch",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoalsUpdateRequest"
               }
             }
           }
@@ -473,6 +766,48 @@
         }
       }
     },
+    "/api/agents/{citizen_id}": {
+      "get": {
+        "tags": [
+          "World"
+        ],
+        "summary": "Read one citizen's full state",
+        "operationId": "agent_api_agents__citizen_id__get",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitizenProfile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/history/events": {
       "get": {
         "tags": [
@@ -568,6 +903,9 @@
                         "$ref": "#/components/schemas/ActionRejected"
                       },
                       {
+                        "$ref": "#/components/schemas/GoalsChanged"
+                      },
+                      {
                         "$ref": "#/components/schemas/InterventionApplied"
                       }
                     ],
@@ -587,6 +925,7 @@
                         "agent_spoke": "#/components/schemas/AgentSpoke",
                         "relationship_changed": "#/components/schemas/RelationshipChanged",
                         "action_rejected": "#/components/schemas/ActionRejected",
+                        "goals_changed": "#/components/schemas/GoalsChanged",
                         "intervention_applied": "#/components/schemas/InterventionApplied"
                       }
                     }
@@ -844,6 +1183,206 @@
           }
         }
       }
+    },
+    "/api/agents/{citizen_id}/history": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Read events a citizen took part in",
+        "description": "Events where the citizen is the actor, sender, recipient, or subject; oldest first.\n\nDefaults to the active branch.",
+        "operationId": "citizen_history_api_agents__citizen_id__history_get",
+        "parameters": [
+          {
+            "name": "citizen_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citizen Id"
+            }
+          },
+          {
+            "name": "branch_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Branch Id"
+            }
+          },
+          {
+            "name": "through",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Through"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/PriceChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/TransactionCompleted"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResourceProduced"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ResourceConsumed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenMoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenSpawned"
+                      },
+                      {
+                        "$ref": "#/components/schemas/CitizenRemoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingConstructed"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingUpgraded"
+                      },
+                      {
+                        "$ref": "#/components/schemas/BuildingRemoved"
+                      },
+                      {
+                        "$ref": "#/components/schemas/AgentSpoke"
+                      },
+                      {
+                        "$ref": "#/components/schemas/RelationshipChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ActionRejected"
+                      },
+                      {
+                        "$ref": "#/components/schemas/GoalsChanged"
+                      },
+                      {
+                        "$ref": "#/components/schemas/InterventionApplied"
+                      }
+                    ],
+                    "discriminator": {
+                      "propertyName": "type",
+                      "mapping": {
+                        "price_changed": "#/components/schemas/PriceChanged",
+                        "transaction_completed": "#/components/schemas/TransactionCompleted",
+                        "resource_produced": "#/components/schemas/ResourceProduced",
+                        "resource_consumed": "#/components/schemas/ResourceConsumed",
+                        "citizen_moved": "#/components/schemas/CitizenMoved",
+                        "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                        "citizen_removed": "#/components/schemas/CitizenRemoved",
+                        "building_constructed": "#/components/schemas/BuildingConstructed",
+                        "building_upgraded": "#/components/schemas/BuildingUpgraded",
+                        "building_removed": "#/components/schemas/BuildingRemoved",
+                        "agent_spoke": "#/components/schemas/AgentSpoke",
+                        "relationship_changed": "#/components/schemas/RelationshipChanged",
+                        "action_rejected": "#/components/schemas/ActionRejected",
+                        "goals_changed": "#/components/schemas/GoalsChanged",
+                        "intervention_applied": "#/components/schemas/InterventionApplied"
+                      }
+                    }
+                  },
+                  "title": "Response Citizen History Api Agents  Citizen Id  History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/{action_id}": {
+      "get": {
+        "tags": [
+          "History"
+        ],
+        "summary": "Read the outcome of an agent action",
+        "description": "Actions apply immediately, so this never reports \"queued\"; it rebuilds the result.",
+        "operationId": "action_result_api_actions__action_id__get",
+        "parameters": [
+          {
+            "name": "action_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Action Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -895,6 +1434,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "action_rejected",
@@ -915,6 +1465,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -962,6 +1513,9 @@
               },
               {
                 "$ref": "#/components/schemas/MoveTo-Input"
+              },
+              {
+                "$ref": "#/components/schemas/AdjustGoals-Input"
               },
               {
                 "$ref": "#/components/schemas/FoundBusiness-Input"
@@ -1034,6 +1588,7 @@
             "discriminator": {
               "propertyName": "type",
               "mapping": {
+                "adjust_goals": "#/components/schemas/AdjustGoals-Input",
                 "adopt_invention": "#/components/schemas/AdoptInvention-Input",
                 "apply_job": "#/components/schemas/ApplyJob-Input",
                 "buy": "#/components/schemas/Buy-Input",
@@ -1214,6 +1769,9 @@
                 "$ref": "#/components/schemas/MoveTo-Output"
               },
               {
+                "$ref": "#/components/schemas/AdjustGoals-Output"
+              },
+              {
                 "$ref": "#/components/schemas/FoundBusiness-Output"
               },
               {
@@ -1284,6 +1842,7 @@
             "discriminator": {
               "propertyName": "type",
               "mapping": {
+                "adjust_goals": "#/components/schemas/AdjustGoals-Output",
                 "adopt_invention": "#/components/schemas/AdoptInvention-Output",
                 "apply_job": "#/components/schemas/ApplyJob-Output",
                 "buy": "#/components/schemas/Buy-Output",
@@ -1329,6 +1888,82 @@
           "action"
         ],
         "title": "ActionValidationResult"
+      },
+      "AdjustGoals-Input": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "adjust_goals",
+            "title": "Type",
+            "default": "adjust_goals"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/GoalWeightChanges-Input"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "changes"
+        ],
+        "title": "AdjustGoals",
+        "description": "Shift goal weights by bounded deltas; the engine clamps and renormalises to 100."
+      },
+      "AdjustGoals-Output": {
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "type": {
+            "type": "string",
+            "const": "adjust_goals",
+            "title": "Type",
+            "default": "adjust_goals"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/GoalWeightChanges-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "actor_id",
+          "rationale",
+          "type",
+          "changes"
+        ],
+        "title": "AdjustGoals",
+        "description": "Shift goal weights by bounded deltas; the engine clamps and renormalises to 100."
       },
       "AdoptInvention-Input": {
         "properties": {
@@ -1433,12 +2068,44 @@
           "citizen": {
             "$ref": "#/components/schemas/Citizen"
           },
+          "role": {
+            "type": "string",
+            "enum": [
+              "commoner",
+              "business_owner"
+            ],
+            "title": "Role"
+          },
+          "wealth_tier": {
+            "type": "string",
+            "enum": [
+              "rich",
+              "middle",
+              "poor"
+            ],
+            "title": "Wealth Tier"
+          },
           "bread_prices": {
             "additionalProperties": {
               "type": "integer"
             },
             "type": "object",
             "title": "Bread Prices"
+          },
+          "neighbors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Neighbors",
+            "description": "Citizen ID to name"
+          },
+          "available_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Available Actions"
           }
         },
         "additionalProperties": false,
@@ -1448,9 +2115,14 @@
           "tick",
           "sequence",
           "citizen",
-          "bread_prices"
+          "role",
+          "wealth_tier",
+          "bread_prices",
+          "neighbors",
+          "available_actions"
         ],
-        "title": "AgentObservation"
+        "title": "AgentObservation",
+        "description": "Everything one agent may see: its own state plus public facts, never other citizens."
       },
       "AgentSpoke": {
         "properties": {
@@ -1499,6 +2171,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "agent_spoke",
@@ -1519,6 +2202,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -1599,6 +2283,45 @@
           "building_id"
         ],
         "title": "ApplyJob"
+      },
+      "AskRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Question"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest"
+      },
+      "AskResult": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Answer"
+          },
+          "cited_event_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cited Event Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answer",
+          "cited_event_ids"
+        ],
+        "title": "AskResult"
       },
       "BranchMetadata": {
         "properties": {
@@ -1787,6 +2510,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "building_constructed",
@@ -1807,6 +2541,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -1859,6 +2594,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "building_removed",
@@ -1879,6 +2625,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -1931,6 +2678,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "building_upgraded",
@@ -1951,6 +2709,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -2220,6 +2979,9 @@
             "type": "array",
             "title": "Goals"
           },
+          "goal_weights": {
+            "$ref": "#/components/schemas/GoalWeights-Output"
+          },
           "personality": {
             "type": "string",
             "title": "Personality",
@@ -2252,6 +3014,7 @@
           "hunger",
           "inventory",
           "goals",
+          "goal_weights",
           "personality",
           "relationships",
           "memories"
@@ -2305,6 +3068,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "citizen_moved",
@@ -2325,10 +3099,57 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
         "title": "CitizenMoved"
+      },
+      "CitizenProfile": {
+        "properties": {
+          "citizen": {
+            "$ref": "#/components/schemas/Citizen"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "commoner",
+              "business_owner"
+            ],
+            "title": "Role"
+          },
+          "wealth_tier": {
+            "type": "string",
+            "enum": [
+              "rich",
+              "middle",
+              "poor"
+            ],
+            "title": "Wealth Tier"
+          },
+          "employed": {
+            "type": "boolean",
+            "title": "Employed"
+          },
+          "owned_building_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Owned Building Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "citizen",
+          "role",
+          "wealth_tier",
+          "employed",
+          "owned_building_ids"
+        ],
+        "title": "CitizenProfile",
+        "description": "A citizen plus values derived from the world (role, tier, employment)."
       },
       "CitizenRemoved": {
         "properties": {
@@ -2377,6 +3198,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "citizen_removed",
@@ -2397,6 +3229,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -2449,6 +3282,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "citizen_spawned",
@@ -2469,6 +3313,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -2801,6 +3646,162 @@
           "type"
         ],
         "title": "Consume"
+      },
+      "DecisionResult": {
+        "properties": {
+          "action": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Buy-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Sell-Output"
+              },
+              {
+                "$ref": "#/components/schemas/TransferMoney-Output"
+              },
+              {
+                "$ref": "#/components/schemas/SetPrice-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Produce-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Consume-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Communicate-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ConstructBuilding-Output"
+              },
+              {
+                "$ref": "#/components/schemas/UpgradeBuilding-Output"
+              },
+              {
+                "$ref": "#/components/schemas/MoveTo-Output"
+              },
+              {
+                "$ref": "#/components/schemas/AdjustGoals-Output"
+              },
+              {
+                "$ref": "#/components/schemas/FoundBusiness-Output"
+              },
+              {
+                "$ref": "#/components/schemas/CloseBusiness-Output"
+              },
+              {
+                "$ref": "#/components/schemas/SetWage-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Hire-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Fire-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ApplyJob-Output"
+              },
+              {
+                "$ref": "#/components/schemas/QuitJob-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Trade-Output"
+              },
+              {
+                "$ref": "#/components/schemas/RespondTrade-Output"
+              },
+              {
+                "$ref": "#/components/schemas/LeaseLot-Output"
+              },
+              {
+                "$ref": "#/components/schemas/SetRent-Output"
+              },
+              {
+                "$ref": "#/components/schemas/PayRent-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Evict-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Interact-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Research-Output"
+              },
+              {
+                "$ref": "#/components/schemas/LicenseInvention-Output"
+              },
+              {
+                "$ref": "#/components/schemas/AdoptInvention-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Lend-Output"
+              },
+              {
+                "$ref": "#/components/schemas/Repay-Output"
+              },
+              {
+                "$ref": "#/components/schemas/ProposeVote-Output"
+              },
+              {
+                "$ref": "#/components/schemas/CastVote-Output"
+              },
+              {
+                "$ref": "#/components/schemas/GatherResource-Output"
+              }
+            ],
+            "title": "Action",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "adjust_goals": "#/components/schemas/AdjustGoals-Output",
+                "adopt_invention": "#/components/schemas/AdoptInvention-Output",
+                "apply_job": "#/components/schemas/ApplyJob-Output",
+                "buy": "#/components/schemas/Buy-Output",
+                "close_business": "#/components/schemas/CloseBusiness-Output",
+                "communicate": "#/components/schemas/Communicate-Output",
+                "construct_building": "#/components/schemas/ConstructBuilding-Output",
+                "consume": "#/components/schemas/Consume-Output",
+                "evict": "#/components/schemas/Evict-Output",
+                "fire": "#/components/schemas/Fire-Output",
+                "found_business": "#/components/schemas/FoundBusiness-Output",
+                "gather_resource": "#/components/schemas/GatherResource-Output",
+                "hire": "#/components/schemas/Hire-Output",
+                "interact": "#/components/schemas/Interact-Output",
+                "lease_lot": "#/components/schemas/LeaseLot-Output",
+                "lend": "#/components/schemas/Lend-Output",
+                "license_invention": "#/components/schemas/LicenseInvention-Output",
+                "move_to": "#/components/schemas/MoveTo-Output",
+                "pay_rent": "#/components/schemas/PayRent-Output",
+                "produce": "#/components/schemas/Produce-Output",
+                "propose_vote": "#/components/schemas/ProposeVote-Output",
+                "quit_job": "#/components/schemas/QuitJob-Output",
+                "repay": "#/components/schemas/Repay-Output",
+                "research": "#/components/schemas/Research-Output",
+                "respond_trade": "#/components/schemas/RespondTrade-Output",
+                "sell": "#/components/schemas/Sell-Output",
+                "set_price": "#/components/schemas/SetPrice-Output",
+                "set_rent": "#/components/schemas/SetRent-Output",
+                "set_wage": "#/components/schemas/SetWage-Output",
+                "trade": "#/components/schemas/Trade-Output",
+                "transfer_money": "#/components/schemas/TransferMoney-Output",
+                "upgrade_building": "#/components/schemas/UpgradeBuilding-Output",
+                "vote": "#/components/schemas/CastVote-Output"
+              }
+            }
+          },
+          "result": {
+            "$ref": "#/components/schemas/ActionResult"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "result"
+        ],
+        "title": "DecisionResult"
       },
       "EntityPayload": {
         "properties": {
@@ -3219,6 +4220,304 @@
         ],
         "title": "GatherResource"
       },
+      "GoalWeightChanges-Input": {
+        "properties": {
+          "wealth": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Wealth",
+            "default": 0
+          },
+          "influence": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Influence",
+            "default": 0
+          },
+          "safety": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Safety",
+            "default": 0
+          },
+          "reputation": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Reputation",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GoalWeightChanges",
+        "description": "Requested change per goal, in percentage points (spec: at most \u00b10.1 = \u00b110)."
+      },
+      "GoalWeightChanges-Output": {
+        "properties": {
+          "wealth": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Wealth",
+            "default": 0
+          },
+          "influence": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Influence",
+            "default": 0
+          },
+          "safety": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Safety",
+            "default": 0
+          },
+          "reputation": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": -10.0,
+            "title": "Reputation",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "wealth",
+          "influence",
+          "safety",
+          "reputation"
+        ],
+        "title": "GoalWeightChanges",
+        "description": "Requested change per goal, in percentage points (spec: at most \u00b10.1 = \u00b110)."
+      },
+      "GoalWeights-Input": {
+        "properties": {
+          "wealth": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Wealth",
+            "default": 25
+          },
+          "influence": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Influence",
+            "default": 25
+          },
+          "safety": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Safety",
+            "default": 25
+          },
+          "reputation": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Reputation",
+            "default": 25
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GoalWeights",
+        "description": "Integer percentages that always sum to 100."
+      },
+      "GoalWeights-Output": {
+        "properties": {
+          "wealth": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Wealth",
+            "default": 25
+          },
+          "influence": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Influence",
+            "default": 25
+          },
+          "safety": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Safety",
+            "default": 25
+          },
+          "reputation": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Reputation",
+            "default": 25
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "wealth",
+          "influence",
+          "safety",
+          "reputation"
+        ],
+        "title": "GoalWeights",
+        "description": "Integer percentages that always sum to 100."
+      },
+      "GoalsChanged": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "tick": {
+            "type": "integer",
+            "title": "Tick"
+          },
+          "sequence": {
+            "type": "integer",
+            "title": "Sequence"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "causal_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Causal Refs"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "type": {
+            "type": "string",
+            "const": "goals_changed",
+            "title": "Type",
+            "default": "goals_changed"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/GoalsPayload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "branch_id",
+          "tick",
+          "sequence",
+          "actor_id",
+          "rationale",
+          "causal_refs",
+          "action_id",
+          "type",
+          "payload"
+        ],
+        "title": "GoalsChanged"
+      },
+      "GoalsPayload": {
+        "properties": {
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          },
+          "old": {
+            "$ref": "#/components/schemas/GoalWeights-Output"
+          },
+          "new": {
+            "$ref": "#/components/schemas/GoalWeights-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "citizen_id",
+          "old",
+          "new"
+        ],
+        "title": "GoalsPayload"
+      },
+      "GoalsUpdateRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/GoalWeightChanges-Input"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "changes"
+        ],
+        "title": "GoalsUpdateRequest"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3496,6 +4795,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "intervention_applied",
@@ -3516,6 +4826,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -4167,6 +5478,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "price_changed",
@@ -4187,6 +5509,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -4610,6 +5933,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "relationship_changed",
@@ -4630,6 +5964,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -4937,6 +6272,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "resource_consumed",
@@ -4957,6 +6303,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -5075,6 +6422,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "resource_produced",
@@ -5095,6 +6453,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -5680,6 +7039,9 @@
                   "$ref": "#/components/schemas/ActionRejected"
                 },
                 {
+                  "$ref": "#/components/schemas/GoalsChanged"
+                },
+                {
                   "$ref": "#/components/schemas/InterventionApplied"
                 }
               ],
@@ -5694,6 +7056,7 @@
                   "citizen_moved": "#/components/schemas/CitizenMoved",
                   "citizen_removed": "#/components/schemas/CitizenRemoved",
                   "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "goals_changed": "#/components/schemas/GoalsChanged",
                   "intervention_applied": "#/components/schemas/InterventionApplied",
                   "price_changed": "#/components/schemas/PriceChanged",
                   "relationship_changed": "#/components/schemas/RelationshipChanged",
@@ -5764,6 +7127,81 @@
           "integrity_hash"
         ],
         "title": "SnapshotMetadata"
+      },
+      "SpawnCitizenRequest": {
+        "properties": {
+          "branch_id": {
+            "type": "string",
+            "title": "Branch Id"
+          },
+          "expected_sequence": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Sequence"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "occupation": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Occupation"
+          },
+          "plot_id": {
+            "type": "string",
+            "title": "Plot Id"
+          },
+          "money": {
+            "type": "integer",
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Money",
+            "default": 0
+          },
+          "personality": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Personality",
+            "default": "practical"
+          },
+          "goal_weights": {
+            "$ref": "#/components/schemas/GoalWeights-Input"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "branch_id",
+          "expected_sequence",
+          "name",
+          "occupation",
+          "plot_id"
+        ],
+        "title": "SpawnCitizenRequest",
+        "description": "Setup or intervention only: the starting money enters the economy from outside."
+      },
+      "SpawnResult": {
+        "properties": {
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          },
+          "update": {
+            "$ref": "#/components/schemas/WorldUpdate"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "citizen_id",
+          "update"
+        ],
+        "title": "SpawnResult"
       },
       "SpeechPayload": {
         "properties": {
@@ -5961,6 +7399,17 @@
             "type": "array",
             "title": "Causal Refs"
           },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
           "type": {
             "type": "string",
             "const": "transaction_completed",
@@ -5981,6 +7430,7 @@
           "actor_id",
           "rationale",
           "causal_refs",
+          "action_id",
           "type",
           "payload"
         ],
@@ -6360,6 +7810,9 @@
                   "$ref": "#/components/schemas/ActionRejected"
                 },
                 {
+                  "$ref": "#/components/schemas/GoalsChanged"
+                },
+                {
                   "$ref": "#/components/schemas/InterventionApplied"
                 }
               ],
@@ -6374,6 +7827,7 @@
                   "citizen_moved": "#/components/schemas/CitizenMoved",
                   "citizen_removed": "#/components/schemas/CitizenRemoved",
                   "citizen_spawned": "#/components/schemas/CitizenSpawned",
+                  "goals_changed": "#/components/schemas/GoalsChanged",
                   "intervention_applied": "#/components/schemas/InterventionApplied",
                   "price_changed": "#/components/schemas/PriceChanged",
                   "relationship_changed": "#/components/schemas/RelationshipChanged",

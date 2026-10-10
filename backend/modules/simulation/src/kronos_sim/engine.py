@@ -10,6 +10,20 @@ from kronos_sim import models as m
 
 EVENT = TypeAdapter(m.SimulationEvent)
 ACTION = TypeAdapter(m.AgentAction)
+# Action types with engine rules; every other AgentAction is rejected as not_supported.
+SUPPORTED_ACTIONS = (
+    "buy",
+    "sell",
+    "transfer_money",
+    "set_price",
+    "produce",
+    "consume",
+    "communicate",
+    "construct_building",
+    "upgrade_building",
+    "move_to",
+    "adjust_goals",
+)
 
 
 class InvalidAction(ValueError):
@@ -30,6 +44,7 @@ class Engine:
         self.events: list[m.SimulationEvent] = []
         self.rng = random.Random()
         self.rng.setstate(_tuples(state.rng_state))
+        self.action_id: str | None = None
 
     def emit(self, kind: str, payload: dict, actor_id=None, rationale=None, causal_refs=None):
         self.state.sequence += 1
@@ -44,6 +59,7 @@ class Engine:
                 actor_id=actor_id,
                 rationale=rationale,
                 causal_refs=causal_refs or [],
+                action_id=self.action_id,
             )
         )
         self.events.append(event)
@@ -62,14 +78,18 @@ class Engine:
             rejected_actions=rejected or [],
         )
 
-    def apply(self, action: m.AgentAction) -> m.SimulationTickResult:
+    def apply(self, action: m.AgentAction, action_id: str | None = None) -> m.SimulationTickResult:
         transaction = Engine(self.state)
+        transaction.action_id = action_id
         transaction._execute(ACTION.validate_python(action.model_dump()))
         return transaction.result()
 
-    def reject(self, action: m.AgentAction, error: InvalidAction) -> m.SimulationTickResult:
+    def reject(
+        self, action: m.AgentAction, error: InvalidAction, action_id: str | None = None
+    ) -> m.SimulationTickResult:
         """Log a rule rejection and remember it, so agents can learn from refused proposals."""
         tx = Engine(self.state)
+        tx.action_id = action_id
         actor = tx.state.citizens.get(action.actor_id)
         if actor is None:
             raise error
@@ -228,9 +248,50 @@ class Engine:
             actor.money -= 2500
             building.level += 1
             emit("building_upgraded", dict(entity_id=building.id, level=building.level))
+        elif isinstance(action, m.AdjustGoals):
+            old = actor.goal_weights
+            raw = {
+                goal: min(100, max(0, getattr(old, goal) + getattr(action.changes, goal)))
+                for goal in m.GOALS
+            }
+            # Renormalise to exactly 100 with integer largest-remainder rounding.
+            total = sum(raw.values())
+            weights = {goal: value * 100 // total for goal, value in raw.items()}
+            by_remainder = sorted(
+                m.GOALS, key=lambda g: (-(raw[g] * 100 % total), m.GOALS.index(g))
+            )
+            for goal in by_remainder[: 100 - sum(weights.values())]:
+                weights[goal] += 1
+            new = m.GoalWeights(**weights)
+            if new == old:
+                raise InvalidAction("bad_params", "Goal weights would not change")
+            actor.goal_weights = new
+            emit(
+                "goals_changed",
+                dict(citizen_id=actor.id, old=old.model_dump(), new=new.model_dump()),
+            )
         else:
             # Schemas are published ahead of their rules; never accept an action as a no-op.
             raise InvalidAction("not_supported", f"Action '{action.type}' is not supported yet")
+
+    def spawn(self, request: m.SpawnCitizenRequest) -> m.SimulationTickResult:
+        tx = Engine(self.state)
+        plot = tx.state.plots.get(request.plot_id)
+        if plot is None:
+            raise InvalidAction("unknown_entity", "Unknown plot")
+        cid = f"citizen-{tx.state.branch_id}-{tx.state.sequence + 1}"
+        tx.state.citizens[cid] = m.Citizen(
+            id=cid,
+            name=request.name,
+            occupation=request.occupation,
+            position=m.Position(x=plot.position.x, z=0),
+            money=request.money,
+            personality=request.personality,
+            goal_weights=request.goal_weights,
+        )
+        position = tx.state.citizens[cid].position.model_dump()
+        tx.emit("citizen_spawned", dict(entity_id=cid, position=position))
+        return tx.result()
 
     def intervene(self, command: m.PriceIntervention, text: str) -> m.SimulationTickResult:
         tx = Engine(self.state)

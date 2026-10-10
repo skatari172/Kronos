@@ -46,6 +46,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List citizens with filters */
+        get: operations["agents_api_agents_get"];
+        put?: never;
+        /**
+         * Spawn a citizen (setup or intervention)
+         * @description Adds a citizen on a plot. Starting money enters the economy from outside.
+         */
+        post: operations["spawn_api_agents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents/{citizen_id}/observation": {
         parameters: {
             query?: never;
@@ -55,7 +76,9 @@ export interface paths {
         };
         /**
          * Read a citizen's current observation
-         * @description Read personal state and public bakery prices without advancing the simulation.
+         * @description Own state, role, public bakery prices, neighbor names, and runnable action types.
+         *
+         *     Read-only; this is the same observation /decide sends to the AI provider.
          */
         get: operations["observation_api_agents__citizen_id__observation_get"];
         put?: never;
@@ -110,6 +133,69 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{citizen_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Let the AI layer choose and submit this citizen's next action
+         * @description Observation → provider → the same path as POST /actions (logged even if rejected).
+         *
+         *     Returns 409 if the world changed while the provider was thinking, and 422 if the provider
+         *     fails or times out.
+         */
+        post: operations["decide_api_agents__citizen_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{citizen_id}/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask a citizen a question, answered from its own event history
+         * @description Read-only. Answers may only cite events in which this citizen took part.
+         */
+        post: operations["ask_api_agents__citizen_id__ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agents/{citizen_id}/goals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Shift a citizen's goal weights by at most 10 points each
+         * @description Submitted as an adjust_goals action; weights are clamped and renormalised to 100.
+         */
+        patch: operations["goals_api_agents__citizen_id__goals_patch"];
         trace?: never;
     };
     "/health": {
@@ -257,6 +343,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/{citizen_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one citizen's full state */
+        get: operations["agent_api_agents__citizen_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/history/events": {
         parameters: {
             query?: never;
@@ -360,6 +463,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/{citizen_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read events a citizen took part in
+         * @description Events where the citizen is the actor, sender, recipient, or subject; oldest first.
+         *
+         *     Defaults to the active branch.
+         */
+        get: operations["citizen_history_api_agents__citizen_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/actions/{action_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the outcome of an agent action
+         * @description Actions apply immediately, so this never reports "queued"; it rebuilds the result.
+         */
+        get: operations["action_result_api_actions__action_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -380,6 +525,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -394,7 +541,7 @@ export interface components {
             /** Expected Sequence */
             expected_sequence: number;
             /** Action */
-            action: components["schemas"]["Buy-Input"] | components["schemas"]["Sell-Input"] | components["schemas"]["TransferMoney-Input"] | components["schemas"]["SetPrice-Input"] | components["schemas"]["Produce-Input"] | components["schemas"]["Consume-Input"] | components["schemas"]["Communicate-Input"] | components["schemas"]["ConstructBuilding-Input"] | components["schemas"]["UpgradeBuilding-Input"] | components["schemas"]["MoveTo-Input"] | components["schemas"]["FoundBusiness-Input"] | components["schemas"]["CloseBusiness-Input"] | components["schemas"]["SetWage-Input"] | components["schemas"]["Hire-Input"] | components["schemas"]["Fire-Input"] | components["schemas"]["ApplyJob-Input"] | components["schemas"]["QuitJob-Input"] | components["schemas"]["Trade-Input"] | components["schemas"]["RespondTrade-Input"] | components["schemas"]["LeaseLot-Input"] | components["schemas"]["SetRent-Input"] | components["schemas"]["PayRent-Input"] | components["schemas"]["Evict-Input"] | components["schemas"]["Interact-Input"] | components["schemas"]["Research-Input"] | components["schemas"]["LicenseInvention-Input"] | components["schemas"]["AdoptInvention-Input"] | components["schemas"]["Lend-Input"] | components["schemas"]["Repay-Input"] | components["schemas"]["ProposeVote-Input"] | components["schemas"]["CastVote-Input"] | components["schemas"]["GatherResource-Input"];
+            action: components["schemas"]["Buy-Input"] | components["schemas"]["Sell-Input"] | components["schemas"]["TransferMoney-Input"] | components["schemas"]["SetPrice-Input"] | components["schemas"]["Produce-Input"] | components["schemas"]["Consume-Input"] | components["schemas"]["Communicate-Input"] | components["schemas"]["ConstructBuilding-Input"] | components["schemas"]["UpgradeBuilding-Input"] | components["schemas"]["MoveTo-Input"] | components["schemas"]["AdjustGoals-Input"] | components["schemas"]["FoundBusiness-Input"] | components["schemas"]["CloseBusiness-Input"] | components["schemas"]["SetWage-Input"] | components["schemas"]["Hire-Input"] | components["schemas"]["Fire-Input"] | components["schemas"]["ApplyJob-Input"] | components["schemas"]["QuitJob-Input"] | components["schemas"]["Trade-Input"] | components["schemas"]["RespondTrade-Input"] | components["schemas"]["LeaseLot-Input"] | components["schemas"]["SetRent-Input"] | components["schemas"]["PayRent-Input"] | components["schemas"]["Evict-Input"] | components["schemas"]["Interact-Input"] | components["schemas"]["Research-Input"] | components["schemas"]["LicenseInvention-Input"] | components["schemas"]["AdoptInvention-Input"] | components["schemas"]["Lend-Input"] | components["schemas"]["Repay-Input"] | components["schemas"]["ProposeVote-Input"] | components["schemas"]["CastVote-Input"] | components["schemas"]["GatherResource-Input"];
         };
         /**
          * ActionResult
@@ -437,7 +584,39 @@ export interface components {
              */
             valid: true;
             /** Action */
-            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"];
+            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"];
+        };
+        /**
+         * AdjustGoals
+         * @description Shift goal weights by bounded deltas; the engine clamps and renormalises to 100.
+         */
+        "AdjustGoals-Input": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "adjust_goals";
+            changes: components["schemas"]["GoalWeightChanges-Input"];
+        };
+        /**
+         * AdjustGoals
+         * @description Shift goal weights by bounded deltas; the engine clamps and renormalises to 100.
+         */
+        "AdjustGoals-Output": {
+            /** Actor Id */
+            actor_id: string;
+            /** Rationale */
+            rationale: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "adjust_goals";
+            changes: components["schemas"]["GoalWeightChanges-Output"];
         };
         /** AdoptInvention */
         "AdoptInvention-Input": {
@@ -471,7 +650,10 @@ export interface components {
             /** Building Id */
             building_id: string;
         };
-        /** AgentObservation */
+        /**
+         * AgentObservation
+         * @description Everything one agent may see: its own state plus public facts, never other citizens.
+         */
         AgentObservation: {
             /** Branch Id */
             branch_id: string;
@@ -480,10 +662,29 @@ export interface components {
             /** Sequence */
             sequence: number;
             citizen: components["schemas"]["Citizen"];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "commoner" | "business_owner";
+            /**
+             * Wealth Tier
+             * @enum {string}
+             */
+            wealth_tier: "rich" | "middle" | "poor";
             /** Bread Prices */
             bread_prices: {
                 [key: string]: number;
             };
+            /**
+             * Neighbors
+             * @description Citizen ID to name
+             */
+            neighbors: {
+                [key: string]: string;
+            };
+            /** Available Actions */
+            available_actions: string[];
         };
         /** AgentSpoke */
         AgentSpoke: {
@@ -501,6 +702,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -535,6 +738,18 @@ export interface components {
             type: "apply_job";
             /** Building Id */
             building_id: string;
+        };
+        /** AskRequest */
+        AskRequest: {
+            /** Question */
+            question: string;
+        };
+        /** AskResult */
+        AskResult: {
+            /** Answer */
+            answer: string;
+            /** Cited Event Ids */
+            cited_event_ids: string[];
         };
         /** BranchMetadata */
         BranchMetadata: {
@@ -607,6 +822,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -630,6 +847,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -653,6 +872,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -765,6 +986,7 @@ export interface components {
             inventory: components["schemas"]["ResourceInventory-Output"];
             /** Goals */
             goals: string[];
+            goal_weights: components["schemas"]["GoalWeights-Output"];
             /**
              * Personality
              * @default practical
@@ -791,12 +1013,35 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "citizen_moved";
             payload: components["schemas"]["EntityPayload"];
+        };
+        /**
+         * CitizenProfile
+         * @description A citizen plus values derived from the world (role, tier, employment).
+         */
+        CitizenProfile: {
+            citizen: components["schemas"]["Citizen"];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "commoner" | "business_owner";
+            /**
+             * Wealth Tier
+             * @enum {string}
+             */
+            wealth_tier: "rich" | "middle" | "poor";
+            /** Employed */
+            employed: boolean;
+            /** Owned Building Ids */
+            owned_building_ids: string[];
         };
         /** CitizenRemoved */
         CitizenRemoved: {
@@ -814,6 +1059,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -837,6 +1084,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -965,6 +1214,12 @@ export interface components {
              * @enum {string}
              */
             type: "consume";
+        };
+        /** DecisionResult */
+        DecisionResult: {
+            /** Action */
+            action: components["schemas"]["Buy-Output"] | components["schemas"]["Sell-Output"] | components["schemas"]["TransferMoney-Output"] | components["schemas"]["SetPrice-Output"] | components["schemas"]["Produce-Output"] | components["schemas"]["Consume-Output"] | components["schemas"]["Communicate-Output"] | components["schemas"]["ConstructBuilding-Output"] | components["schemas"]["UpgradeBuilding-Output"] | components["schemas"]["MoveTo-Output"] | components["schemas"]["AdjustGoals-Output"] | components["schemas"]["FoundBusiness-Output"] | components["schemas"]["CloseBusiness-Output"] | components["schemas"]["SetWage-Output"] | components["schemas"]["Hire-Output"] | components["schemas"]["Fire-Output"] | components["schemas"]["ApplyJob-Output"] | components["schemas"]["QuitJob-Output"] | components["schemas"]["Trade-Output"] | components["schemas"]["RespondTrade-Output"] | components["schemas"]["LeaseLot-Output"] | components["schemas"]["SetRent-Output"] | components["schemas"]["PayRent-Output"] | components["schemas"]["Evict-Output"] | components["schemas"]["Interact-Output"] | components["schemas"]["Research-Output"] | components["schemas"]["LicenseInvention-Output"] | components["schemas"]["AdoptInvention-Output"] | components["schemas"]["Lend-Output"] | components["schemas"]["Repay-Output"] | components["schemas"]["ProposeVote-Output"] | components["schemas"]["CastVote-Output"] | components["schemas"]["GatherResource-Output"];
+            result: components["schemas"]["ActionResult"];
         };
         /** EntityPayload */
         EntityPayload: {
@@ -1124,6 +1379,152 @@ export interface components {
             /** Quantity */
             quantity: number;
         };
+        /**
+         * GoalWeightChanges
+         * @description Requested change per goal, in percentage points (spec: at most ±0.1 = ±10).
+         */
+        "GoalWeightChanges-Input": {
+            /**
+             * Wealth
+             * @default 0
+             */
+            wealth: number;
+            /**
+             * Influence
+             * @default 0
+             */
+            influence: number;
+            /**
+             * Safety
+             * @default 0
+             */
+            safety: number;
+            /**
+             * Reputation
+             * @default 0
+             */
+            reputation: number;
+        };
+        /**
+         * GoalWeightChanges
+         * @description Requested change per goal, in percentage points (spec: at most ±0.1 = ±10).
+         */
+        "GoalWeightChanges-Output": {
+            /**
+             * Wealth
+             * @default 0
+             */
+            wealth: number;
+            /**
+             * Influence
+             * @default 0
+             */
+            influence: number;
+            /**
+             * Safety
+             * @default 0
+             */
+            safety: number;
+            /**
+             * Reputation
+             * @default 0
+             */
+            reputation: number;
+        };
+        /**
+         * GoalWeights
+         * @description Integer percentages that always sum to 100.
+         */
+        "GoalWeights-Input": {
+            /**
+             * Wealth
+             * @default 25
+             */
+            wealth: number;
+            /**
+             * Influence
+             * @default 25
+             */
+            influence: number;
+            /**
+             * Safety
+             * @default 25
+             */
+            safety: number;
+            /**
+             * Reputation
+             * @default 25
+             */
+            reputation: number;
+        };
+        /**
+         * GoalWeights
+         * @description Integer percentages that always sum to 100.
+         */
+        "GoalWeights-Output": {
+            /**
+             * Wealth
+             * @default 25
+             */
+            wealth: number;
+            /**
+             * Influence
+             * @default 25
+             */
+            influence: number;
+            /**
+             * Safety
+             * @default 25
+             */
+            safety: number;
+            /**
+             * Reputation
+             * @default 25
+             */
+            reputation: number;
+        };
+        /** GoalsChanged */
+        GoalsChanged: {
+            /** Id */
+            id: string;
+            /** Branch Id */
+            branch_id: string;
+            /** Tick */
+            tick: number;
+            /** Sequence */
+            sequence: number;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Rationale */
+            rationale: string | null;
+            /** Causal Refs */
+            causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "goals_changed";
+            payload: components["schemas"]["GoalsPayload"];
+        };
+        /** GoalsPayload */
+        GoalsPayload: {
+            /** Citizen Id */
+            citizen_id: string;
+            old: components["schemas"]["GoalWeights-Output"];
+            new: components["schemas"]["GoalWeights-Output"];
+        };
+        /** GoalsUpdateRequest */
+        GoalsUpdateRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            changes: components["schemas"]["GoalWeightChanges-Input"];
+            /** Rationale */
+            rationale?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1225,6 +1626,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1474,6 +1877,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1649,6 +2054,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1763,6 +2170,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -1821,6 +2230,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2035,7 +2446,7 @@ export interface components {
             sequence: number;
             state: components["schemas"]["WorldState"];
             /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["InterventionApplied"])[];
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["InterventionApplied"])[];
             /** Rejected Actions */
             rejected_actions: string[];
         };
@@ -2053,6 +2464,39 @@ export interface components {
             created_at: string;
             /** Integrity Hash */
             integrity_hash: string;
+        };
+        /**
+         * SpawnCitizenRequest
+         * @description Setup or intervention only: the starting money enters the economy from outside.
+         */
+        SpawnCitizenRequest: {
+            /** Branch Id */
+            branch_id: string;
+            /** Expected Sequence */
+            expected_sequence: number;
+            /** Name */
+            name: string;
+            /** Occupation */
+            occupation: string;
+            /** Plot Id */
+            plot_id: string;
+            /**
+             * Money
+             * @default 0
+             */
+            money: number;
+            /**
+             * Personality
+             * @default practical
+             */
+            personality: string;
+            goal_weights?: components["schemas"]["GoalWeights-Input"];
+        };
+        /** SpawnResult */
+        SpawnResult: {
+            /** Citizen Id */
+            citizen_id: string;
+            update: components["schemas"]["WorldUpdate"];
         };
         /** SpeechPayload */
         SpeechPayload: {
@@ -2133,6 +2577,8 @@ export interface components {
             rationale: string | null;
             /** Causal Refs */
             causal_refs: string[];
+            /** Action Id */
+            action_id: string | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -2276,7 +2722,7 @@ export interface components {
             sequence: number;
             state: components["schemas"]["WorldState"];
             /** Events */
-            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["InterventionApplied"])[];
+            events: (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["InterventionApplied"])[];
         };
     };
     responses: never;
@@ -2340,6 +2786,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorldUpdate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agents_api_agents_get: {
+        parameters: {
+            query?: {
+                role?: ("commoner" | "business_owner") | null;
+                employed?: boolean | null;
+                wealth_tier?: ("rich" | "middle" | "poor") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CitizenProfile"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    spawn_api_agents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpawnCitizenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpawnResult"];
                 };
             };
             /** @description Validation Error */
@@ -2431,6 +2943,111 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_api_agents__citizen_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MutationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_api_agents__citizen_id__ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    goals_api_agents__citizen_id__goals_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalsUpdateRequest"];
             };
         };
         responses: {
@@ -2655,6 +3272,37 @@ export interface operations {
             };
         };
     };
+    agent_api_agents__citizen_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CitizenProfile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     events_api_history_events_get: {
         parameters: {
             query: {
@@ -2674,7 +3322,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["InterventionApplied"])[];
+                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["InterventionApplied"])[];
                 };
             };
             /** @description Validation Error */
@@ -2852,6 +3500,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorldUpdate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    citizen_history_api_agents__citizen_id__history_get: {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                through?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                citizen_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": (components["schemas"]["PriceChanged"] | components["schemas"]["TransactionCompleted"] | components["schemas"]["ResourceProduced"] | components["schemas"]["ResourceConsumed"] | components["schemas"]["CitizenMoved"] | components["schemas"]["CitizenSpawned"] | components["schemas"]["CitizenRemoved"] | components["schemas"]["BuildingConstructed"] | components["schemas"]["BuildingUpgraded"] | components["schemas"]["BuildingRemoved"] | components["schemas"]["AgentSpoke"] | components["schemas"]["RelationshipChanged"] | components["schemas"]["ActionRejected"] | components["schemas"]["GoalsChanged"] | components["schemas"]["InterventionApplied"])[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    action_result_api_actions__action_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActionResult"];
                 };
             };
             /** @description Validation Error */

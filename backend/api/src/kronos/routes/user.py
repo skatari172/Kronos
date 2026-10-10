@@ -30,3 +30,14 @@ async def action(body: m.ActionRequest, service: ServiceDependency):
     The player chooses actor_id; the engine still enforces ownership, funds, and stock.
     """
     return await service.execute_action(body)
+
+
+@router.post(
+    "/agents",
+    response_model=m.SpawnResult,
+    status_code=201,
+    summary="Spawn a citizen (setup or intervention)",
+)
+async def spawn(body: m.SpawnCitizenRequest, service: ServiceDependency):
+    """Adds a citizen on a plot. Starting money enters the economy from outside."""
+    return await service.spawn(body)
