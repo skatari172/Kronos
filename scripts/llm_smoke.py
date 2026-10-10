@@ -44,7 +44,10 @@ class RecordingClient:
         self.calls.append(
             {
                 "seconds": round(time.perf_counter() - started, 2),
-                "schema_bytes": len(json.dumps(kwargs["output_config"]["format"]["schema"])),
+                # Large decision menus send the schema in the prompt instead (no format).
+                "schema_bytes": len(
+                    json.dumps(kwargs["output_config"].get("format", {}).get("schema", {}))
+                ),
                 "usage": response.usage.model_dump(mode="json"),
                 "response": response.model_dump(mode="json"),
             }

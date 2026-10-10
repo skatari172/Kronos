@@ -1,13 +1,15 @@
 /**
- * Header event stream. HARD-CODED SAMPLE for now: replace `SAMPLE_EVENTS` with
- * the snapshot's events (`useWorld((s) => s.events)`) or `GET /api/history/events`.
- * The "why" for each event will come from the event's `rationale` and the
- * citizens' decision records (`GET /api/actions/{action_id}`, agent memories).
+ * Header event stream. Live, it is built from the backend's committed events
+ * (`useLiveChronicle`, see chronicle.ts). Offline previews reveal the
+ * HARD-CODED `SAMPLE_EVENTS` instead, and scripted fights write their own.
  */
 import { useEffect } from "react";
 import { create } from "zustand";
+import { request } from "../api/client";
+import type { SimulationEvent, WorldState } from "../api/types";
 import { useWorld } from "../stores/world";
 import { useFights } from "../world/fights";
+import { HOSTILE, isRepeat, rememberNames, toEntry } from "./chronicle";
 
 export type FeedKind =
   | "build"
@@ -32,6 +34,10 @@ export type Side = {
   incentive: string;
   /** How they reasoned, in their own words. */
   thought: string;
+  /** Who decided: "AI agent", "Mock agent", "Utility rule", "Town rule", "Memory"… */
+  source?: string;
+  /** The villager, when this side is one: their name opens their details. */
+  id?: string;
 };
 
 export type FeedItem = {
@@ -373,7 +379,7 @@ const SAMPLE_EVENTS: Omit<FeedItem, "id">[] = [
   },
 ];
 
-const KEEP = 60;
+const KEEP = 600;
 
 type Chronicle = {
   /** Newest first. */
@@ -383,6 +389,7 @@ type Chronicle = {
   cursor: number;
   add: (item: Omit<FeedItem, "id">) => void;
   revealSample: () => void;
+  reset: () => void;
 };
 
 /**
@@ -398,6 +405,7 @@ export const useChronicle = create<Chronicle>((set, get) => ({
       items: [{ ...item, id: s.nextId }, ...s.items].slice(0, KEEP),
       nextId: s.nextId + 1,
     })),
+  reset: () => set({ items: [], cursor: 0 }),
   revealSample: () => {
     const { cursor } = get();
     const sample = SAMPLE_EVENTS[cursor % SAMPLE_EVENTS.length];
@@ -408,9 +416,10 @@ export const useChronicle = create<Chronicle>((set, get) => ({
   },
 }));
 
-/** Reveals a few samples at once, then one every few seconds. Mount once. */
-export function useSampleClock(everyMs = 2800) {
+/** Offline only: reveals a few samples at once, then one every few seconds. */
+export function useSampleClock(enabled: boolean, everyMs = 2800) {
   useEffect(() => {
+    if (!enabled) return;
     const { items, revealSample } = useChronicle.getState();
     if (!items.length) for (let i = 0; i < 4; i++) revealSample();
     const timer = setInterval(
@@ -418,7 +427,7 @@ export function useSampleClock(everyMs = 2800) {
       everyMs,
     );
     return () => clearInterval(timer);
-  }, [everyMs]);
+  }, [enabled, everyMs]);
 }
 
 /** HARD-CODED grudges behind the village scuffles (world/fights.ts). */
@@ -430,37 +439,124 @@ const GRUDGES: [string, string][] = [
   ["Their cart blocked the road all week", "Had nowhere else to park"],
 ];
 
-/** Write each new scuffle into the chronicle. Mount once. */
-export function useFightChronicle() {
-  useEffect(
-    () =>
-      useFights.subscribe((now, before) => {
-        const fight = now.current;
-        if (!fight || fight.id === before.current?.id) return;
-        const state = useWorld.getState().update?.state;
-        const name = (id: string) => state?.citizens[id]?.name ?? "Someone";
-        const [a, b] = [name(fight.a), name(fight.b)];
-        const [grudge, reply] = GRUDGES[fight.id % GRUDGES.length];
-        useChronicle.getState().add({
-          day: (state?.tick ?? 0) + 1,
-          kind: "fight",
-          text: `${a} and ${b} came to blows`,
-          why: [
-            {
-              name: a,
-              role: "Threw the first punch",
-              incentive: grudge,
-              thought: `${b} has had this coming for weeks.`,
-            },
-            {
-              name: b,
-              role: "Fought back",
-              incentive: reply,
-              thought: `If ${a} wants a fight, ${a} gets one.`,
-            },
-          ],
-        });
-      }),
-    [],
-  );
+/** Offline only: write each scripted scuffle into the chronicle. */
+export function useFightChronicle(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    return useFights.subscribe((now, before) => {
+      const fight = now.current;
+      if (!fight || fight.id === before.current?.id || fight.real) return;
+      const state = useWorld.getState().update?.state;
+      const name = (id: string) => state?.citizens[id]?.name ?? "Someone";
+      const [a, b] = [name(fight.a), name(fight.b)];
+      const [grudge, reply] = GRUDGES[fight.id % GRUDGES.length];
+      useChronicle.getState().add({
+        day: (state?.tick ?? 0) + 1,
+        kind: "fight",
+        text: `${a} and ${b} came to blows`,
+        why: [
+          {
+            name: a,
+            role: "Threw the first punch",
+            incentive: grudge,
+            thought: `${b} has had this coming for weeks.`,
+          },
+          {
+            name: b,
+            role: "Fought back",
+            incentive: reply,
+            thought: `If ${a} wants a fight, ${a} gets one.`,
+          },
+        ],
+      });
+    });
+  }, [enabled]);
+}
+
+/**
+ * Live: rebuild the chronicle from the backend's events, and stage a scuffle
+ * in the village for each new argument, insult or betrayal. Mount once.
+ */
+export function useLiveChronicle(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const seen = new Set<string>();
+    const said = new Map<string, string>();
+    let epoch = -1;
+    // While earlier history loads, new events wait so the order stays right.
+    let loading = false;
+    let cancelled = false;
+
+    const take = (
+      events: SimulationEvent[],
+      state: WorldState,
+      live: boolean,
+    ) => {
+      for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
+        if (seen.has(event.id)) continue;
+        seen.add(event.id);
+        if (isRepeat(event, said)) continue;
+        const item = toEntry(event, state);
+        if (item) useChronicle.getState().add(item);
+        if (
+          live &&
+          event.type === "citizen_interacted" &&
+          HOSTILE.has(event.payload.kind) &&
+          event.actor_id
+        )
+          useFights
+            .getState()
+            .request(event.actor_id, event.payload.recipient_id);
+      }
+    };
+
+    const sync = () => {
+      const world = useWorld.getState();
+      const state = world.update?.state;
+      if (!state || cancelled) return;
+      rememberNames(state);
+      if (world.epoch !== epoch) {
+        // A new epoch (load, seek, branch switch) replaces history: rebuild it
+        // from the event log, quietly (no fights for the past).
+        epoch = world.epoch;
+        seen.clear();
+        said.clear();
+        useChronicle.getState().reset();
+        loading = true;
+        const mine = epoch;
+        void loadHistory(state.sequence)
+          .catch(() => [] as SimulationEvent[])
+          .then((history) => {
+            if (cancelled || mine !== epoch) return;
+            const latest = useWorld.getState();
+            take(history, latest.update?.state ?? state, false);
+            take(latest.events, latest.update?.state ?? state, false);
+            loading = false;
+          });
+        return;
+      }
+      if (!loading) take(world.events, state, true);
+    };
+    sync();
+    const stop = useWorld.subscribe(sync);
+    return () => {
+      cancelled = true;
+      stop();
+    };
+  }, [enabled]);
+}
+
+/** Story-sized history: the last few thousand events, read page by page. */
+async function loadHistory(sequence: number, span = 4000) {
+  const events: SimulationEvent[] = [];
+  let after = Math.max(0, sequence - span);
+  while (after < sequence) {
+    const page = await request<SimulationEvent[]>(
+      `/api/events?after=${after}&limit=500`,
+    );
+    if (!page.length) break;
+    events.push(...page);
+    after = page[page.length - 1].sequence;
+  }
+  return events;
 }

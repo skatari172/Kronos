@@ -6,7 +6,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from kronos_agents.anthropic_provider import DEFAULT_MODEL, AnthropicProvider, output_schema
+from kronos_agents.anthropic_provider import (
+    DEFAULT_MODEL,
+    GRAMMAR_LIMIT,
+    AnthropicProvider,
+    output_schema,
+)
 from kronos_agents.prompts import decision_examples, system_prompt
 from kronos_agents.provider import AgentService, ProviderError
 from kronos_sim.engine import Engine
@@ -54,14 +59,22 @@ def hungry_world():
     return state
 
 
+def small_menu(observation, size=GRAMMAR_LIMIT):
+    """An observation whose menu fits a structured-output grammar (buy first)."""
+    others = [a for a in observation.available_actions if a != "buy"]
+    observation.available_actions = ["buy", *others][:size]
+    return observation
+
+
 def test_request_shape_for_a_decision():
     client = FakeClient(recorded("decision_buy.json"))
-    provider = AnthropicProvider(client=client)
-    observation = observe(hungry_world(), "citizen-5")
+    provider = AnthropicProvider("claude-opus-5-5", client=client)
+    observation = small_menu(observe(hungry_world(), "citizen-5"))
     asyncio.run(AgentService(provider).decide(observation))
 
     (request,) = client.requests
-    assert request["model"] == DEFAULT_MODEL == "claude-opus-5-5"
+    assert DEFAULT_MODEL == "claude-haiku-5-5"
+    assert request["model"] == "claude-opus-5-5"
     assert request["fallbacks"] == "default"
     assert request["betas"] == ["server-side-fallback-2026-07-01"]
     assert "tool_choice" not in request  # forced tool use is a 400 on Opus 5.5
@@ -85,6 +98,21 @@ def test_request_shape_for_a_decision():
         "description": buy["properties"]["rationale"]["description"],
     }
     assert buy["properties"]["type"]["enum"] == ["buy"]
+
+
+def test_large_menus_send_the_schema_as_text():
+    # More than GRAMMAR_LIMIT actions is a 400 ("compiled grammar is too large") as a format.
+    client = FakeClient(recorded("decision_buy.json"))
+    observation = observe(hungry_world(), "citizen-5")
+    assert len(observation.available_actions) > GRAMMAR_LIMIT
+    action = asyncio.run(AgentService(AnthropicProvider(client=client)).decide(observation))
+    assert action.type == "buy"  # the copied `result` wrapper is unwrapped
+    (request,) = client.requests
+    assert request["model"] == DEFAULT_MODEL and "fallbacks" not in request
+    assert "format" not in request["output_config"]
+    content = request["messages"][0]["content"]
+    assert content.startswith("Reply with one JSON object matching this schema")
+    assert '"Buy"' in content and '"citizen-5"' in content
 
 
 def test_schema_is_supported_by_structured_outputs():

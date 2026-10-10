@@ -2810,6 +2810,7 @@
           "Backend tools"
         ],
         "summary": "Check backend health",
+        "description": "The provider is the one actually configured (`KRONOS_LLM_PROVIDER`), not a constant.",
         "operationId": "health_health_get",
         "responses": {
           "200": {

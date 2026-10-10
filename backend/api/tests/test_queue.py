@@ -456,3 +456,38 @@ def test_existing_jobs_inventions_loans_votes_and_rent_work_through_ticks(tmp_pa
             and e["payload"]["amount"] == 300
             for e in last["events"]
         )
+
+
+def test_a_day_passing_while_a_slow_model_reads_a_decree_still_queues_it(tmp_path):
+    import asyncio
+
+    from kronos.service import Service
+    from kronos_agents.provider import MockProvider
+    from kronos_sim.models import InterventionRequest
+
+    async def scenario():
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        class SlowParser(MockProvider):
+            async def complete(self, task, observation):
+                if task == "intervention":
+                    entered.set()
+                    await release.wait()
+                return await super().complete(task, observation)
+
+        service = Service(Settings(database_url=f"sqlite:///{tmp_path / 'decree.db'}"))
+        service.agents.provider = SlowParser()
+        request = InterventionRequest(
+            branch_id="main", expected_sequence=service.state.sequence, text="Feast"
+        )
+        decree = asyncio.create_task(service.intervene(request))
+        await asyncio.wait_for(entered.wait(), 1)
+        await service.tick()  # A day passes while the model is still reading.
+        release.set()
+        result = await asyncio.wait_for(decree, 1)
+        assert result.result.status == "queued" and result.command.type == "adjust_hunger"
+        if service.decision_task:
+            await service.decision_task
+        service.store.close()
+
+    asyncio.run(scenario())

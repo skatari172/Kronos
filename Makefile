@@ -16,9 +16,12 @@ define free_port
 	fi
 endef
 
-.PHONY: help install backend frontend stop test lint format build contracts check reset db-init
+# Fresh village plus backend and frontend in one terminal (scripts/start.sh; KEEP=1 keeps the world).
+.PHONY: help start install backend frontend stop test lint format build contracts check reset db-init
 help:
-	@echo 'make install | backend | frontend | stop | test | lint | format | build | contracts | check | reset | db-init'
+	@echo 'make start | install | backend | frontend | stop | test | lint | format | build | contracts | check | reset | db-init'
+start:
+	./scripts/start.sh $(if $(KEEP),--keep,)
 install:
 	./scripts/bootstrap.sh
 	$(UV) sync --frozen

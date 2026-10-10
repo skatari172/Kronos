@@ -151,9 +151,14 @@ export function GodBar({
   );
 }
 
-/** The decree lands: strike the town, then write it into the chronicle. */
+/**
+ * The decree lands: strike the town, then write it into the chronicle. Live,
+ * the chronicle entry comes from the backend's `intervention_applied` event
+ * once the queued decree runs (chronicle.ts), so only previews write it here.
+ */
 function land(text: string, command: Command | null, live: boolean) {
   useDecrees.getState().land(moodOf(command));
+  if (live) return;
   const state = useWorld.getState().update?.state;
   useChronicle.getState().add({
     day: (state?.tick ?? 0) + 1,
@@ -162,7 +167,7 @@ function land(text: string, command: Command | null, live: boolean) {
     why: [
       {
         name: "You",
-        role: live ? "Decree" : "Preview decree",
+        role: "Preview decree",
         incentive: "Shape the town from above",
         thought: text,
       },

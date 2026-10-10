@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     llm_concurrency: int = Field(4, ge=1)
     # Agent tiers: strategic citizens may use the provider; the rest use the fallback.
     # A comma-separated ID list wins; otherwise owners first, then by ID, up to the limit.
+    # No limit by default: every citizen is its own agent. Set a number to cap costs.
     strategic_agents: str = ""
-    strategic_limit: int = Field(12, ge=0)
+    strategic_limit: int | None = Field(None, ge=0)
     # Response cache for real providers (replays and demos cost nothing). Empty disables it;
     # cache_only never calls the provider (a miss falls back to the utility policy).
     llm_cache: str = ".cache/llm"

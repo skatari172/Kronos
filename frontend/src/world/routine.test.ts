@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialMock } from "../api/mock";
 import { RUN_FROM } from "./Models";
 import { useFights } from "./fights";
@@ -7,6 +7,18 @@ import { startRoutine, stepRoutine } from "./routine";
 import { townAt } from "./town";
 
 const town = townAt(1);
+
+// Routines roll dice; a seeded generator keeps every run of these tests the same.
+beforeEach(() => {
+  let seed = 7;
+  vi.spyOn(Math, "random").mockImplementation(() => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  });
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /** Run a villager's routine for `seconds`, recording poses, speeds, and gaits. */
 function live(

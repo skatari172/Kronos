@@ -241,11 +241,18 @@ class Service:
         raise KeyError("Unknown action in this API session; read committed Events for history")
 
     async def intervene(self, body):
-        # Names let the parser resolve "give 5 coins to Ada" to a citizen ID.
-        citizens = {cid: c.name for cid, c in self.state.citizens.items()}
-        command = await self.agents.parse(body.text, citizens)
+        """Like `decide`: check the request against the current world, parse outside the
+        lock (a real model can take longer than a tick), then queue it unless the branch
+        changed meanwhile. Queued interventions run on the next tick either way."""
         async with self.lock:
             self.check(body)
+            # Names let the parser resolve "give 5 coins to Ada" to a citizen ID.
+            citizens = {cid: c.name for cid, c in self.state.citizens.items()}
+            branch, epoch = self.state.branch_id, self.branch_epoch
+        command = await self.agents.parse(body.text, citizens)
+        async with self.lock:
+            if self.branch_epoch != epoch or self.state.branch_id != branch:
+                raise HTTPException(409, "Active branch changed while reading the command")
             result = self.enqueue(command, "player", body.text)
         return InterventionResult(command=command, result=result)
 

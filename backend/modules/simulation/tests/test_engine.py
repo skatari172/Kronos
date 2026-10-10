@@ -219,10 +219,12 @@ def test_every_action_type_is_supported_or_explicitly_planned():
     ],
 )
 def test_goal_adjustment_clamps_and_renormalises_to_100(changes, expected):
-    from kronos_sim.models import AdjustGoals, GoalWeightChanges
+    from kronos_sim.models import AdjustGoals, GoalWeightChanges, GoalWeights
 
+    world = initial_world()
+    world.citizens["citizen-0"].goal_weights = GoalWeights()  # even 25s, not Elena's own
     action = AdjustGoals(actor_id="citizen-0", changes=GoalWeightChanges(**changes))
-    result = Engine(initial_world()).apply(action, action_id="action-main:0")
+    result = Engine(world).apply(action, action_id="action-main:0")
     assert result.state.citizens["citizen-0"].goal_weights.model_dump() == expected
     assert result.events[0].type == "goals_changed"
     assert result.events[0].action_id == "action-main:0"

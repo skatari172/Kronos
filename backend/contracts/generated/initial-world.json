@@ -656,16 +656,16 @@
           "bread": 1
         },
         "goals": [
-          "Stay fed",
-          "Save for tomorrow"
+          "Own the most land",
+          "Keep the farm ahead"
         ],
         "goal_weights": {
-          "wealth": 25,
-          "influence": 25,
-          "safety": 25,
-          "reputation": 25
+          "wealth": 45,
+          "influence": 30,
+          "safety": 10,
+          "reputation": 15
         },
-        "personality": "practical",
+        "personality": "Shrewd and proud landowner who hates being undersold",
         "relationships": [],
         "memories": [],
         "reputation": 50,
@@ -692,16 +692,16 @@
           "bread": 1
         },
         "goals": [
-          "Stay fed",
-          "Save for tomorrow"
+          "Feed the whole town",
+          "Be the richest baker"
         ],
         "goal_weights": {
-          "wealth": 25,
+          "wealth": 40,
           "influence": 25,
-          "safety": 25,
-          "reputation": 25
+          "safety": 15,
+          "reputation": 20
         },
-        "personality": "practical",
+        "personality": "Ambitious baker, jealous of any rival oven",
         "relationships": [],
         "memories": [],
         "reputation": 50,
@@ -728,16 +728,16 @@
           "bread": 1
         },
         "goals": [
-          "Stay fed",
-          "Save for tomorrow"
+          "Broker every deal",
+          "Be liked by all"
         ],
         "goal_weights": {
-          "wealth": 25,
-          "influence": 25,
-          "safety": 25,
-          "reputation": 25
+          "wealth": 30,
+          "influence": 30,
+          "safety": 10,
+          "reputation": 30
         },
-        "personality": "practical",
+        "personality": "Sociable merchant who knows everyone's business",
         "relationships": [],
         "memories": [],
         "reputation": 50,
@@ -764,16 +764,16 @@
           "bread": 1
         },
         "goals": [
-          "Stay fed",
-          "Save for tomorrow"
+          "Earn a fair wage",
+          "Stand up to Elena"
         ],
         "goal_weights": {
-          "wealth": 25,
-          "influence": 25,
-          "safety": 25,
-          "reputation": 25
+          "wealth": 35,
+          "influence": 15,
+          "safety": 35,
+          "reputation": 15
         },
-        "personality": "practical",
+        "personality": "Hot-headed farmhand tired of being poor",
         "relationships": [],
         "memories": [],
         "reputation": 50,
@@ -800,16 +800,16 @@
           "bread": 1
         },
         "goals": [
-          "Stay fed",
-          "Save for tomorrow"
+          "Never go hungry",
+          "Save for a home"
         ],
         "goal_weights": {
-          "wealth": 25,
-          "influence": 25,
-          "safety": 25,
-          "reputation": 25
+          "wealth": 20,
+          "influence": 10,
+          "safety": 55,
+          "reputation": 15
         },
-        "personality": "practical",
+        "personality": "Quiet, careful miller who counts every crumb",
         "relationships": [],
         "memories": [],
         "reputation": 50,
@@ -836,16 +836,16 @@
           "bread": 1
         },
         "goals": [
-          "Stay fed",
-          "Save for tomorrow"
+          "Build something lasting",
+          "Earn respect"
         ],
         "goal_weights": {
           "wealth": 25,
-          "influence": 25,
-          "safety": 25,
-          "reputation": 25
+          "influence": 35,
+          "safety": 10,
+          "reputation": 30
         },
-        "personality": "practical",
+        "personality": "Blunt builder with big plans for the town",
         "relationships": [],
         "memories": [],
         "reputation": 50,
@@ -872,16 +872,16 @@
           "bread": 1
         },
         "goals": [
-          "Stay fed",
-          "Save for tomorrow"
+          "Make friends",
+          "Find steady work"
         ],
         "goal_weights": {
-          "wealth": 25,
-          "influence": 25,
-          "safety": 25,
-          "reputation": 25
+          "wealth": 15,
+          "influence": 15,
+          "safety": 30,
+          "reputation": 40
         },
-        "personality": "practical",
+        "personality": "Gentle weaver who mends quarrels",
         "relationships": [],
         "memories": [],
         "reputation": 50,

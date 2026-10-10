@@ -1037,7 +1037,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Check backend health */
+        /**
+         * Check backend health
+         * @description The provider is the one actually configured (`KRONOS_LLM_PROVIDER`), not a constant.
+         */
         get: operations["health_health_get"];
         put?: never;
         post?: never;

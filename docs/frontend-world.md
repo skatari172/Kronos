@@ -6,36 +6,44 @@ The frontend is a full-screen 3D village that grows from a hamlet into a city as
 
 ## Map
 
-| File                                      | Responsibility                                                                                      |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `src/app/App.tsx`                         | Full-screen stage: village, growth badge, tier banner, playback HUD, time-lapse                     |
-| `src/app/useSimulation.ts`                | Load, sync, auto-start, playback controls; offline fixture fallback in development                  |
-| `src/app/Header.tsx`, `feed.ts`           | Header and the full-screen Chronicle (sample events)                                                |
-| `src/app/EntityPanel.tsx`, `profiles.ts`  | Details panel for the selection (live numbers, sample narrative)                                    |
-| `src/app/Dashboard.tsx`                   | The earlier panel dashboard, not mounted. Reuse its pieces as HUDs                                  |
-| `src/world/Village.tsx`                   | Canvas, lights, camera, simulated entities (businesses, villagers), selection labels                |
-| `src/world/BuildingLife.tsx`              | A business's life: construction, upgrades, ruins                                                    |
-| `src/world/Ground.tsx`                    | Island tiles, roads, scenery, houses and landmarks, simulation lots, rise-from-the-ground animation |
-| `src/world/town.ts`                       | Town plan: hex grid, districts, road network and auto-tiling, places, path-finding                  |
-| `src/world/progress.ts`                   | Growth score and tiers (Hamlet → Village → Town → City), `useTown()`                                |
-| `src/world/routine.ts`                    | Villager daily life: errands, breaks, homes, builders                                               |
-| `src/world/sites.ts`                      | Construction sites currently animating, so routines can send builders                               |
-| `src/world/crowd.ts`                      | Keeps villagers a body-width apart                                                                  |
-| `src/world/preload.ts`                    | Starts loading every model for every tier at startup                                                |
-| `src/world/Models.tsx`                    | Model loading, grass recolour, business dressing per level, dust, animated characters               |
-| `src/world/assets.ts`                     | Model registry: business models, character per occupation, animation files, scales                  |
-| `src/world/Selection.tsx`, `spring.ts`    | Shared selection ring and spring helper                                                             |
-| `src/world/town.test.ts`, `crowd.test.ts` | Growth, road, home, tier-hold, and crowd-spacing invariants                                         |
-| `public/models/`                          | KayKit CC0 models, licences, and sources ([README](../frontend/public/models/README.md))            |
+| File                                                          | Responsibility                                                                                      |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/app/App.tsx`                                             | Full-screen stage: village, growth badge, tier banner, playback HUD, time-lapse                     |
+| `src/app/useSimulation.ts`                                    | Load, sync, auto-start, playback controls; offline fixture fallback in development                  |
+| `src/app/Header.tsx`, `feed.ts`                               | Header and the full-screen Chronicle (sample events)                                                |
+| `src/app/EntityPanel.tsx`, `VillagerPanel.tsx`, `profiles.ts` | Details panel; villagers get a five-tab summary (overview, activity, mind, ties, ask)               |
+| `src/app/Dashboard.tsx`                                       | The earlier panel dashboard, not mounted. Reuse its pieces as HUDs                                  |
+| `src/world/Village.tsx`                                       | Canvas, lights, camera, simulated entities (businesses, villagers), selection labels                |
+| `src/world/BuildingLife.tsx`                                  | A business's life: construction, upgrades, ruins                                                    |
+| `src/world/Ground.tsx`                                        | Island tiles, roads, scenery, houses and landmarks, simulation lots, rise-from-the-ground animation |
+| `src/world/town.ts`                                           | Town plan: hex grid, districts, road network and auto-tiling, places, path-finding                  |
+| `src/world/progress.ts`                                       | Growth score and tiers (Hamlet → Village → Town → City), `useTown()`                                |
+| `src/world/routine.ts`                                        | Villager daily life: errands, breaks, homes, builders                                               |
+| `src/world/sites.ts`                                          | Construction sites currently animating, so routines can send builders                               |
+| `src/world/crowd.ts`                                          | Keeps villagers a body-width apart                                                                  |
+| `src/world/preload.ts`                                        | Starts loading every model for every tier at startup                                                |
+| `src/world/Models.tsx`                                        | Model loading, grass recolour, business dressing per level, dust, animated characters               |
+| `src/world/assets.ts`                                         | Model registry: business models, character per occupation, animation files, scales                  |
+| `src/world/Selection.tsx`, `spring.ts`                        | Shared selection ring and spring helper                                                             |
+| `src/world/town.test.ts`, `crowd.test.ts`                     | Growth, road, home, tier-hold, and crowd-spacing invariants                                         |
+| `public/models/`                                              | KayKit CC0 models, licences, and sources ([README](../frontend/public/models/README.md))            |
 
 ## Stage and controls
 
 - **Full screen.** The village fills the window. HUDs float over it.
 - **Auto-start.** On the first status poll, if the server clock is paused, the page starts it once (`useSimulation`). A later pause by anyone is respected until reload. Playback is shared server state, so every tab sees the same clock.
 - **Bottom HUD:** day and connection, play/pause, one-day step, speed, and **time-lapse**. Time-lapse sets the _real_ simulation to 4× and slowly orbits the camera; stopping it returns to 1×.
-- **Header:** brand, the town's current tier ("Oakhaven · Village"), and a **Chronicle** button with a count of new events. The button opens the event stream full screen, with a search box and filter chips (All, Your decrees, Trade, Building, People, Talk, Money, Homes, Losses) showing counts; one large line per event (icon, sentence, day), newest first and scrolling. Clicking an event opens a box explaining why it happened: each person involved (both sides of a trade, a rent, a loan, a vote) with what they wanted and their reasoning. While that box is open the stream behind it freezes; closing it (✕, Esc, or a click outside) lets new events flow in again. The stream is a hard-coded sample for now (`src/app/feed.ts`); swap in the snapshot's events or `GET /api/history/events`.
+- **Header:** brand, the town's current tier ("Oakhaven · Village"), and a **Chronicle** button with a count of new events. The button opens the event stream full screen, with a search box and filter chips (All, Your decrees, Trade, Building, People, Fights, Talk, Money, Homes, Losses) showing counts; one large line per event (icon, sentence, day), newest first and scrolling. Clicking an event opens a box explaining why it happened: each person involved (both sides of a trade, a rent, a loan, a vote) with what they wanted and their reasoning. While that box is open the stream behind it freezes; closing it (✕, Esc, or a click outside) lets new events flow in again. Live, the stream is built from the backend's committed events (`useLiveChronicle` in `src/app/feed.ts`, mapping in `src/app/chronicle.ts`). On load or a branch change it rebuilds from the last ~4,000 events via `GET /api/events`, then follows the WebSocket. Routine bookkeeping (wages, meals, harvests, movement, a scripted agent's daily loaf, repeated messages) is left out. The "why" box shows the actor's own `rationale` with a source chip (AI agent, Mock agent, Utility rule, Town rule, from the `[source]` prefix the agent service writes) and the other party's latest memory of the actor plus their trust and grudge. Decrees come from the backend's `intervention_applied` event, so they survive reloads. Offline previews, which have no agents, reveal the hard-coded `SAMPLE_EVENTS` instead.
 - **Decrees (the player as the town's god):** a glowing box floats above the village (`src/app/GodBar.tsx`). Plain language ("Cap bread price at 6 coins", "Famine", "Set market tax to 5%") goes to `POST /api/interventions`, which parses it into a validated command and applies it through the engine. An accepted decree drifts down from the box onto the town in gold; when it lands, a column of light strikes the square with shockwaves and sparks (`world/DecreeEffect.tsx`), every villager stops, turns to the square, and cheers for a few seconds, and the decree joins the Chronicle as a gold "Your decree" entry whose why box shows your words and the town's reaction (`rules.ts › reactionTo`, sample copy). A rejected sentence shakes the box and says why. Any text may be typed; the frontend never filters it. Live, it is sent as-is (with a 45 s wait and a pulsing "listening" box, since an AI provider can take ~20 s) and the backend decides what it means. With the default mock provider only its fixed phrasings apply; with `KRONOS_LLM_PROVIDER=anthropic` free-form text is interpreted. Offline, anything is accepted as a preview: known phrasings get an exact summary (`rules.ts › previewCommand`), everything else is recorded in the player's own words. The examples list opens when the box is clicked and closes once something is submitted, an example is picked, or Esc is pressed.
-- **Details panel** (right side, a bottom sheet on phones): opens when anything is selected and closes with ✕ or Esc. It stays short and large: a title, a tag (job, business kind and level, home, landmark, or lot), two to four live numbers from the snapshot (coins, job, hunger; owner, cash, bread price or wheat, staff; owner and rent), and for villagers one sample thought from `src/app/profiles.ts`.
+- **Details panel** (right side, a bottom sheet on phones): opens when anything is selected and closes with ✕ or Esc. It stays short and large: a title, a tag (job, business kind and level, home, landmark, or lot), two to four live numbers from the snapshot (coins, job, hunger; owner, cash, bread price or wheat, staff; owner and rent), and, for villagers, a full summary in five tabs (`src/app/VillagerPanel.tsx`):
+  - **Overview:** coins, job, home (rents from whom, or lots owned), bread, business owned, reputation, influence and standing (`GET /api/agents/{id}`), hunger, and what's on their mind: their latest decision's reasoning with who decided, else their latest memory.
+  - **Activity:** what they did and what happened to them, newest first, from `GET /api/agents/{id}/history` (refreshed each day). Each of their own decisions shows its reasoning and source, and a line counts who decided (for example "Mock agent ×75").
+  - **Mind:** personality, goals, priorities (goal weights as bars), memories and the memory summary.
+  - **Ties:** their strongest relationships, with trust (−100 to 100, centred) and grudge bars.
+  - **Ask:** a question answered by their agent from their own history (`POST /api/agents/{id}/ask`), with how many events it cited. Live only.
+
+  Offline previews use the snapshot and the store's events, with a sample thought from `src/app/profiles.ts`. In the Chronicle's "why" box, a villager's name opens their summary.
+
 - **Tier banner:** "Oakhaven is now a Village", shown for 4 s when the tier rises during play. Seeks and branch switches (a new epoch) set the baseline silently.
 - **Selection:** click any business, villager, house, landmark, or lot for a gold ring and the details panel. Click empty ground or press Esc to clear. Nothing floats over the scene.
 - **Camera:** drag to orbit, scroll to zoom (very close is allowed). Panning is off.
@@ -133,7 +141,7 @@ Lots are not tied to any hard-coded layout: each one renders at its own `positio
 Villagers sometimes stop on the way to look around or wave (4% per road segment). Anyone with under 1.50 coins sneaks instead of strolling unless in a hurry.
 
 - **Newcomers** rise out of the ground (`Spawn_Ground`) instead of popping in.
-- **Fights** (`fights.ts`, HARD-CODED for now). Every 30–55 s the director picks two villagers, a meeting point on the nearest road, and a start time 7 s ahead. Both sprint there, face off, and play a choreographed exchange. Each fight is written into the Chronicle with both sides' grudges (Fights filter). Later this should follow the backend's relationship events (argue, insult, betray, grudges).
+- **Fights** (`fights.ts`). Live, each new `citizen_interacted` event of kind argue, insult or betray is staged as a fight between those two villagers (`useFights.request`; at most 3 waiting, 12 s apart, history replays are never staged). The director picks a meeting point on the nearest road and a start time 7 s ahead; both sprint there, face off, and play a choreographed exchange. The Chronicle entry comes from the event itself (Fights filter). Offline previews, which have no agents, script a fight every 30–55 s between random villagers instead, with hard-coded grudges.
 - **Decree reactions** (`decrees.ts`). While words fall, everyone stops, turns to the square, and raises their arms to the sky (`Ranged_Magic_Raise`). After the strike they react to what was decreed (`rules.ts › moodOf`): good news (raises, gifts, feasts, harvests, caps) brings cheering and jumping for joy; bad news (famine, drought, price hikes, wage cuts, taxes) brings a flinch, then grumbling.
 - **Homes** (`homeOf`). A citizen who leases a lot lives there. Everyone else gets a cottage in citizen-ID order, and it stays the same as the town grows (tested).
 - **Starting spots** (`startSpot`). When the scene loads, each villager stands in front of their home, or another cottage, landmark, or business if someone earlier already starts there.
@@ -157,6 +165,7 @@ Villagers sometimes stop on the way to look around or wave (4% per road segment)
 ## Known limits and requests for other owners
 
 - **Committed database (API/history).** `backend/database/kronos.db` is tracked, and the page auto-starts the clock. Running the app locally therefore changes a tracked file. Consider ignoring it, or seeding it on first run.
+- **Saved worlds keep their old citizens.** Founder personalities and newcomer names live in the seed (`kronos_sim/seed.py`), so a database created before them still has identical "practical" founders. `make reset` (with the backend stopped) starts a fresh world.
 - **Economy stability (simulation).** In testing, the seed economy starved by about day 60–90 at 4×: average hunger 94, villagers nearly broke, a bakery holding most of the cash, and the market bankrupt. Growth stalls by design when that happens. A healthier money loop would let towns reach Town and City on their own.
 - **Lots and population (simulation).** The v1 growth step (`simulation-design.md`) targets this: 2 town-land plots open when every plot is used, newcomers arrive every 3 days while the town is fed, destitute citizens leave, and citizens found, upgrade, and rent on their own. New plots appear through `plot_opened` and are shown by the existing lot rules.
 - **More building kinds (simulation).** Chapel, forge, and lumbermill are scenery. Making them `BuildingKind`s would let the existing lifecycle stage them.

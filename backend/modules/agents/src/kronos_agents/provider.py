@@ -181,10 +181,16 @@ class MockProvider:
                 }
         if not observation["neighbors"] or not prices:
             raise ProviderError("The mock has no sensible action for this citizen")
+        social = MockProvider._socialize(observation)
+        if social is not None:
+            return social
         return {
             **actor,
             "type": "communicate",
-            "recipient_id": min(observation["neighbors"]),
+            # Day 0 tells the first neighbor; later days go round the neighbors.
+            "recipient_id": sorted(observation["neighbors"])[
+                observation.get("tick", 0) % len(observation["neighbors"])
+            ],
             "message": (
                 "There is no bread in stock right now."
                 if not stocked
@@ -194,6 +200,43 @@ class MockProvider:
             ),
             "rationale": "Share the observed price with a neighbor.",
         }
+
+    @staticmethod
+    def _socialize(observation: dict) -> dict | None:
+        """From day 2, a fed citizen sometimes befriends, gifts, argues or insults a neighbor.
+
+        Deterministic: the roll is a hash of citizen and day, and grudges make quarrels likelier,
+        so feuds build and fade without touching the world's RNG.
+        """
+        citizen, tick = observation["citizen"], observation.get("tick", 0)
+        if tick < 2 or "interact" not in observation["available_actions"]:
+            return None
+        neighbors = sorted(observation["neighbors"])
+        roll = zlib.crc32(f"{citizen['id']}:{tick}".encode())
+        target = neighbors[roll % len(neighbors)]
+        name = observation["neighbors"][target]
+        tie = next((t for t in observation.get("ties", []) if t["citizen_id"] == target), {})
+        grudge, trust = tie.get("grudge", 0), tie.get("trust", 0)
+        chance = (roll >> 8) % 10
+        temper = observation["citizen"].get("personality", "").lower()
+        hot = any(word in temper for word in ("proud", "jealous", "hot", "blunt", "ambitious"))
+        act = {"actor_id": citizen["id"], "type": "interact", "recipient_id": target}
+        if grudge >= 30 and chance < 3:
+            return {**act, "kind": "insult", "rationale": f"{name} keeps crossing me. Enough."}
+        if (grudge >= 10 and chance < 2) or (hot and chance == 0):
+            return {**act, "kind": "argue", "rationale": f"I won't let {name} talk down to me."}
+        if trust >= 50 and chance < 2:
+            return {**act, "kind": "ally", "rationale": f"{name} and I are stronger together."}
+        if chance in (2, 3) and grudge < 10:
+            return {**act, "kind": "befriend", "rationale": f"{name} has been decent to me."}
+        if chance == 4 and citizen["money"] >= 3000:
+            return {
+                **act,
+                "kind": "gift",
+                "amount": 200,
+                "rationale": f"I can spare a little for {name}.",
+            }
+        return None
 
     @staticmethod
     def _answer(observation: dict) -> dict:
@@ -214,8 +257,9 @@ class MockProvider:
         }
 
 
-# Decisions per post-tick batch; bounds latency however large the town grows.
-MAX_DECISIONS = 8
+# Decisions per post-tick batch; bounds latency however large the town grows. Room for a
+# whole City-sized town, so every citizen gets a turn each round.
+MAX_DECISIONS = 24
 
 
 class AgentService:
@@ -304,7 +348,6 @@ class AgentService:
         if not set(result.cited_event_ids) <= {event.id for event in events}:
             raise ProviderError("Answer cited events outside the citizen's history")
         return result
-
 
     def scheduled(self, world: WorldState) -> list[str]:
         """Citizens whose slot falls on the coming day, in stable ID order.

@@ -9,6 +9,7 @@ from typing import get_args
 from pydantic import TypeAdapter
 
 from kronos_sim import models as m
+from kronos_sim.seed import newcomer_name, newcomer_persona
 
 EVENT = TypeAdapter(m.SimulationEvent)
 ACTION = TypeAdapter(m.AgentAction)
@@ -2254,16 +2255,21 @@ class Engine:
         )
         if opening is None:
             return
+        arrival = s.tick // 3 - 1
+        personality, goals, weights = newcomer_persona(arrival)
         cid = self._spawn(
             m.SpawnCitizenRequest(
                 branch_id=s.branch_id,
                 expected_sequence=s.sequence,
-                name=f"Traveler {s.tick // 3}",
+                name=newcomer_name(arrival),
                 occupation="Newcomer",
                 plot_id=opening.plot_id,
                 money=1000,
+                personality=personality,
+                goal_weights=weights,
             )
         )
+        s.citizens[cid].goals = goals
         self._execute(
             m.ApplyJob(actor_id=cid, building_id=opening.id, rationale="Newcomer seeks an open job")
         )

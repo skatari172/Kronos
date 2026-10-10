@@ -10,7 +10,8 @@ import { useWorld } from "../stores/world";
 import { growthOf, TIERS } from "../world/progress";
 import { Village } from "../world/Village";
 import { EntityPanel } from "./EntityPanel";
-import { useFightChronicle, useSampleClock } from "./feed";
+import { useFightChronicle, useLiveChronicle, useSampleClock } from "./feed";
+import { useFights } from "../world/fights";
 import { GodBar } from "./GodBar";
 import { Header } from "./Header";
 import { useSimulation } from "./useSimulation";
@@ -20,8 +21,13 @@ export function App() {
   const update = useWorld((s) => s.update);
   const epoch = useWorld((s) => s.epoch);
   const sim = useSimulation();
-  useSampleClock();
-  useFightChronicle();
+  // Live, the chronicle and fights follow the backend's events; offline
+  // previews (no agents) fall back to hard-coded samples and scripted fights.
+  const live = sim.mode === "live";
+  useSampleClock(sim.mode === "offline");
+  useFightChronicle(sim.mode === "offline");
+  useLiveChronicle(live);
+  useEffect(() => useFights.setState({ scripted: !live }), [live]);
   const [timelapse, setTimelapse] = useState(false);
   const growth = update ? growthOf(update.state, epoch) : null;
   const banner = useTierBanner(growth?.tier, epoch);
@@ -38,7 +44,6 @@ export function App() {
       </main>
     );
 
-  const live = sim.mode === "live";
   const day = String(update.state.tick + 1).padStart(2, "0");
   const status = !live
     ? sim.preview || "Offline preview · press ⏭ to grow the village"
@@ -62,7 +67,7 @@ export function App() {
       <Village autoRotate={timelapse} />
       <Header tier={growth.name} />
       <GodBar live={live} onDecree={sim.intervene} />
-      <EntityPanel />
+      <EntityPanel live={live} />
       {banner && (
         <div className="tier-banner" role="status" key={banner}>
           <small>OAKHAVEN IS NOW A</small>

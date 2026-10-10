@@ -1,12 +1,19 @@
 import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
-import type { Building, Citizen, Plot, WorldState } from "../api/types";
+import type {
+  Building,
+  Citizen,
+  Plot,
+  SimulationEvent,
+  WorldState,
+} from "../api/types";
 import { coins } from "../api/format";
 import { usePresentation, useWorld } from "../stores/world";
 import { useTown } from "../world/progress";
 import { residentsOf } from "../world/routine";
 import type { Place, Town } from "../world/town";
-import { PLACE_NOTES, citizenThought } from "./profiles";
+import { PLACE_NOTES } from "./profiles";
+import { VillagerPanel } from "./VillagerPanel";
 
 const KIND_NAMES: Record<Building["kind"], string> = {
   farm: "Farm",
@@ -16,13 +23,14 @@ const KIND_NAMES: Record<Building["kind"], string> = {
 
 /**
  * Details for whatever is selected in the village, docked on the right.
- * A few large numbers from the snapshot, plus one line of hard-coded sample
- * copy (profiles.ts) until the per-entity endpoints are wired in.
+ * Businesses, lots and places get a few large numbers from the snapshot;
+ * villagers get the full summary in VillagerPanel.tsx.
  */
-export function EntityPanel() {
+export function EntityPanel({ live }: { live: boolean }) {
   const selectedId = usePresentation((s) => s.selectedId);
   const select = usePresentation((s) => s.select);
   const state = useWorld((s) => s.update?.state);
+  const events = useWorld((s) => s.events);
   const town = useTown();
 
   useEffect(() => {
@@ -32,10 +40,13 @@ export function EntityPanel() {
   }, [select]);
 
   if (!selectedId || !state) return null;
-  const body = resolve(selectedId, state, town);
+  const body = resolve(selectedId, state, town, events, live);
   if (!body) return null;
   return (
-    <aside className="entity-panel" aria-label={`${body.title} details`}>
+    <aside
+      className={`entity-panel ${state.citizens[selectedId] ? "villager" : ""}`}
+      aria-label={`${body.title} details`}
+    >
       <header>
         <div>
           <h2>{body.title}</h2>
@@ -56,8 +67,15 @@ export function EntityPanel() {
 
 type Body = { title: string; tag: string; content: ReactNode };
 
-function resolve(id: string, state: WorldState, town: Town): Body | null {
-  if (state.citizens[id]) return citizenBody(state.citizens[id], state);
+function resolve(
+  id: string,
+  state: WorldState,
+  town: Town,
+  events: SimulationEvent[],
+  live: boolean,
+): Body | null {
+  if (state.citizens[id])
+    return citizenBody(state.citizens[id], state, events, live);
   if (state.buildings[id]) return buildingBody(state.buildings[id], state);
   if (id.startsWith("lot:")) {
     const plot = state.plots[id.slice(4)];
@@ -70,24 +88,23 @@ function resolve(id: string, state: WorldState, town: Town): Body | null {
 const name = (state: WorldState, id?: string | null) =>
   (id && (state.citizens[id]?.name ?? state.buildings[id]?.name)) || "—";
 
-function citizenBody(citizen: Citizen, state: WorldState): Body {
+function citizenBody(
+  citizen: Citizen,
+  state: WorldState,
+  events: SimulationEvent[],
+  live: boolean,
+): Body {
   return {
     title: citizen.name,
     tag: citizen.occupation,
     content: (
-      <>
-        <dl className="stats">
-          <Stat label="Coins" value={coins(citizen.money)} />
-          <Stat
-            label="Works at"
-            value={
-              citizen.employer_id ? name(state, citizen.employer_id) : "No job"
-            }
-          />
-        </dl>
-        <Meter label="Hunger" value={citizen.hunger} warn={70} />
-        <blockquote>“{citizenThought(citizen.id)}”</blockquote>
-      </>
+      <VillagerPanel
+        key={citizen.id}
+        citizen={citizen}
+        state={state}
+        events={events}
+        live={live}
+      />
     ),
   };
 }
@@ -154,31 +171,6 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div>
       <dt>{label}</dt>
       <dd>{value}</dd>
-    </div>
-  );
-}
-
-function Meter({
-  label,
-  value,
-  warn,
-}: {
-  label: string;
-  value: number;
-  warn: number;
-}) {
-  return (
-    <div className="panel-meter">
-      <div>
-        <span>{label}</span>
-        <span>{value} / 100</span>
-      </div>
-      <div className="meter-track">
-        <i
-          className={value >= warn ? "warn" : ""}
-          style={{ width: `${value}%` }}
-        />
-      </div>
     </div>
   );
 }

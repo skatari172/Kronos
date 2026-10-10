@@ -25,7 +25,7 @@ def test_anthropic_defaults(monkeypatch):
     pytest.importorskip("anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")  # no request is sent
     provider, timeout = build_provider(Settings(llm_provider="anthropic", llm_cache=""))
-    assert (provider.model, timeout) == ("claude-opus-5-5", 20)
+    assert (provider.model, timeout) == ("claude-haiku-5-5", 20)
     monkeypatch.setenv("KRONOS_LLM_TIMEOUT", "8")
     monkeypatch.setenv("KRONOS_LLM_MODEL", "claude-sonnet-5-5")
     provider, timeout = build_provider(Settings(llm_provider="anthropic", llm_cache=""))
@@ -51,6 +51,6 @@ def test_real_providers_are_cached_and_logged(tmp_path):
     provider, _ = build_provider(config)
     assert isinstance(provider, CachingProvider) and provider.replay_only
     assert isinstance(provider.inner, LoggingProvider)
-    assert provider.tag.startswith("claude-opus-5-5:")
+    assert provider.tag.startswith("claude-haiku-5-5:")
     # The mock is free and deterministic, so it is never wrapped.
     assert isinstance(build_provider(Settings())[0], MockProvider)

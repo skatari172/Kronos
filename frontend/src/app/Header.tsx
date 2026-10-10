@@ -15,6 +15,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { usePresentation } from "../stores/world";
 import { useChronicle, type FeedItem, type FeedKind } from "./feed";
 
 const ICONS: Record<FeedKind, LucideIcon> = {
@@ -73,7 +74,9 @@ export function Header({ tier }: { tier: string }) {
         >
           <BookOpen size={17} />
           Chronicle
-          {unseen > 0 && <span className="badge">{unseen}</span>}
+          {unseen > 0 && (
+            <span className="badge">{unseen > 99 ? "99+" : unseen}</span>
+          )}
         </button>
       </header>
       {open && (
@@ -223,13 +226,31 @@ function Chronicle({
           )}
         </ol>
       </div>
-      {detail && <WhyBox event={detail} onClose={closeDetail} />}
+      {detail && (
+        <WhyBox
+          event={detail}
+          onClose={closeDetail}
+          onPerson={(id) => {
+            // Show that villager: close the chronicle and open their details.
+            usePresentation.getState().select(id);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 }
 
 /** Why one event happened: each person involved, what they wanted, and why. */
-function WhyBox({ event, onClose }: { event: FeedItem; onClose: () => void }) {
+function WhyBox({
+  event,
+  onClose,
+  onPerson,
+}: {
+  event: FeedItem;
+  onClose: () => void;
+  onPerson?: (id: string) => void;
+}) {
   const Icon = ICONS[event.kind];
   return (
     <div
@@ -262,8 +283,21 @@ function WhyBox({ event, onClose }: { event: FeedItem; onClose: () => void }) {
           {event.why.map((side) => (
             <section key={side.name + side.role}>
               <header>
-                <strong>{side.name}</strong>
+                {side.id && onPerson ? (
+                  <button
+                    className="why-person"
+                    title={`Open ${side.name}'s details`}
+                    onClick={() => onPerson(side.id!)}
+                  >
+                    {side.name}
+                  </button>
+                ) : (
+                  <strong>{side.name}</strong>
+                )}
                 <span className="chip">{side.role}</span>
+                {side.source && (
+                  <span className="chip why-source">{side.source}</span>
+                )}
               </header>
               <dl>
                 <dt>Wanted</dt>

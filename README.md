@@ -8,11 +8,21 @@
 
 Requires **Python 3.12+**, **Node 22.12+**, npm, and Make. No Docker, API keys, or paid services.
 
+One command does everything: installs anything missing, checks the Claude key (when `.env` uses it), resets the database to a fresh day-0 village, starts the backend and frontend, and opens the browser. Ctrl+C stops both.
+
+```sh
+make start         # or ./scripts/start.sh; `make start KEEP=1` keeps the current village
+```
+
+Or run each part yourself:
+
 ```sh
 make install
 make backend       # terminal 1 — http://localhost:8000
 make frontend      # terminal 2 — http://localhost:5173
 ```
+
+To have Claude drive the villagers, set `KRONOS_LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` in `.env` (the default model is the low-cost `claude-haiku-5-5`), then check the key with `uv run python scripts/check_anthropic_key.py --call`.
 
 `make install` uses uv and pnpm if installed, otherwise installs them inside ignored `.tools/`. It installs the committed lockfiles. Python modules use a single uv environment. Optional settings are in `.env.example`; copy to `.env` to customize the backend. Vite reads the root `.env` / `.env.local` or shell variables:
 
@@ -56,6 +66,7 @@ Root configuration files manage the shared toolchain. Each Python module has its
 
 | Command                          | Purpose                                               |
 | -------------------------------- | ----------------------------------------------------- |
+| `make start`                     | Fresh village, backend and frontend in one terminal   |
 | `make install`                   | Install toolchain if needed, then locked dependencies |
 | `make backend` / `make frontend` | Start each app independently                          |
 | `make test`                      | pytest + Vitest                                       |

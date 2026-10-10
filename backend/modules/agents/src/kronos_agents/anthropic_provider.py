@@ -17,7 +17,9 @@ from pydantic import TypeAdapter
 from kronos_agents.prompts import system_prompt, user_message
 from kronos_agents.provider import AgentService, ProviderError
 
-DEFAULT_MODEL = "claude-opus-5-5"
+# Haiku: each decision is one choice from a short menu, so the fast, low-cost model fits.
+# Set KRONOS_LLM_MODEL (e.g. claude-sonnet-5-5) for richer reasoning.
+DEFAULT_MODEL = "claude-haiku-5-5"
 DEFAULT_TIMEOUT = 20.0
 # Models that accept server-side refusal fallbacks (`fallbacks: "default"`).
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
@@ -39,6 +41,10 @@ _UNSUPPORTED = (
     "uniqueItems",
 )
 _WRAPPER = "result"
+# Structured outputs compile the schema into a grammar with a size limit: a union of more
+# than about 8 action types is rejected ("compiled grammar is too large"). Larger menus send
+# the schema as text in the prompt instead; AgentService still validates every reply.
+GRAMMAR_LIMIT = 8
 
 
 def result_type(task: str) -> Any:
@@ -182,6 +188,24 @@ class AnthropicProvider:
         """Keyword arguments for `client.beta.messages.create` (pure; inspected by tests) and
         whether the structured reply is wrapped."""
         schema, wrapped = output_schema(task, observation)
+        message = user_message(task, observation)
+        constrained = not (
+            task == "decision" and len(observation.get("available_actions") or []) > GRAMMAR_LIMIT
+        )
+        if not constrained:
+            # Too many choices for a grammar: describe the shapes and ask for bare JSON.
+            shapes = json.dumps(
+                schema["properties"][_WRAPPER] | {"$defs": schema.get("$defs", {})},
+                separators=(",", ":"),
+            )
+            message = (
+                f"Reply with one JSON object matching this schema (no prose, no code fence):\n"
+                f"{shapes}\n\n{message}"
+            )
+            wrapped = False
+        output_config: dict[str, Any] = {"effort": self.effort}
+        if constrained:
+            output_config["format"] = {"type": "json_schema", "schema": schema}
         kwargs: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self.max_tokens,
@@ -193,11 +217,8 @@ class AnthropicProvider:
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
-            "messages": [{"role": "user", "content": user_message(task, observation)}],
-            "output_config": {
-                "effort": self.effort,
-                "format": {"type": "json_schema", "schema": schema},
-            },
+            "messages": [{"role": "user", "content": message}],
+            "output_config": output_config,
         }
         if self.model in _FALLBACK_MODELS:
             kwargs["betas"] = [_FALLBACK_BETA]
@@ -229,7 +250,16 @@ class AnthropicProvider:
         if not text.strip():
             raise ProviderError("Claude returned no structured output")
         if not wrapped:
-            return text
+            # Unconstrained replies may wrap the object in prose or a code fence.
+            start, end = text.find("{"), text.rfind("}")
+            text = text[start : end + 1] if 0 <= start < end else text
+            try:
+                data = json.loads(text)
+            except ValueError:
+                return text  # AgentService reports the invalid JSON
+            if isinstance(data, dict) and set(data) == {_WRAPPER}:
+                data = data[_WRAPPER]  # some replies copy the structured-output wrapper
+            return json.dumps(data)
         try:
             return json.dumps(json.loads(text)[_WRAPPER])
         except (ValueError, KeyError, TypeError) as exc:

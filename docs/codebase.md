@@ -226,7 +226,7 @@ Stale context returns 409; malformed input/dry-run rule failure/provider failure
 
 `GET /api/world` and WebSocket frames use **`{branch_id, tick, sequence, state, events}`**. `state` is the complete serialized WorldState, not a delta. WebSocket sends an initial snapshot/recent Events, then new saved state plus the committed Event batch. Tick HTTP results additionally include `action_results` and `rejected_actions`. Events describe outcomes, carry sequence and optional action/causal links, and are the source for the feed. Never infer a completed trade from browser movement or snapshot differences.
 
-`GET /api/events?after=N&limit=100` currently has conflicting list and `EventPage` handlers. `EventPage` defines `branch_id`, `events`, `next_after`, `has_more`. Both implementations use ascending exclusive-after queries. Consumers must not assume a final page envelope until section 3 is resolved. `/api/history/events` remains the explicit branch/through historical route.
+`GET /api/events?after=N&limit=100` returns a plain list of events, ascending, with sequence greater than `after` (the duplicate `EventPage` handler was removed). `/api/history/events` remains the explicit branch/through historical route.
 
 Play requires branch/version and speed 1/2/4; pause uses an empty body; manual tick uses branch/version. Backend playback starts paused/1 after restart. The newer frontend hook auto-starts play once on visiting a connected live village, then respects later pauses. Shared playback affects all tabs.
 

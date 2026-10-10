@@ -326,7 +326,8 @@ def test_goal_update_is_bounded_and_renormalised(client):
     response = resolve(client, client.patch("/api/agents/citizen-6/goals", json=body))
     assert response.status_code == 200 and response.json()["status"] == "applied"
     weights = client.get("/api/agents/citizen-6").json()["citizen"]["goal_weights"]
-    assert weights == {"wealth": 35, "influence": 25, "safety": 15, "reputation": 25}
+    # Finn starts at 15/15/30/40.
+    assert weights == {"wealth": 25, "influence": 15, "safety": 20, "reputation": 40}
     event = client.get("/api/agents/citizen-6/history").json()[-1]
     assert event["type"] == "goals_changed" and event["rationale"] == "Saving up"
     too_big = {**mutation(1), "changes": {"wealth": 11}}

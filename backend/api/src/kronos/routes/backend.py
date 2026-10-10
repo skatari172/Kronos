@@ -12,8 +12,9 @@ router = APIRouter(tags=["Backend tools"])
 
 
 @router.get("/health", summary="Check backend health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "provider": "mock"}
+async def health(service: ServiceDependency) -> dict[str, str]:
+    """The provider is the one actually configured (`KRONOS_LLM_PROVIDER`), not a constant."""
+    return {"status": "ok", "provider": service.config.llm_provider}
 
 
 @router.get(

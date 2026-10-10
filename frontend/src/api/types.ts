@@ -10,3 +10,4 @@ export type Snapshot = components["schemas"]["SnapshotMetadata"];
 export type Status = components["schemas"]["SimulationStatus"];
 export type InterventionResult = components["schemas"]["InterventionResult"];
 export type ActionResult = components["schemas"]["ActionResult"];
+export type CitizenProfile = components["schemas"]["CitizenProfile"];
