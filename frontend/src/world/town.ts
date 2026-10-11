@@ -18,6 +18,8 @@ const CORE = { x: 6.8, z: 5.4 };
 
 export type Point = { x: number; z: number };
 const key = (p: Point) => `${Math.round(p.x * 10)}:${Math.round(p.z * 10)}`;
+/** A tile's identity: its grid cell, so tiny float differences never make a "new" tile. */
+export const tileKey = key;
 const step = (p: Point, k: number) => ({
   x: p.x + DIRECTIONS[k].x,
   z: p.z + DIRECTIONS[k].z,
@@ -334,6 +336,272 @@ function cellsNear(p: Point, radius: number) {
   return cells.filter((c, i) => i === 0 || distance(c) < radius);
 }
 
+/** Convex outline of points (Andrew's monotone chain), counter-clockwise. */
+function convexHull(points: Point[]): Point[] {
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.z - b.z);
+  if (sorted.length < 3) return sorted;
+  const cross = (o: Point, a: Point, b: Point) =>
+    (a.x - o.x) * (b.z - o.z) - (a.z - o.z) * (b.x - o.x);
+  const half = (list: Point[]) => {
+    const out: Point[] = [];
+    for (const p of list) {
+      while (
+        out.length >= 2 &&
+        cross(out[out.length - 2], out[out.length - 1], p) <= 0
+      )
+        out.pop();
+      out.push(p);
+    }
+    out.pop();
+    return out;
+  };
+  return [...half(sorted), ...half([...sorted].reverse())];
+}
+
+/** Inside a counter-clockwise convex outline, allowing `pad` beyond its edges. */
+function insideHull(hull: Point[], p: Point, pad: number) {
+  if (hull.length < 3) return false;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    const edge = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    // Signed distance to the edge's line; negative is outside.
+    const side = ((b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x)) / edge;
+    if (side < -pad) return false;
+  }
+  return true;
+}
+
+/**
+ * Make the land one piece: bridge every separate patch (lots opened past the
+ * shore) to the main island along the shortest hex path, then fill everything
+ * inside the land's convex outline, so the town is one solid area with no thin
+ * strips or notches. Adds plain grass tiles to `tiles` in place.
+ */
+export function joinLand(tiles: Piece[]) {
+  const land = new Map(tiles.map((t) => [key(t), { x: t.x, z: t.z }]));
+  // Every added cell sits exactly on the grid, so the same cell always gets the
+  // same position however it was reached (no remounts, no replayed growth).
+  const snap = (p: Point): Point => {
+    const row = Math.round(p.z / ROW);
+    const offset = row % 2 ? WIDTH / 2 : 0;
+    return {
+      x: Math.round((p.x - offset) / WIDTH) * WIDTH + offset,
+      z: row * ROW,
+    };
+  };
+  const add = (p: Point) => {
+    const cell = snap(p);
+    land.set(key(cell), cell);
+    tiles.push({
+      ...cell,
+      model: "hex_grass",
+      rotation: 0,
+      district: district(cell),
+    });
+  };
+  const near = (p: Point) => [0, 1, 2, 3, 4, 5].map((k) => snap(step(p, k)));
+  const patches = () => {
+    const seen = new Set<string>();
+    const out: Point[][] = [];
+    for (const [id, start] of land) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const patch: Point[] = [];
+      const queue = [start];
+      while (queue.length) {
+        const cell = queue.pop()!;
+        patch.push(cell);
+        for (const n of near(cell)) {
+          const nk = key(n);
+          if (land.has(nk) && !seen.has(nk)) {
+            seen.add(nk);
+            queue.push(land.get(nk)!);
+          }
+        }
+      }
+      out.push(patch);
+    }
+    return out.sort((a, b) => b.length - a.length);
+  };
+  const gap = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.z - b.z);
+
+  for (
+    let parts = patches(), guard = 0;
+    parts.length > 1 && guard < 50;
+    guard++
+  ) {
+    const [main, island] = parts;
+    const inMain = new Set(main.map(key));
+    let from = island[0];
+    let to = main[0];
+    for (const a of island)
+      for (const b of main) if (gap(a, b) < gap(from, to)) [from, to] = [a, b];
+    // Walk hex by hex toward the main island, laying grass where there is sea.
+    for (let cell = from, n = 0; !inMain.has(key(cell)) && n < 40; n++) {
+      cell = near(cell).reduce((best, c) =>
+        gap(c, to) < gap(best, to) ? c : best,
+      );
+      if (!land.has(key(cell))) add(cell);
+    }
+    parts = patches();
+  }
+
+  // One solid area: fill every cell inside the convex outline of all the land
+  // (the island and every lot), so far-off lots never hang off on a thin strip.
+  const hull = convexHull([...land.values()]);
+  const pad = WIDTH * 0.45;
+  const xs = [...land.values()].map((p) => p.x);
+  const zs = [...land.values()].map((p) => p.z);
+  const [r0, r1] = [
+    Math.floor(Math.min(...zs) / ROW),
+    Math.ceil(Math.max(...zs) / ROW),
+  ];
+  for (let row = r0; row <= r1; row++) {
+    const offset = row % 2 ? WIDTH / 2 : 0;
+    const c0 = Math.floor((Math.min(...xs) - offset) / WIDTH);
+    const c1 = Math.ceil((Math.max(...xs) - offset) / WIDTH);
+    for (let col = c0; col <= c1; col++) {
+      const cell = { x: col * WIDTH + offset, z: row * ROW };
+      if (!land.has(key(cell)) && insideHull(hull, cell, pad)) add(cell);
+    }
+  }
+}
+
+/**
+ * Dress land added past the island (`base` is the town before lots): pave a
+ * road from each lot out there to the road network along the shortest path
+ * over the new land (re-shaping the road tiles it joins), then forest the rest
+ * with the island's own trees, with a cottage now and then beside the new
+ * roads. Deterministic per cell, so the same land always looks the same.
+ */
+function furnish(town: Town, base: Town, lots: Point[]): Town {
+  const snapCell = (p: Point): Point => {
+    const row = Math.round(p.z / ROW);
+    const offset = row % 2 ? WIDTH / 2 : 0;
+    return {
+      x: Math.round((p.x - offset) / WIDTH) * WIDTH + offset,
+      z: row * ROW,
+    };
+  };
+  const index = new Map(town.tiles.map((t, i) => [key(t), i]));
+  const baseKeys = new Set(base.tiles.map(key));
+  const added = new Set(
+    town.tiles.filter((t) => !baseKeys.has(key(t))).map(key),
+  );
+  const cellOf = (id: string) => town.tiles[index.get(id)!];
+  const around = (p: Point) =>
+    [0, 1, 2, 3, 4, 5].map((k) => key(snapCell(step(p, k))));
+  const lotCells = new Set(lots.map((lot) => key(snapCell(lot))));
+  const placeCells = new Set(town.places.map((p) => key(p.at)));
+  const paveable = (id: string) =>
+    cellOf(id)?.model === "hex_grass" && !placeCells.has(id);
+  const roads = new Set(town.roads.keys());
+  const fresh = new Set<string>();
+
+  // Roads: nearest lots first, so farther ones can join the new roads.
+  const outward = [...lots].sort(
+    (a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z),
+  );
+  for (const lot of outward) {
+    const start = key(snapCell(lot));
+    if (around(snapCell(lot)).some((n) => roads.has(n))) continue;
+    const previous = new Map<string, string | null>([[start, null]]);
+    const queue = [start];
+    let reached: string | null = null;
+    while (queue.length && !reached) {
+      const id = queue.shift()!;
+      for (const next of around(cellOf(id) ?? snapCell(lot))) {
+        if (previous.has(next) || !index.has(next)) continue;
+        previous.set(next, id);
+        if (roads.has(next)) {
+          reached = next;
+          break;
+        }
+        // Pave new land, or plain island grass with no house or landmark on
+        // it; never another lot.
+        if (!lotCells.has(next) && (added.has(next) || paveable(next)))
+          queue.push(next);
+      }
+    }
+    if (!reached) continue;
+    for (
+      let id = previous.get(reached);
+      id && id !== start;
+      id = previous.get(id)
+    )
+      if (!roads.has(id)) {
+        roads.add(id);
+        fresh.add(id);
+      }
+  }
+
+  // Road tiles and the walking graph for new roads and the roads they join.
+  const graph = new Map(town.roads);
+  const tiles = [...town.tiles];
+  const touched = new Set(fresh);
+  for (const id of fresh)
+    for (const n of around(cellOf(id))) if (roads.has(n)) touched.add(n);
+  for (const id of touched) {
+    const cell = cellOf(id);
+    const near = around(cell);
+    const mask = near.flatMap((n, k) => (roads.has(n) ? [k] : []));
+    tiles[index.get(id)!] = {
+      ...cell,
+      ...roadTile(mask),
+      district: cell.district,
+    };
+    graph.set(id, {
+      at: { x: cell.x, z: cell.z },
+      next: mask.map((k) => near[k]),
+    });
+  }
+
+  // Forest and cottages on the rest of the new land, clear of the lots; any
+  // trees standing where a new road now runs are cleared.
+  const scenery = town.scenery.filter((piece) => !fresh.has(key(piece)));
+  const places = [...town.places];
+  const facing = (k: number) => Math.atan2(DIRECTIONS[k].x, DIRECTIONS[k].z);
+  for (const id of added) {
+    if (roads.has(id)) continue;
+    const cell = cellOf(id);
+    if (
+      lots.some(
+        (lot) => Math.hypot(lot.x - cell.x, lot.z - cell.z) < LOT_CLEARANCE,
+      )
+    )
+      continue;
+    const seed = hash(id);
+    const roadSide = around(cell).findIndex((n) => fresh.has(n));
+    if (roadSide >= 0 && seed % 4 === 0) {
+      const place: Place = {
+        id: `place:${id}`,
+        kind: "home",
+        name: "Cottage",
+        road: around(cell)[roadSide],
+        at: { x: cell.x, z: cell.z },
+      };
+      places.push(place);
+      scenery.push({
+        x: cell.x,
+        z: cell.z,
+        model: HOUSES[seed % HOUSES.length],
+        rotation: facing(roadSide),
+        place,
+        district: cell.district,
+      });
+    } else if (seed % 3 !== 0)
+      scenery.push({
+        x: cell.x,
+        z: cell.z,
+        model: FOREST[seed % FOREST.length],
+        rotation: ((seed % 6) * Math.PI) / 3,
+        district: cell.district,
+      });
+  }
+  return { ...town, tiles, scenery, places, roads: graph };
+}
+
 /** Scenery closer than this to a lot would stand inside its building. */
 const LOT_CLEARANCE = WIDTH * 0.8;
 const fitted = new Map<string, Town>();
@@ -364,13 +632,31 @@ export function withLots(town: Town, lots: Point[]): Town {
           district: district(cell),
         });
       }
-  const result: Town = {
+  let result: Town = {
     ...town,
     tiles,
     scenery,
     places: town.places.filter((place) => !near(place.at)),
   };
+  // Only lots past the shore reshape the land; the island alone stays as
+  // designed. New land then gets what the rest of the town has: roads to its
+  // lots, forest, and the odd cottage.
+  if (tiles.length > town.tiles.length) {
+    joinLand(tiles);
+    result = furnish(result, town, lots);
+  }
   if (fitted.size > 64) fitted.clear();
   fitted.set(id, result);
   return result;
+}
+
+/** The middle of the land (its bounding box), where the camera centres and decrees strike. */
+export function landCentre(town: Town): Point {
+  const xs = town.tiles.map((t) => t.x);
+  const zs = town.tiles.map((t) => t.z);
+  if (!xs.length) return { x: 0, z: 0 };
+  return {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    z: (Math.min(...zs) + Math.max(...zs)) / 2,
+  };
 }

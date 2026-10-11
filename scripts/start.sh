@@ -42,6 +42,10 @@ if [ "$provider" = "anthropic" ]; then
     echo "Fix ANTHROPIC_API_KEY in .env, or set KRONOS_LLM_PROVIDER=mock."
   fi
 fi
+if [ "$provider" = "gemini" ]; then
+  # `make install` syncs without extras, so add the Gemini SDK back every time (fast when present).
+  "$UV" sync --extra gemini --quiet
+fi
 
 step "Stopping old servers"
 make stop >/dev/null

@@ -1161,7 +1161,8 @@ class WageIntervention(Model):
 
 
 class GrantIntervention(Model):
-    """Money from outside the economy: positive gives, negative takes (never below zero)."""
+    """Zero-sum redistribution: positive gives (collected from businesses' cash and the
+    well-off, shared out), negative takes (never below zero, into the businesses' cash)."""
 
     type: Literal["grant_money"] = "grant_money"
     citizen_id: str | None = Field(default=None, description="One citizen; null = everyone")
@@ -1426,9 +1427,15 @@ class UserQueryResult(Model):
     """Outcome of processing the user query and executing the determined toolkit endpoint."""
 
     query: str
-    tool_call: DeterminedToolCall
-    status: Literal["applied", "queued", "executed", "rejected", "error"] = Field(
-        description="Execution status"
+    tool_call: DeterminedToolCall | None = Field(
+        default=None, description="The tool the model chose; null when it chose none"
+    )
+    status: Literal["applied", "queued", "executed", "rejected", "error", "answered"] = Field(
+        description="Execution status; `answered` means no tool fit and nothing changed"
+    )
+    message: str | None = Field(
+        default=None,
+        description="The model's reply to the player when no tool fits (status `answered`)",
     )
     result: Any = Field(
         default=None,

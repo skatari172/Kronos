@@ -35,8 +35,35 @@ export function rememberNames(world: WorldState) {
   for (const [id, b] of Object.entries(world.buildings)) known.set(id, b.name);
 }
 
-const nameOf = (id: string | null | undefined, fallback = "Someone") =>
+export const nameOf = (id: string | null | undefined, fallback = "Someone") =>
   (id && known.get(id)) || fallback;
+
+/** A memory line without internal ids ("Trade offer-main-294 …") or end punctuation. */
+export const tidy = (memory: string) =>
+  memory
+    .replace(/\b(?:building|citizen)-[\w-]*\d\b/g, (id) =>
+      nameOf(id, "a business"),
+    )
+    .replace(
+      /\s?\b(?:offer|loan|application|plot|license|vote)-[\w-]*\d\b/g,
+      "",
+    )
+    .replace(/[.!?]+$/, "")
+    .trim();
+
+/**
+ * A memory as a short sentence: "Theo: Bread is cheap." becomes
+ * 'Heard Theo say "Bread is cheap."', and "To Theo: …" becomes 'Told Theo "…"'.
+ */
+function recall(memory: string, actor: string) {
+  const line = tidy(memory);
+  const heard = new RegExp(`^${actor}: (.+)$`).exec(line);
+  if (heard)
+    return `Heard ${actor} say “${heard[1].replace(/\s*\(x\d+\)$/, "")}”.`;
+  const told = /^To ([^:]+): (.+)$/.exec(line);
+  if (told) return `Told ${told[1]} “${told[2].replace(/\s*\(x\d+\)$/, "")}”.`;
+  return `${line}.`;
+}
 
 /** Is this the speaker saying the same thing again? (`said` is per chronicle.) */
 export function isRepeat(event: SimulationEvent, said: Map<string, string>) {
@@ -81,7 +108,7 @@ function actorSide(
 }
 
 /** The other party: what they remember of it, or how they feel toward the actor. */
-function otherSide(
+export function otherSide(
   id: string,
   actorId: string | null | undefined,
   world: WorldState,
@@ -105,7 +132,7 @@ function otherSide(
     name: nameOf(id),
     role,
     incentive: citizen?.personality ?? "Get by",
-    thought: memory ? `${memory.replace(/[.!?]+$/, "")}. ${feeling}` : feeling,
+    thought: memory ? `${recall(memory, actor)} ${feeling}` : feeling,
     source: "Memory",
   };
 }

@@ -59,7 +59,8 @@ type Fights = {
 export const useFights = create<Fights>((set) => ({
   current: null,
   nextAt: performance.now() + 18_000,
-  scripted: true,
+  // Off until the app knows it is an offline preview (App.tsx turns it on).
+  scripted: false,
   pending: [],
   begin: (fight) =>
     set((s) => ({

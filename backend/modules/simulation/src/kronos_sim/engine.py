@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import random
 import re
 from decimal import ROUND_HALF_UP, Decimal
@@ -76,6 +77,22 @@ MAX_PREPAID_PERIODS = 4  # How far ahead a tenant may pay.
 NEW_PLOTS_PER_EXPANSION = 2  # Town-land lots opened once every lot is built on or leased.
 PLOT_SPACING_X = 4  # Seed lots sit at x in {-4, 0, 4} ...
 PLOT_SPACING_Z = 6  # ... and z in {-3, 3}; new lots continue that grid ring by ring.
+
+
+def _land_rings() -> list[tuple[int, int]]:
+    """Where new town land opens: the seed's lot grid (x every 4, z = 6k - 3), nearest
+    the centre first and round the circle at each distance, so the town grows outward
+    in every direction instead of down one column. The street row beside the main
+    street (|z| = 3) is kept for the town's own buildings until well outside its core
+    (|x| >= 16), and the chapel square (0, -9) stays clear."""
+    spots = [
+        (PLOT_SPACING_X * i, PLOT_SPACING_Z * j - 3) for i in range(-12, 13) for j in range(-10, 11)
+    ]
+    keep = [(x, z) for x, z in spots if not (abs(z) == 3 and abs(x) < 16) and (x, z) != (0, -9)]
+    return sorted(keep, key=lambda p: (round(math.hypot(*p), 3), math.atan2(p[1], p[0])))
+
+
+_LAND_RINGS = _land_rings()
 NEWCOMER_INTERVAL_DAYS = 3  # A newcomer may arrive on ticks divisible by this.
 NEWCOMER_MAX_AVG_HUNGER = 50  # Only a village whose average hunger is below this attracts one.
 NEWCOMER_MONEY = 1000  # 10 coins.
@@ -1990,25 +2007,99 @@ class Engine:
         return plan, "all_businesses", [b.id for b, _ in changed]
 
     def _intervene_grant(self, command: m.GrantIntervention):
-        # Taking never drives money below zero; citizens with nothing to take are skipped.
-        moves = [
-            (c, command.amount if command.amount > 0 else -min(-command.amount, c.money))
-            for c in self._targets(command.citizen_id)
+        """Zero-sum: no money comes from nowhere.
+
+        A gift is a tax: it is collected from those who can spare it (up to half of each
+        business's cash, then up to a third of each well-off villager's money, proportionally)
+        and shared equally among the recipients, who get only what could be collected.
+        Money taken from villagers goes to the businesses' cash (public works), evenly.
+        """
+        targets = self._targets(command.citizen_id)
+        if command.amount < 0:
+            return self._intervene_levy(targets, -command.amount, command.citizen_id)
+        receivers = {c.id for c in targets}
+        businesses = sorted(self.state.buildings.values(), key=lambda b: b.id)
+        payers: list[tuple[object, int]] = [(b, b.cash // 2) for b in businesses if b.cash > 0]
+        # The well-off pay in even when they also receive: a gift to everyone is a
+        # redistribution. A gift to one villager is never funded by that villager.
+        payers += [
+            (c, c.money // 3)
+            for c in sorted(self.state.citizens.values(), key=lambda c: c.id)
+            if c.money >= 2 * command.amount and not (command.citizen_id and c.id in receivers)
         ]
-        moves = [(c, delta) for c, delta in moves if delta]
-        if not moves:
-            raise InvalidAction("insufficient_funds", "Nobody has money to take")
+        payers = [(p, cap) for p, cap in payers if cap > 0]
+        capacity = sum(cap for _, cap in payers)
+        each = min(command.amount, capacity // len(targets))
+        if each <= 0:
+            raise InvalidAction(
+                "insufficient_funds", "The town has nothing to spare: no one can fund that gift"
+            )
+        needed = each * len(targets)
+        # Proportional shares of `needed`, largest remainders first, never above a cap.
+        shares = [(p, cap, needed * cap // capacity) for p, cap in payers]
+        short = needed - sum(share for _, _, share in shares)
+        order = sorted(
+            range(len(shares)),
+            key=lambda i: -((needed * shares[i][1]) % capacity),
+        )
+        for i in order:
+            if short <= 0:
+                break
+            p, cap, share = shares[i]
+            if share < cap:
+                shares[i] = (p, cap, share + 1)
+                short -= 1
 
         def plan(_):
-            for citizen, delta in moves:
-                citizen.money += delta
-                sender, recipient = ("town", citizen.id) if delta > 0 else (citizen.id, "town")
+            for payer, _, share in shares:
+                if not share:
+                    continue
+                if isinstance(payer, m.Building):
+                    payer.cash -= share
+                else:
+                    payer.money -= share
                 yield (
                     "transaction_completed",
-                    dict(sender_id=sender, recipient_id=recipient, amount=abs(delta)),
+                    dict(sender_id=payer.id, recipient_id="town", amount=share),
+                )
+            for citizen in targets:
+                citizen.money += each
+                yield (
+                    "transaction_completed",
+                    dict(sender_id="town", recipient_id=citizen.id, amount=each),
                 )
 
         scope = "all_citizens" if command.citizen_id is None else "citizen"
+        return plan, scope, [c.id for c in targets]
+
+    def _intervene_levy(self, targets: list[m.Citizen], amount: int, citizen_id: str | None):
+        """Take coins from villagers (never below zero) into the businesses' cash, evenly."""
+        moves = [(c, min(amount, c.money)) for c in targets]
+        moves = [(c, taken) for c, taken in moves if taken]
+        if not moves:
+            raise InvalidAction("insufficient_funds", "Nobody has money to take")
+        businesses = sorted(self.state.buildings.values(), key=lambda b: b.id)
+        total = sum(taken for _, taken in moves)
+
+        def plan(_):
+            for citizen, taken in moves:
+                citizen.money -= taken
+                yield (
+                    "transaction_completed",
+                    dict(sender_id=citizen.id, recipient_id="town", amount=taken),
+                )
+            if businesses:
+                part, extra = divmod(total, len(businesses))
+                for i, building in enumerate(businesses):
+                    share = part + (1 if i < extra else 0)
+                    if share:
+                        building.cash += share
+                        yield (
+                            "transaction_completed",
+                            dict(sender_id="town", recipient_id=building.id, amount=share),
+                        )
+
+        scope = "all_citizens" if citizen_id is None else "citizen"
         return plan, scope, [c.id for c, _ in moves]
 
     def _intervene_resource(self, command: m.ResourceIntervention):
@@ -2023,17 +2114,61 @@ class Engine:
         return (lambda _: iter(())), command.resource, []
 
     def _intervene_hunger(self, command: m.HungerIntervention):
-        changes = [
-            (c, _clamp(c.hunger + command.change, 0, 100))
-            for c in self._targets(command.citizen_id)
-        ]
-        changes = [(c, hunger) for c, hunger in changes if hunger != c.hunger]
-        if not changes:
-            raise InvalidAction("bad_params", "Hunger would not change")
-        for citizen, hunger in changes:
-            citizen.hunger = hunger
+        """A famine just strikes. A feast is zero-sum: it is eaten from the bakeries' bread,
+        one loaf for every 30 hunger (rounded up), hungriest villagers first, so a feast
+        with empty bakeries feeds few or no one."""
+        targets = self._targets(command.citizen_id)
         scope = "all_citizens" if command.citizen_id is None else "citizen"
-        return (lambda _: iter(())), scope, [c.id for c, _ in changes]
+        if command.change > 0:
+            changes = [(c, _clamp(c.hunger + command.change, 0, 100)) for c in targets]
+            changes = [(c, hunger) for c, hunger in changes if hunger != c.hunger]
+            if not changes:
+                raise InvalidAction("bad_params", "Hunger would not change")
+            for citizen, hunger in changes:
+                citizen.hunger = hunger
+            return (lambda _: iter(())), scope, [c.id for c, _ in changes]
+        bakeries = sorted(
+            (b for b in self.state.buildings.values() if b.inventory.bread > 0),
+            key=lambda b: (-b.inventory.bread, b.id),
+        )
+        loaves = sum(b.inventory.bread for b in bakeries)
+        fed: list[tuple[m.Citizen, int, int]] = []
+        for citizen in sorted(targets, key=lambda c: (-c.hunger, c.id)):
+            relief = min(-command.change, citizen.hunger)
+            need = -(-relief // 30)
+            if relief <= 0 or not loaves:
+                continue
+            eaten = min(need, loaves)
+            loaves -= eaten
+            fed.append((citizen, min(relief, eaten * 30), eaten))
+        if not fed:
+            hungry = any(c.hunger > 0 for c in targets)
+            if hungry and not bakeries:
+                raise InvalidAction("out_of_stock", "There is no bread in the bakeries for a feast")
+            raise InvalidAction("bad_params", "Nobody is hungry enough to feast")
+        total = sum(eaten for _, _, eaten in fed)
+
+        def plan(_):
+            remaining = total
+            for bakery in bakeries:
+                if not remaining:
+                    break
+                used = min(remaining, bakery.inventory.bread)
+                bakery.inventory.bread -= used
+                remaining -= used
+                yield (
+                    "resource_consumed",
+                    dict(
+                        entity_id=bakery.id,
+                        resource="bread",
+                        quantity=used,
+                        stock_remaining=bakery.inventory.bread,
+                    ),
+                )
+            for citizen, relief, _ in fed:
+                citizen.hunger = _clamp(citizen.hunger - relief, 0, 100)
+
+        return plan, scope, [c.id for c, _, _ in fed]
 
     def _intervene_policy(self, command: m.PolicyIntervention):
         policies = self.state.policies
@@ -2248,15 +2383,11 @@ class Engine:
         ):
             return
         positions = {(p.position.x, p.position.z) for p in s.plots.values()}
-        # Extend the seed's three-column grid, skipping every existing coordinate.
-        index = 0
-        for _ in range(2):
-            while (4 * (index % 3) - 4, 6 * (index // 3) - 3) in positions:
-                index += 1
-            position = m.Position(x=4 * (index % 3) - 4, z=6 * (index // 3) - 3)
+        free = [spot for spot in _LAND_RINGS if spot not in positions]
+        for x, z in free[:2]:
+            position = m.Position(x=x, z=z)
             pid = f"plot-{s.sequence + 1:06d}"
             s.plots[pid] = m.Plot(id=pid, position=position)
-            positions.add((position.x, position.z))
             self.emit("plot_opened", dict(entity_id=pid, position=position.model_dump()))
 
     def _welcome_newcomer(self):

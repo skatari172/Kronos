@@ -44,3 +44,12 @@ export const usePresentation = create<{
   selectedId: null,
   select: (selectedId) => set({ selectedId }),
 }));
+
+/**
+ * Whether the simulation is paused. While paused the village holds still:
+ * villagers stand idle, no new fights or conversations start, and live events
+ * waiting to play out across the day wait too.
+ */
+export const usePlayback = create<{ paused: boolean }>(() => ({
+  paused: false,
+}));

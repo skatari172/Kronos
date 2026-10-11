@@ -135,7 +135,6 @@ def test_schema_is_supported_by_structured_outputs():
         ("decision", observation),
         ("ask", observation),
         ("intervention", {}),
-        ("user_query", {"query": "Next day", "context": {}}),
     ]:
         schema, _ = output_schema(task, obs)
         assert schema["type"] == "object"
@@ -222,30 +221,39 @@ def test_intervention_parses():
     assert "percent" in price["required"] and price["additionalProperties"] is False
 
 
-def test_user_query_parses():
-    tool_json = {
-        "endpoint": "/api/simulation/tick",
-        "method": "POST",
-        "tool": "simulation_tick",
-        "parameters": {},
-        "rationale": "Advance simulation by 1 day",
-    }
+def test_user_query_uses_native_tools():
     fake_response = SimpleNamespace(
-        content=[SimpleNamespace(type="text", text=json.dumps(tool_json))],
-        stop_reason="end_turn",
+        content=[
+            SimpleNamespace(type="text", text="Giving everyone five coins."),
+            SimpleNamespace(type="tool_use", name="grant_money", input={"amount": 500}),
+        ],
+        stop_reason="tool_use",
     )
     client = FakeClient(fake_response)
-    tool_call = asyncio.run(
-        AgentService(AnthropicProvider(client=client)).resolve_user_query("Next day")
+    call = asyncio.run(
+        AgentService(AnthropicProvider(client=client)).resolve_user_query("Give everyone 5 coins")
     )
-    assert tool_call.endpoint == "/api/simulation/tick"
-    assert tool_call.tool == "simulation_tick"
-    request = client.requests[0]
+    assert (call.endpoint, call.tool) == ("/api/interventions", "grant_money")
+    assert call.parameters.amount == 500 and call.rationale == "Giving everyone five coins."
+    (request,) = client.requests
     assert request["system"][0]["text"] == system_prompt("user_query")
-    schema = request["output_config"]["format"]["schema"]
-    assert schema["type"] == "object"
-    assert schema["additionalProperties"] is False
-    assert "endpoint" in schema["properties"]
+    assert request["tool_choice"] == {"type": "auto"} and "output_config" not in request
+    tools = {tool["name"]: tool for tool in request["tools"]}
+    assert tools["grant_money"]["input_schema"]["required"] == ["amount"]
+    assert all(t["input_schema"]["additionalProperties"] is False for t in tools.values())
+
+
+def test_user_query_without_a_tool_returns_the_reply():
+    fake_response = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="The wind is calm over Oakhaven today.")],
+        stop_reason="end_turn",
+    )
+    reply = asyncio.run(
+        AgentService(AnthropicProvider(client=FakeClient(fake_response))).resolve_user_query(
+            "What's the weather like?"
+        )
+    )
+    assert reply == "The wind is calm over Oakhaven today."
 
 
 @pytest.mark.parametrize(

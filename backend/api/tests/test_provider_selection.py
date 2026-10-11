@@ -11,7 +11,7 @@ def test_mock_is_the_default():
 
 
 def test_unknown_provider_is_rejected():
-    with pytest.raises(ValueError, match="'mock' or 'anthropic'"):
+    with pytest.raises(ValueError, match="'anthropic' or 'gemini'"):
         build_provider(Settings(llm_provider="openai"))
 
 

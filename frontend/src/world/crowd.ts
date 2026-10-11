@@ -39,3 +39,8 @@ export function keepApart(id: string, position: Vector3, seed: number) {
 export function crowdPositions() {
   return [...crowd].map(([id, at]) => ({ id, x: at.x, z: at.z }));
 }
+
+/** Where one villager stands right now (live; do not modify). */
+export function crowdAt(id: string) {
+  return crowd.get(id);
+}

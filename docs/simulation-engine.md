@@ -49,7 +49,7 @@ make check         # Python/frontend tests, lint, format checks, frontend build
 make contracts     # after changing action/Event/API wire contracts
 ```
 
-The default provider is `KRONOS_LLM_PROVIDER=mock`; no key or paid call is needed. `KRONOS_DATABASE_URL` selects the existing persistence layer's database. `KRONOS_TICK_SECONDS` defaults to 2. Use the repository's `.tools/node/node_modules/.bin/pnpm` as `PNPM` if a global installation uses the wrong Node runtime.
+The default provider is `KRONOS_LLM_PROVIDER=mock`; no key or paid call is needed. `KRONOS_DATABASE_URL` selects the existing persistence layer's database. `KRONOS_TICK_SECONDS` defaults to 30 (seconds per day at 1x). Use the repository's `.tools/node/node_modules/.bin/pnpm` as `PNPM` if a global installation uses the wrong Node runtime.
 
 API tests use disposable databases under pytest temporary directories through the existing store. They never need the developer's village database. Do not use `make reset`, `make db-init`, migrations, or schema edits as part of an engine update.
 
@@ -81,13 +81,13 @@ Existing branches remain compatible: pending runtime attempts belong to their or
 
 Growth lives in `Engine._growth_rules`, separate from provider strategy. It runs once per day in this order. Existing commands/helpers perform founding, spawning, applying, upgrading and leasing.
 
-| Rule         | Trigger                                                                                                     | Outcome                                                                                                                                                            |
-| ------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Open land    | A nonempty village's every plot has a building or tenant                                                    | Add exactly two unowned plots; extend the seed's three-column grid, skip occupied coordinates, emit `plot_opened` for each                                         |
-| Newcomer     | Day divisible by 3; average post-routine hunger strictly below 50; a business has a free slot               | One traveler arrives with 1,000 cents and applies to the first open business in ID order; emit `citizen_spawned` and `job_applied`                                 |
-| Saver founds | A citizen has strictly more than 8,000 cents; an unleased, vacant town plot exists                          | At most one founder across town per day, first in citizen ID order; transfer 5,000 cents into business cash; choose least-common kind, ties farm → bakery → market |
-| Busy upgrade | Cash strictly above 10,000 cents after daily mechanics; positive job capacity fully occupied; level below 3 | Spend 2,500 business cents, gain one level and two slots; emit `building_upgraded`                                                                                 |
-| Worker home  | Employed, no unbuilt owned/leased home, more than 2,000 cents; affordable owned vacant plot available       | Lease first eligible plot in ID order; emit `lot_leased`; reuse weekly rent collection, without inventing an immediate payment                                     |
+| Rule         | Trigger                                                                                                     | Outcome                                                                                                                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Open land    | A nonempty village's every plot has a building or tenant                                                    | Add exactly two unowned plots at the nearest free spots of `_LAND_RINGS` (the seed's lot grid in rings round the centre, so the town grows in a circle), emit `plot_opened` for each |
+| Newcomer     | Day divisible by 3; average post-routine hunger strictly below 50; a business has a free slot               | One traveler arrives with 1,000 cents and applies to the first open business in ID order; emit `citizen_spawned` and `job_applied`                                                   |
+| Saver founds | A citizen has strictly more than 8,000 cents; an unleased, vacant town plot exists                          | At most one founder across town per day, first in citizen ID order; transfer 5,000 cents into business cash; choose least-common kind, ties farm → bakery → market                   |
+| Busy upgrade | Cash strictly above 10,000 cents after daily mechanics; positive job capacity fully occupied; level below 3 | Spend 2,500 business cents, gain one level and two slots; emit `building_upgraded`                                                                                                   |
+| Worker home  | Employed, no unbuilt owned/leased home, more than 2,000 cents; affordable owned vacant plot available       | Lease first eligible plot in ID order; emit `lot_leased`; reuse weekly rent collection, without inventing an immediate payment                                                       |
 
 Manual `upgrade_building` shares the level/capacity rule, adds two slots, and preserves the existing 2,500-cent charge to the owner's personal money. Both upgrade paths respect the existing 20-slot model limit: a building with more than 18 slots cannot gain another two. New construction/founding honors current minimum wage and bread-price caps.
 

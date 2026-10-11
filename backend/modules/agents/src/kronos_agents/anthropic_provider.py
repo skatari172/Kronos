@@ -16,6 +16,7 @@ from pydantic import TypeAdapter
 
 from kronos_agents.prompts import system_prompt, user_message
 from kronos_agents.provider import AgentService, ProviderError
+from kronos_agents.tools import tool_definitions
 
 # Haiku: each decision is one choice from a short menu, so the fast, low-cost model fits.
 # Set KRONOS_LLM_MODEL (e.g. claude-sonnet-5-5) for richer reasoning.
@@ -24,12 +25,7 @@ DEFAULT_TIMEOUT = 20.0
 # Models that accept server-side refusal fallbacks (`fallbacks: "default"`).
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"}
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
-_TASK_METHODS = {
-    "decision": "decide",
-    "ask": "ask",
-    "intervention": "parse",
-    "user_query": "resolve_user_query",
-}
+_TASK_METHODS = {"decision": "decide", "ask": "ask", "intervention": "parse"}
 # JSON-schema keywords structured outputs do not support; folded into the description instead
 # and still enforced by pydantic when AgentService validates the reply.
 _UNSUPPORTED = (
@@ -229,6 +225,49 @@ class AnthropicProvider:
             kwargs["betas"] = [_FALLBACK_BETA]
             kwargs["fallbacks"] = "default"
         return kwargs, wrapped
+
+    def tool_request(self, query: str, context: dict) -> dict:
+        """Keyword arguments for a player query with native tool use (pure; for tests)."""
+        return {
+            "model": self.model,
+            "max_tokens": 1024,
+            "system": [
+                {
+                    "type": "text",
+                    "text": system_prompt("user_query"),
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": user_message("user_query", {"query": query, "context": context}),
+                }
+            ],
+            "tools": tool_definitions(),
+            "tool_choice": {"type": "auto"},
+        }
+
+    async def choose_tool(self, query: str, context: dict) -> tuple[str | None, dict, str]:
+        """(tool name, arguments, text): the tool Claude called, or None and its reply."""
+        try:
+            response = await self.client.beta.messages.create(**self.tool_request(query, context))
+        except Exception as exc:
+            raise ProviderError(_error_message(exc)) from exc
+        if getattr(response, "stop_reason", None) == "refusal":
+            raise ProviderError("Claude declined this request")
+        text = " ".join(
+            block.text.strip()
+            for block in response.content
+            if getattr(block, "type", None) == "text" and block.text.strip()
+        )
+        for block in response.content:
+            if getattr(block, "type", None) == "tool_use":
+                arguments = block.input if isinstance(block.input, dict) else vars(block.input)
+                return block.name, dict(arguments), text
+        if not text:
+            raise ProviderError("Claude returned neither a tool call nor a reply")
+        return None, {}, text
 
     async def complete(self, task: str, observation: dict) -> str:
         if task not in _TASK_METHODS:

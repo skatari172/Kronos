@@ -156,12 +156,54 @@ def test_user_query_concurrency_conflict(client):
     assert "World changed" in res.json()["detail"]
 
 
-def test_user_query_unsupported_query_returns_422(client):
+def test_user_query_without_a_tool_answers_and_changes_nothing(client):
+    before = client.get("/api/world").json()
     res = client.post(
         "/api/user/query",
         json={"query": "Fly a rocket to Mars and back"},
     )
-    assert res.status_code == 422
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "answered" and data["tool_call"] is None
+    assert data["message"] and "can't" in data["message"]
+    assert client.get("/api/world").json() == before
+    assert client.get("/api/simulation/status").json()["playing"] is False
+
+
+def test_user_query_a_day_passing_while_the_model_thinks_still_runs_it(tmp_path):
+    import asyncio
+
+    from kronos.config import Settings
+    from kronos.service import Service
+    from kronos_agents.provider import MockProvider
+    from kronos_sim.models import UserQueryRequest
+
+    async def scenario():
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        class SlowModel(MockProvider):
+            async def complete(self, task, observation):
+                if task == "user_query":
+                    entered.set()
+                    await release.wait()
+                return await super().complete(task, observation)
+
+        service = Service(Settings(database_url=f"sqlite:///{tmp_path / 'query.db'}"))
+        service.agents.provider = SlowModel()
+        request = UserQueryRequest(
+            query="Feast", branch_id="main", expected_sequence=service.state.sequence
+        )
+        query = asyncio.create_task(service.handle_user_query(request))
+        await asyncio.wait_for(entered.wait(), 1)
+        await service.tick()  # A day passes while the model is still choosing.
+        release.set()
+        result = await asyncio.wait_for(query, 1)
+        assert result.status == "queued" and result.tool_call.tool == "adjust_hunger"
+        if service.decision_task:
+            await service.decision_task
+        service.store.close()
+
+    asyncio.run(scenario())
 
 
 def test_user_query_alias_endpoint(client):

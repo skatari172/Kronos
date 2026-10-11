@@ -145,3 +145,19 @@ def test_without_a_fallback_non_strategic_citizens_skip_their_turn():
     service = AgentService(provider, round_ticks=1, strategic_limit=2)
     actions = asyncio.run(service.propose(initial_world(42)))
     assert provider.calls == 2 and len(actions) == 2
+
+
+def test_wrappers_pass_tool_use_through(tmp_path):
+    """The cache and log wrappers must not hide `choose_tool` (player queries)."""
+    from kronos_agents.middleware import CachingProvider, LoggingProvider
+
+    class Tools:
+        async def complete(self, task, observation):
+            raise AssertionError("player queries use tool use, not complete()")
+
+        async def choose_tool(self, query, context):
+            return "grant_money", {"amount": 500}, ""
+
+    wrapped = CachingProvider(LoggingProvider(Tools(), tmp_path / "log.jsonl"), tmp_path)
+    call = asyncio.run(AgentService(wrapped).resolve_user_query("Give everyone 5 coins"))
+    assert (call.tool, call.parameters.amount) == ("grant_money", 500)

@@ -4838,6 +4838,46 @@
           }
         }
       }
+    },
+    "/api/voice": {
+      "post": {
+        "tags": [
+          "User tools"
+        ],
+        "summary": "Speak a villager's line in their own voice (optional ElevenLabs)",
+        "operationId": "voice_api_voice_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "audio/mpeg": {}
+            }
+          },
+          "503": {
+            "description": "Voices not configured"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -10872,7 +10912,7 @@
           "amount"
         ],
         "title": "GrantIntervention",
-        "description": "Money from outside the economy: positive gives, negative takes (never below zero)."
+        "description": "Zero-sum redistribution: positive gives (collected from businesses' cash and the\nwell-off, shared out), negative takes (never below zero, into the businesses' cash)."
       },
       "HTTPValidationError": {
         "properties": {
@@ -20395,7 +20435,15 @@
             "title": "Query"
           },
           "tool_call": {
-            "$ref": "#/components/schemas/DeterminedToolCall"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeterminedToolCall"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The tool the model chose; null when it chose none"
           },
           "status": {
             "type": "string",
@@ -20404,10 +20452,23 @@
               "queued",
               "executed",
               "rejected",
-              "error"
+              "error",
+              "answered"
             ],
             "title": "Status",
-            "description": "Execution status"
+            "description": "Execution status; `answered` means no tool fit and nothing changed"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message",
+            "description": "The model's reply to the player when no tool fits (status `answered`)"
           },
           "result": {
             "title": "Result",
@@ -20456,6 +20517,7 @@
           "query",
           "tool_call",
           "status",
+          "message",
           "result",
           "scheduled_tick",
           "action_id",
@@ -20503,6 +20565,26 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VoiceRequest": {
+        "properties": {
+          "citizen_id": {
+            "type": "string",
+            "title": "Citizen Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 600,
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "citizen_id",
+          "text"
+        ],
+        "title": "VoiceRequest"
       },
       "Vote": {
         "properties": {

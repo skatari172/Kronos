@@ -1,5 +1,7 @@
 """V1 growth uses the existing entities, commands, and event stream."""
 
+import math
+
 import pytest
 from kronos_sim import models as m
 from kronos_sim.engine import Engine, InvalidAction
@@ -22,7 +24,8 @@ def test_full_land_opens_two_persistable_plots_at_deterministic_positions():
     assert left == right
     opened = [e for e in left.events if e.type == "plot_opened"]
     assert len(opened) == 2
-    assert [e.payload.position for e in opened] == [m.Position(x=-4, z=9), m.Position(x=0, z=9)]
+    # Nearest the centre first, on opposite sides: the town grows outward in a circle.
+    assert [e.payload.position for e in opened] == [m.Position(x=0, z=9), m.Position(x=-4, z=-9)]
     assert len({(p.position.x, p.position.z) for p in left.state.plots.values()}) == 8
     for event in opened:
         plot = left.state.plots[event.payload.entity_id]
@@ -210,3 +213,17 @@ def test_landlord_cannot_count_another_tenants_home_as_their_own():
     engine._growth_rules()
     assert engine.state.plots["plot-4"].tenant_id == worker.id
     assert engine.state.plots["plot-3"].tenant_id == "citizen-6"
+
+
+def test_land_opens_in_rings_around_the_centre_not_down_one_column():
+    from kronos_sim.engine import _LAND_RINGS
+
+    distances = [math.hypot(x, z) for x, z in _LAND_RINGS]
+    assert distances == sorted(distances)  # always the nearest free spot first
+    first = _LAND_RINGS[:16]
+    # Every direction gets land early: north and south, east and west.
+    assert any(z > 0 for _, z in first) and any(z < 0 for _, z in first)
+    assert any(x > 0 for x, _ in first) and any(x < 0 for x, _ in first)
+    # The main-street row near the centre and the chapel square stay clear.
+    assert not any(abs(z) == 3 and abs(x) < 16 for x, z in _LAND_RINGS)
+    assert (0, -9) not in _LAND_RINGS

@@ -166,8 +166,8 @@ export function physique(id: string) {
   h = (h ^ (h >>> 16)) >>> 0;
   return {
     height: 0.9 + ((h >>> 4) % 17) / 100, // 0.90–1.06
-    /** Strolling speed in world units per second. */
-    pace: 0.45 + ((h >>> 8) % 11) * 0.05, // 0.45–0.95
+    /** Strolling speed in world units per second; unhurried enough to follow by eye. */
+    pace: 0.45 + ((h >>> 8) % 11) * 0.035, // 0.45–0.80
     walk: (["walkA", "walkB", "walkC"] as const)[(h >>> 12) % 3],
     run: (["runA", "runB"] as const)[(h >>> 14) % 2],
   };

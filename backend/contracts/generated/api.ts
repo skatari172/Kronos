@@ -1535,6 +1535,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/voice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Speak a villager's line in their own voice (optional ElevenLabs) */
+        post: operations["voice_api_voice_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3154,7 +3171,8 @@ export interface components {
         };
         /**
          * GrantIntervention
-         * @description Money from outside the economy: positive gives, negative takes (never below zero).
+         * @description Zero-sum redistribution: positive gives (collected from businesses' cash and the
+         *     well-off, shared out), negative takes (never below zero, into the businesses' cash).
          */
         GrantIntervention: {
             /**
@@ -6734,13 +6752,19 @@ export interface components {
         UserQueryResult: {
             /** Query */
             query: string;
-            tool_call: components["schemas"]["DeterminedToolCall"];
+            /** @description The tool the model chose; null when it chose none */
+            tool_call: components["schemas"]["DeterminedToolCall"] | null;
             /**
              * Status
-             * @description Execution status
+             * @description Execution status; `answered` means no tool fit and nothing changed
              * @enum {string}
              */
-            status: "applied" | "queued" | "executed" | "rejected" | "error";
+            status: "applied" | "queued" | "executed" | "rejected" | "error" | "answered";
+            /**
+             * Message
+             * @description The model's reply to the player when no tool fits (status `answered`)
+             */
+            message: string | null;
             /**
              * Result
              * @description Result returned by executing the determined toolkit endpoint
@@ -6774,6 +6798,13 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VoiceRequest */
+        VoiceRequest: {
+            /** Citizen Id */
+            citizen_id: string;
+            /** Text */
+            text: string;
         };
         /**
          * Vote
@@ -9811,6 +9842,46 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    voice_api_voice_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/mpeg": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Voices not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
