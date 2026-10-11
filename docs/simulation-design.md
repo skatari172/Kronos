@@ -53,7 +53,7 @@ The last daily step in `Engine.tick()`, after the existing ones. It uses no AI, 
 
 | Rule       | Behaviour                                                                                                                       | Events                                  |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| New land   | When every plot has a building or a tenant, 2 town-land plots open on the outer ring                                            | `plot_opened`                           |
+| New land   | When every plot has a building or a tenant, 2 town-land plots open at the nearest free spots in rings around the centre         | `plot_opened`                           |
 | Newcomers  | Every 3 days, if average hunger < 50 and a job slot is open, one citizen arrives with 10 coins and applies                      | `citizen_spawned`, `job_applied`        |
 | Departures | A non-owner at hunger 100 with no money for 3 days in a row leaves; their job and rented plot are freed                         | `citizen_removed`, `employment_changed` |
 | Founding   | At most one per day: a citizen with > 80 coins founds the kind the town has fewest of on free town land, with 50 coins as cash  | `building_constructed`                  |

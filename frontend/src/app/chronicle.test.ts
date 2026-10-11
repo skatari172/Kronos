@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialMock } from "../api/mock";
 import type { SimulationEvent } from "../api/types";
-import { rememberNames, splitRationale, toEntry } from "./chronicle";
+import { rememberNames, splitRationale, tidy, toEntry } from "./chronicle";
 
 const world = initialMock().state;
 rememberNames(world);
@@ -90,5 +90,12 @@ describe("live chronicle", () => {
         world,
       ),
     ).toBeNull();
+  });
+
+  it("tidies internal ids out of memories", () => {
+    expect(tidy("Trade offer-main-294 with Theo expired.")).toBe(
+      "Trade with Theo expired",
+    );
+    expect(tidy("I was hired at bakery.")).toBe("I was hired at bakery");
   });
 });

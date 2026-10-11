@@ -4,6 +4,7 @@ import { initialMock } from "../api/mock";
 import { RUN_FROM } from "./Models";
 import { useFights } from "./fights";
 import { startRoutine, stepRoutine } from "./routine";
+import { founderArrived, openSite } from "./sites";
 import { townAt } from "./town";
 
 const town = townAt(1);
@@ -51,6 +52,23 @@ function live(
 }
 
 describe("villager routines", () => {
+  it("walks to their new business's plot, then builds it", () => {
+    const at = { x: 12.6, z: 2.4 }; // across town from Finn's start
+    const close = openSite({
+      buildingId: "new-bakery",
+      ownerId: "citizen-6",
+      at,
+      until: performance.now() + 120_000,
+    });
+    expect(founderArrived("new-bakery")).toBe(false);
+    const { poses, gaits, at: end } = live("citizen-6", 60);
+    expect(gaits.size).toBeGreaterThan(0); // walked (or ran) over first
+    expect(founderArrived("new-bakery")).toBe(true);
+    expect(poses).toContain("hammer");
+    expect(Math.hypot(end.x - at.x, end.z - at.z)).toBeLessThan(2.5);
+    close();
+  });
+
   it("runs to a fight and trades blows from the agreed start", () => {
     const now = performance.now();
     useFights.setState({

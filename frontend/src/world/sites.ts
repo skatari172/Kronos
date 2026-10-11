@@ -10,6 +10,8 @@ export type Site = {
   at: Point;
   /** performance.now() when the scaffolding comes down. */
   until: number;
+  /** The founder has reached the plot (building starts when they do). */
+  arrived?: boolean;
 };
 
 const sites = new Map<string, Site>();
@@ -31,4 +33,15 @@ export function siteFor(citizenId: string, occupation: string) {
     )
       return site;
   return undefined;
+}
+
+/** A villager reached a site; the founder arriving lets building begin. */
+export function arriveAt(buildingId: string, citizenId: string) {
+  const site = sites.get(buildingId);
+  if (site && site.ownerId === citizenId) site.arrived = true;
+}
+
+/** Whether the founder has reached this site yet. */
+export function founderArrived(buildingId: string) {
+  return !!sites.get(buildingId)?.arrived;
 }

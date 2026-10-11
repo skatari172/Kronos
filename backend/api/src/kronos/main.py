@@ -22,6 +22,7 @@ from kronos.routes import (
     relationships,
     resources,
     user,
+    voice,
     votes,
     world,
 )
@@ -102,6 +103,7 @@ def create_app(config: Settings | None = None) -> FastAPI:
         backend,
         world,
         history,
+        voice,
     )
     for module in routers:
         app.include_router(module.router)

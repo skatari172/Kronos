@@ -7,9 +7,10 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { request } from "../api/client";
 import type { SimulationEvent, WorldState } from "../api/types";
-import { useWorld } from "../stores/world";
+import { usePlayback, useWorld } from "../stores/world";
 import { useFights } from "../world/fights";
 import { HOSTILE, isRepeat, rememberNames, toEntry } from "./chronicle";
+import { stage } from "./stage";
 
 export type FeedKind =
   | "build"
@@ -416,8 +417,22 @@ export const useChronicle = create<Chronicle>((set, get) => ({
   },
 }));
 
+/** How the chronicle is shown: the right sidebar, and the full-screen page. */
+export const useChronicleView = create<{
+  sidebar: boolean;
+  full: boolean;
+  setSidebar: (open: boolean) => void;
+  setFull: (open: boolean) => void;
+}>((set) => ({
+  // Narrow screens start with the sidebar tucked away.
+  sidebar: typeof window === "undefined" || window.innerWidth >= 900,
+  full: false,
+  setSidebar: (sidebar) => set({ sidebar }),
+  setFull: (full) => set({ full }),
+}));
+
 /** Offline only: reveals a few samples at once, then one every few seconds. */
-export function useSampleClock(enabled: boolean, everyMs = 2800) {
+export function useSampleClock(enabled: boolean, everyMs = 5000) {
   useEffect(() => {
     if (!enabled) return;
     const { items, revealSample } = useChronicle.getState();
@@ -487,27 +502,82 @@ export function useLiveChronicle(enabled: boolean) {
     let loading = false;
     let cancelled = false;
 
+    // Live events arrive once a day in a batch; play them out across the day
+    // (pops, conversations, chronicle lines) instead of all at once. The day's
+    // length is measured from how often batches arrive (it follows the speed).
+    let dayMs = 30_000;
+    let lastBatch = 0;
+    let pending: { at: number; run: () => void; timer: number }[] = [];
+    const flush = () => {
+      for (const beat of pending) {
+        clearTimeout(beat.timer);
+        beat.run();
+      }
+      pending = [];
+    };
+
+    const tell = (event: SimulationEvent, state: WorldState, live: boolean) => {
+      const item = toEntry(event, state);
+      if (item) useChronicle.getState().add(item);
+      if (!live) return;
+      stage(event, state);
+      if (
+        event.type === "citizen_interacted" &&
+        HOSTILE.has(event.payload.kind) &&
+        event.actor_id
+      )
+        useFights
+          .getState()
+          .request(event.actor_id, event.payload.recipient_id);
+    };
+
     const take = (
       events: SimulationEvent[],
       state: WorldState,
       live: boolean,
     ) => {
+      const fresh: SimulationEvent[] = [];
       for (const event of [...events].sort((a, b) => a.sequence - b.sequence)) {
         if (seen.has(event.id)) continue;
         seen.add(event.id);
         if (isRepeat(event, said)) continue;
-        const item = toEntry(event, state);
-        if (item) useChronicle.getState().add(item);
-        if (
-          live &&
-          event.type === "citizen_interacted" &&
-          HOSTILE.has(event.payload.kind) &&
-          event.actor_id
-        )
-          useFights
-            .getState()
-            .request(event.actor_id, event.payload.recipient_id);
+        fresh.push(event);
       }
+      if (!live) {
+        fresh.forEach((event) => tell(event, state, false));
+        return;
+      }
+      // Anything still waiting from the last day happens now, in order.
+      flush();
+      const now = performance.now();
+      if (lastBatch) {
+        const gap = now - lastBatch;
+        if (gap > 800 && gap < 60_000) dayMs = dayMs * 0.5 + gap * 0.5;
+      }
+      lastBatch = now;
+      const story = fresh.filter(
+        (e) => toEntry(e, state) || e.type === "citizen_interacted",
+      );
+      const routine = fresh.filter((e) => !story.includes(e));
+      routine.forEach((event) => tell(event, state, true));
+      const spread = (dayMs * 0.85) / Math.max(story.length, 1);
+      story.forEach((event, i) => {
+        const run = () =>
+          tell(event, useWorld.getState().update?.state ?? state, true);
+        if (i === 0) return run();
+        const beat = { at: now + i * spread, run, timer: 0 };
+        // While paused, a waiting event waits too, then plays on resume.
+        const fire = () => {
+          if (usePlayback.getState().paused) {
+            beat.timer = window.setTimeout(fire, 400);
+            return;
+          }
+          pending = pending.filter((b) => b !== beat);
+          run();
+        };
+        beat.timer = window.setTimeout(fire, i * spread);
+        pending.push(beat);
+      });
     };
 
     const sync = () => {
@@ -519,6 +589,9 @@ export function useLiveChronicle(enabled: boolean) {
         // A new epoch (load, seek, branch switch) replaces history: rebuild it
         // from the event log, quietly (no fights for the past).
         epoch = world.epoch;
+        pending.forEach((beat) => clearTimeout(beat.timer));
+        pending = [];
+        lastBatch = 0;
         seen.clear();
         said.clear();
         useChronicle.getState().reset();
@@ -541,6 +614,7 @@ export function useLiveChronicle(enabled: boolean) {
     const stop = useWorld.subscribe(sync);
     return () => {
       cancelled = true;
+      pending.forEach((beat) => clearTimeout(beat.timer));
       stop();
     };
   }, [enabled]);

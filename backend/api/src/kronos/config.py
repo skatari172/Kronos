@@ -6,7 +6,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="KRONOS_", env_file=".env", extra="ignore")
     database_url: str = "sqlite:///./backend/database/kronos.db"
     seed: int = 42
-    tick_seconds: float = 2
+    # Seconds per simulated day at 1x (2x and 4x divide it). Slow enough to follow each
+    # day's conversations and decisions, and to give a real model time to think.
+    tick_seconds: float = 30
     # Days per simulated year: yearly checkpoints (fork points) fall on these boundaries.
     ticks_per_year: int = Field(30, ge=1)
     llm_provider: str = "mock"
@@ -17,6 +19,16 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr | None = Field(
         None, validation_alias=AliasChoices("ANTHROPIC_API_KEY", "KRONOS_ANTHROPIC_API_KEY")
     )
+    gemini_api_key: SecretStr | None = Field(
+        None, validation_alias=AliasChoices("GEMINI_API_KEY", "KRONOS_GEMINI_API_KEY")
+    )
+    # Optional ElevenLabs voices for conversations (POST /api/voice). Unset: the
+    # browser's own speech is used instead. Read under its standard name.
+    elevenlabs_api_key: SecretStr | None = Field(
+        None, validation_alias=AliasChoices("ELEVENLABS_API_KEY", "KRONOS_ELEVENLABS_API_KEY")
+    )
+    elevenlabs_model: str = "eleven_turbo_v2_5"
+    voice_cache: str = ".cache/voice"
     # Every citizen makes one strategic decision per round of this many days (staggered).
     agent_round_ticks: int = Field(3, ge=1)
     # Cost controls for real providers (A5): provider calls per tick (None = no cap) and

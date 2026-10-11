@@ -1,5 +1,9 @@
 /** Plain-language rule changes for the header (RuleBar.tsx). */
-import type { InterventionResult, WorldState } from "../api/types";
+import type {
+  DeterminedToolCall,
+  InterventionResult,
+  WorldState,
+} from "../api/types";
 import { coins } from "../api/format";
 import type { Mood } from "../world/decrees";
 
@@ -223,4 +227,66 @@ export function moodOf(command: Command | null): Mood {
     default:
       return "neutral";
   }
+}
+
+/**
+ * The town-wide command behind a tool the backend's model chose, so the
+ * decree reads and feels the same as a typed intervention. Null for tools
+ * that are not interventions (a new citizen, an owner's action, the clock).
+ */
+export function commandOf(tool: DeterminedToolCall | null): Command | null {
+  if (!tool || tool.endpoint !== "/api/interventions") return null;
+  const p = Object.fromEntries(
+    Object.entries(tool.parameters ?? {}).filter(([, v]) => v !== null),
+  );
+  const type = tool.tool === "set_wage_intervention" ? "set_wage" : tool.tool;
+  return { ...p, type } as unknown as Command;
+}
+
+/** One line for a tool that is not an intervention, for the chronicle. */
+export function describeTool(
+  tool: DeterminedToolCall,
+  state?: WorldState,
+): string {
+  const p = tool.parameters ?? {};
+  const name = (id?: string | null) =>
+    (id && (state?.citizens[id]?.name ?? state?.buildings[id]?.name)) || id;
+  switch (tool.tool) {
+    case "spawn_citizen":
+      return `You summoned ${p.name ?? "a newcomer"}${p.occupation ? `, a ${p.occupation.toLowerCase()},` : ""} to Oakhaven`;
+    case "set_price":
+      return `You had ${name(p.building_id)} sell ${p.resource ?? "bread"} at ${coins(p.price ?? 0)}`;
+    case "set_wage":
+      return `You had ${name(p.building_id)} pay ${coins(p.wage ?? 0)} a day`;
+    case "hire":
+      return `You had ${name(p.building_id)} hire ${name(p.citizen_id)}`;
+    case "fire":
+      return `You had ${name(p.building_id)} let ${name(p.citizen_id)} go`;
+    case "found_business":
+      return `You had ${name(p.actor_id)} found a ${p.kind ?? "business"}`;
+    case "upgrade_building":
+      return `You had ${name(p.building_id)} expand`;
+    case "close_business":
+      return `You closed ${name(p.building_id)}`;
+    case "simulation_tick":
+      return "You moved time forward a day";
+    case "simulation_playback":
+      return p.playing === false ? "You stopped time" : "You set time moving";
+    default:
+      return `You decreed: ${tool.tool.replaceAll("_", " ")}`;
+  }
+}
+
+/** How the villagers take a tool that is not an intervention. */
+export function toolMood(tool: DeterminedToolCall | null): Mood {
+  if (!tool) return "neutral";
+  if (tool.tool === "spawn_citizen" || tool.tool === "upgrade_building")
+    return "good";
+  if (
+    tool.tool === "fire" ||
+    tool.tool === "close_business" ||
+    tool.tool === "evict"
+  )
+    return "bad";
+  return moodOf(commandOf(tool));
 }

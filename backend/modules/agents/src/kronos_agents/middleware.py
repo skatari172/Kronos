@@ -52,6 +52,11 @@ class CachingProvider:
     def source(self):
         return getattr(self.inner, "source", "llm")
 
+    def __getattr__(self, name: str):
+        """Pass through what this wrapper doesn't handle, such as `choose_tool`
+        (native tool use for player queries; not cached: each query is new)."""
+        return getattr(self.inner, name)
+
     def path(self, task: str, observation: dict) -> Path:
         key = cache_key(task, observation, self.tag)
         return self.directory / task / key[:2] / f"{key}.json"
@@ -87,6 +92,11 @@ class LoggingProvider:
     @property
     def source(self):
         return getattr(self.inner, "source", "llm")
+
+    def __getattr__(self, name: str):
+        """Pass through what this wrapper doesn't handle, such as `choose_tool`
+        (native tool use for player queries; not cached: each query is new)."""
+        return getattr(self.inner, name)
 
     async def complete(self, task: str, observation: dict) -> str:
         started = time.perf_counter()

@@ -19,6 +19,8 @@ type Decrees = {
   fallingUntil: number;
   landedAt: number;
   mood: Mood;
+  /** Where decrees strike: the middle of the land (set by DecreeEffect). */
+  centre: { x: number; z: number };
   fall: (ms: number) => void;
   land: (mood: Mood) => void;
 };
@@ -28,6 +30,7 @@ export const useDecrees = create<Decrees>((set) => ({
   fallingUntil: 0,
   landedAt: -Infinity,
   mood: "neutral",
+  centre: { x: 0, z: 0 },
   fall: (ms) => set({ fallingUntil: performance.now() + ms }),
   land: (mood) =>
     set((s) => ({

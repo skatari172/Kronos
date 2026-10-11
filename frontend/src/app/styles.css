@@ -971,17 +971,19 @@ footer > span:last-child {
   color: #f1f0e4;
 }
 .hud-day small {
-  max-width: min(360px, 46vw);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Long preview captions wrap onto a second line instead of being cut off. */
+  max-width: min(300px, 46vw);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
+  line-height: 1.3;
   font-size: 13px;
   letter-spacing: 0.4px;
   color: #a9b6a5;
 }
 .hud-day i {
+  flex: none;
+  margin-top: 5px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -1147,7 +1149,8 @@ footer > span:last-child {
   font-size: 14px;
   font-weight: 600;
 }
-.chronicle-button .badge {
+.chronicle-button .badge,
+.sidebar-tab .badge {
   min-width: 20px;
   padding: 1px 6px;
   border-radius: 999px;
@@ -1162,7 +1165,8 @@ footer > span:last-child {
   position: absolute;
   top: calc(60px + env(safe-area-inset-top, 0px) + 22px);
   left: 50%;
-  z-index: 6;
+  /* Above the tier banner, so a reply is never covered. */
+  z-index: 8;
   width: min(640px, calc(100vw - 32px));
   transform: translateX(-50%);
 }
@@ -1320,7 +1324,8 @@ footer > span:last-child {
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, calc(48vh - 130px)) scale(0.5);
+    /* Onto the middle of the land: the camera centres it 28px below mid-screen. */
+    transform: translate(-50%, calc(50vh - 85px)) scale(0.5);
     letter-spacing: 0.18em;
     filter: blur(1px);
   }
@@ -1672,7 +1677,8 @@ footer > span:last-child {
   position: absolute;
   /* Below the decree box, which floats under the header. */
   top: calc(60px + env(safe-area-inset-top, 0px) + 96px);
-  right: 16px;
+  /* Left side: the chronicle sidebar owns the right. */
+  left: 16px;
   z-index: 7;
   display: flex;
   flex-direction: column;
@@ -1982,4 +1988,1511 @@ footer > span:last-child {
     width: auto;
     max-height: 55vh;
   }
+}
+
+/* ---------- Village overlays: speech bubbles, reactions, thought pops ---------- */
+.speech-bubble {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: #fffaf0;
+  color: #22301f;
+  font:
+    600 13px/1.25 system-ui,
+    sans-serif;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px #1a2a1a40;
+  cursor: pointer;
+  transform: translateY(-6px);
+  animation: bubble-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.speech-bubble span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.speech-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  border: 7px solid transparent;
+  border-bottom: 0;
+  border-top-color: #fffaf0;
+  transform: translateX(-50%);
+}
+.speech-bubble:hover {
+  background: #fff;
+  box-shadow:
+    0 0 0 2px #d9c58c,
+    0 8px 22px #1a2a1a55;
+}
+.speech-bubble.friend,
+.speech-bubble.gift {
+  color: #7a2f45;
+}
+.speech-bubble.deal,
+.speech-bubble.loan {
+  color: #6a4a12;
+}
+.speech-reaction {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fffaf0;
+  color: #22301f;
+  box-shadow: 0 4px 12px #1a2a1a40;
+  animation: bubble-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.speech-reaction.friend,
+.speech-reaction.gift {
+  color: #c2405f;
+}
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.6);
+  }
+}
+.thought-pop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #142019e6;
+  color: #f1ecd8;
+  font:
+    600 12px/1.2 system-ui,
+    sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px #0f1d1440;
+  animation: pop-rise 5.5s ease-out both;
+}
+.thought-pop svg {
+  color: #d9c58c;
+}
+.thought-pop.good svg {
+  color: #9fd38a;
+}
+.thought-pop.bad {
+  color: #ffd9cf;
+}
+.thought-pop.bad svg {
+  color: #e8947f;
+}
+@keyframes pop-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.8);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-22px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-34px);
+  }
+}
+
+/* ---------- Conversation window ---------- */
+.convo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #0b120fa8;
+  backdrop-filter: blur(3px);
+  animation: fade-in 0.2s ease;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.convo {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: min(680px, calc(100vh - 32px));
+  border-radius: 18px;
+  background: #142019;
+  border: 1px solid #ffffff1c;
+  box-shadow: 0 30px 70px #00000066;
+  color: #e6e9dd;
+  overflow: hidden;
+  animation: convo-in 0.3s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+@keyframes convo-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+}
+.convo > header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #ffffff12;
+}
+.convo-people {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #d9c58c;
+}
+.convo-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #142019;
+  font:
+    700 18px/1 Georgia,
+    serif;
+  box-shadow:
+    0 0 0 2px #142019,
+    0 0 0 3px #ffffff30;
+}
+.convo-title {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.convo-title strong {
+  font:
+    600 20px/1.15 Georgia,
+    serif;
+  color: #f8f2dc;
+}
+.convo-title small {
+  color: #a9b4a6;
+  font-size: 13px;
+}
+.convo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 20px;
+  overflow-y: auto;
+}
+.convo-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 84%;
+  animation: row-in 0.35s ease both;
+}
+.convo-row.left {
+  align-self: flex-start;
+}
+.convo-row.right {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.convo-who {
+  font:
+    700 12px/1 system-ui,
+    sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a9b4a6;
+}
+.convo-bubble {
+  padding: 12px 16px;
+  border-radius: 16px 16px 16px 4px;
+  background: #fffaf0;
+  color: #22301f;
+  font-size: 16px;
+  line-height: 1.45;
+  min-height: 22px;
+}
+.convo-bubble.action {
+  background: #2a3a30;
+  color: #f1ecd8;
+  font-style: italic;
+}
+.convo-bubble.reply {
+  border-radius: 16px 16px 4px 16px;
+  background: #d9c58c;
+  color: #1a231d;
+}
+.convo-bubble cite {
+  display: block;
+  margin-top: 8px;
+  font:
+    600 11px/1.2 system-ui,
+    sans-serif;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: currentColor;
+  animation: blink 0.8s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+.typing {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+.typing i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  animation: typing 1s infinite;
+}
+.typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes typing {
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.convo-thought {
+  display: flex;
+  gap: 10px;
+  margin: 0 8px;
+  padding: 12px 14px;
+  border: 1px dashed #d9c58c55;
+  border-radius: 12px;
+  color: #d9c58c;
+  animation: row-in 0.4s ease 0.15s both;
+}
+.convo-thought small {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font:
+    700 11px/1.2 system-ui,
+    sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.convo-thought .chip {
+  font-style: normal;
+  color: #d9c58c;
+}
+.convo-thought p {
+  margin: 6px 0 0;
+  color: #e6e9dd;
+  font:
+    italic 15px/1.45 Georgia,
+    serif;
+}
+.convo-note {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #ffffff0c;
+  animation: row-in 0.4s ease 0.4s both;
+}
+.convo-note small {
+  font:
+    700 11px/1.2 system-ui,
+    sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a9b4a6;
+}
+.convo-note p {
+  margin: 5px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.convo > footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid #ffffff12;
+}
+.convo-spacer {
+  flex: 1;
+}
+.convo-ask {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: #d9c58c;
+  color: #1a231d;
+  font:
+    700 14px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.convo-ask:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.convo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid #ffffff22;
+  border-radius: 9px;
+  background: none;
+  color: #e6e9dd;
+  font:
+    600 13px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.convo-link:hover {
+  border-color: #d9c58c88;
+  color: #f8f2dc;
+}
+
+/* ---------- Chronicle sidebar (right) ---------- */
+:root {
+  --sidebar: 360px;
+}
+/* With the sidebar open, centred overlays centre on the remaining space. */
+.stage.with-sidebar .decree-fall,
+.stage.with-sidebar .god-bar,
+.stage.with-sidebar .hud,
+.stage.with-sidebar .hud-error,
+.stage.with-sidebar .tier-banner {
+  left: calc((100% - var(--sidebar)) / 2);
+}
+.event-sidebar {
+  position: absolute;
+  top: calc(60px + env(safe-area-inset-top, 0px) + 16px);
+  right: 16px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  width: calc(var(--sidebar) - 32px);
+  border-radius: 16px;
+  background: #142019f2;
+  border: 1px solid #ffffff1c;
+  box-shadow: 0 18px 44px #0f1d1440;
+  color: #e6e9dd;
+  overflow: hidden;
+  animation: sidebar-in 0.25s ease;
+}
+@keyframes sidebar-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+.event-sidebar > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 14px 12px 18px;
+  border-bottom: 1px solid #ffffff12;
+}
+.event-sidebar > header > div {
+  flex: 1;
+}
+.event-sidebar h2 {
+  margin: 0 0 4px;
+  font:
+    600 22px/1.1 Georgia,
+    serif;
+  color: #f8f2dc;
+}
+.event-sidebar header small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #a9b4a6;
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9fd38a;
+  box-shadow: 0 0 0 0 #9fd38a88;
+  animation: live-pulse 2s infinite;
+}
+@keyframes live-pulse {
+  70% {
+    box-shadow: 0 0 0 6px #9fd38a00;
+  }
+}
+.sidebar-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  line-height: 0;
+  border: 1px solid #ffffff1c;
+  border-radius: 8px;
+  background: none;
+  color: #d8e0d4;
+  cursor: pointer;
+}
+.sidebar-icon:hover {
+  border-color: #d9c58c88;
+  color: #f8f2dc;
+}
+.sidebar-new {
+  margin: 10px 14px 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #d9c58c;
+  color: #1a231d;
+  font:
+    700 12px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+  animation: bubble-in 0.3s ease both;
+}
+.event-sidebar ol {
+  flex: 1;
+  margin: 0;
+  padding: 8px 8px 4px;
+  list-style: none;
+  overflow-y: auto;
+}
+/* Only the newest line slides in; a burst of events never blanks the list. */
+.event-sidebar li:first-child {
+  animation: row-in 0.35s ease;
+}
+.event-sidebar li button {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: #e6e9dd;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+.event-sidebar li button:hover {
+  background: #ffffff0d;
+}
+.event-sidebar li small {
+  padding-top: 2px;
+  color: #8f9a8c;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sidebar-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.sidebar-icon-dot {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #ffffff0f;
+  color: #d9c58c;
+}
+.event-sidebar li.fight .sidebar-icon-dot,
+.event-sidebar li.loss .sidebar-icon-dot {
+  color: #e8947f;
+}
+.event-sidebar li.decree .sidebar-icon-dot {
+  background: #d9c58c;
+  color: #1a231d;
+}
+.event-sidebar li.decree .sidebar-text {
+  color: #f3d98b;
+  font-weight: 600;
+}
+.sidebar-empty {
+  padding: 16px;
+  color: #8f9a8c;
+  font-size: 14px;
+}
+.sidebar-full {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 6px 14px 14px;
+  padding: 10px;
+  border: 1px solid #ffffff22;
+  border-radius: 10px;
+  background: none;
+  color: #e6e9dd;
+  font:
+    600 13px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.sidebar-full:hover {
+  border-color: #d9c58c88;
+  color: #f8f2dc;
+}
+.sidebar-tab {
+  position: absolute;
+  top: calc(60px + env(safe-area-inset-top, 0px) + 16px);
+  right: 0;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 10px 12px;
+  border: 1px solid #ffffff1c;
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: #142019f0;
+  color: #e6e9dd;
+  font:
+    600 14px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.sidebar-tab:hover {
+  color: #f8f2dc;
+}
+@media (max-width: 900px) {
+  .stage.with-sidebar .decree-fall,
+  .stage.with-sidebar .god-bar,
+  .stage.with-sidebar .hud,
+  .stage.with-sidebar .hud-error,
+  .stage.with-sidebar .tier-banner {
+    left: 50%;
+  }
+  .event-sidebar {
+    left: 16px;
+    width: auto;
+    z-index: 12;
+  }
+}
+
+/* One DOM layer over the canvas; OverlayProjector moves each anchor every frame. */
+.overlay-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+.overlay-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  padding-bottom: 6px;
+}
+.overlay-anchor .speech-bubble {
+  pointer-events: auto;
+}
+
+/* "World has not changed after this message": a short-lived note under the box. */
+.god-notice {
+  position: relative;
+  overflow: hidden;
+}
+.god-notice::after {
+  /* A thin bar that runs out as the note's time does. */
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: #d9b56c;
+  transform-origin: left;
+  animation: notice-time 9s linear forwards;
+}
+@keyframes notice-time {
+  to {
+    transform: scaleX(0);
+  }
+}
+.god-notice,
+.god-reply {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px 12px 12px 16px;
+  border-radius: 14px;
+  background: #fffaf0f2;
+  color: #22301f;
+  box-shadow: 0 10px 28px #1a2a1a40;
+  animation: bubble-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.god-notice > svg,
+.god-reply > svg {
+  flex: none;
+  margin-top: 2px;
+  color: #b08a2e;
+}
+.god-notice > div,
+.god-reply > div {
+  flex: 1;
+}
+.god-notice small,
+.god-reply small {
+  font:
+    700 11px/1.2 system-ui,
+    sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a7a4e;
+}
+.god-notice p,
+.god-reply p {
+  margin: 4px 0 0;
+  font:
+    italic 16px/1.45 Georgia,
+    serif;
+}
+.god-reply-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #6a6a5a;
+  cursor: pointer;
+}
+.god-reply-close:hover {
+  background: #0000000d;
+}
+
+/* ---------- Speed slider (HUD) ---------- */
+.speed-slider {
+  display: grid;
+  grid-template-columns: auto 120px;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 4px 4px 2px;
+  color: #e6e9dd;
+}
+.speed-slider.disabled {
+  opacity: 0.5;
+}
+.speed-value {
+  grid-row: span 2;
+  min-width: 40px;
+  font:
+    600 22px/1 Georgia,
+    serif;
+  color: #f8f2dc;
+}
+.speed-slider input[type="range"] {
+  width: 120px;
+  margin: 0;
+  accent-color: #d9c58c;
+  cursor: pointer;
+}
+.speed-slider input:disabled {
+  cursor: default;
+}
+.speed-ticks {
+  display: flex;
+  justify-content: space-between;
+  font:
+    600 11px/1 system-ui,
+    sans-serif;
+  color: #8f9a8c;
+}
+.speed-ticks i {
+  font-style: normal;
+}
+.speed-ticks i.on {
+  color: #d9c58c;
+}
+
+/* ---------- World page: the town now vs. at its founding ---------- */
+.world-page {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 28px) 16px
+    calc(env(safe-area-inset-bottom, 0px) + 28px);
+  background: #101715;
+  animation: fade-in 0.2s ease;
+}
+.world-sheet {
+  display: flex;
+  flex-direction: column;
+  width: min(1180px, 100%);
+  min-height: 0;
+  color: #e6e9dd;
+}
+.world-sheet > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #ffffff14;
+}
+.world-sheet h2 {
+  margin: 0 0 6px;
+  font:
+    600 34px/1.1 Georgia,
+    serif;
+  color: #f8f2dc;
+}
+.world-sheet header p {
+  margin: 0;
+  color: #a9b4a6;
+  font-size: 15px;
+}
+.world-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 24px;
+  padding-top: 20px;
+}
+.world-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.world-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto auto;
+  column-gap: 12px;
+  row-gap: 4px;
+  padding: 16px;
+  border: 1px solid #ffffff14;
+  border-radius: 14px;
+  background: #16211c;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.world-card:hover {
+  border-color: #d9c58c66;
+}
+.world-card.active {
+  border-color: #d9c58c;
+  background: #1d2a22;
+  box-shadow: 0 0 0 1px #d9c58c55;
+}
+.world-card.everything {
+  grid-column: 1 / -1;
+}
+.world-card-icon {
+  grid-row: span 3;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #ffffff0d;
+  color: #d9c58c;
+}
+.world-card-label {
+  font:
+    700 12px/1.2 system-ui,
+    sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a9b4a6;
+}
+.world-card strong {
+  font:
+    600 26px/1.1 Georgia,
+    serif;
+  color: #f8f2dc;
+}
+.world-card small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8f9a8c;
+  font-size: 13px;
+}
+.world-card small em {
+  font-style: normal;
+  font-size: 11px;
+}
+.world-card small em.up {
+  color: #9fd38a;
+}
+.world-card small em.down {
+  color: #e8947f;
+}
+.world-story {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #ffffff14;
+  border-radius: 14px;
+  background: #131c18;
+}
+.world-story h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  padding: 16px 18px;
+  border-bottom: 1px solid #ffffff12;
+  font:
+    600 20px/1.1 Georgia,
+    serif;
+  color: #f8f2dc;
+}
+.world-story h3 span {
+  font:
+    700 12px/1 system-ui,
+    sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #d9c58c;
+}
+.world-story ol {
+  flex: 1;
+  margin: 0;
+  padding: 8px 18px 18px;
+  list-style: none;
+  overflow-y: auto;
+}
+.world-story > .panel-note {
+  padding: 18px;
+}
+.world-day h4 {
+  position: sticky;
+  top: 0;
+  margin: 14px 0 6px;
+  padding: 4px 0;
+  background: #131c18;
+  font:
+    700 12px/1.2 system-ui,
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a9b4a6;
+}
+.world-line {
+  padding: 8px 0 8px 14px;
+  border-left: 2px solid #ffffff1a;
+  font-size: 15px;
+  line-height: 1.4;
+}
+.world-line p {
+  margin: 4px 0 0;
+  font:
+    italic 14px/1.45 Georgia,
+    serif;
+  color: #c9d1c5;
+}
+.world-line p .chip {
+  margin-left: 8px;
+  font-style: normal;
+  color: #d9c58c;
+}
+.world-line.decree {
+  border-left-color: #d9c58c;
+  color: #f3d98b;
+}
+.world-line.seed {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  border-left-color: #9fd38a;
+  color: #e6e9dd;
+}
+.world-line.seed svg {
+  flex: none;
+  margin-top: 3px;
+  color: #9fd38a;
+}
+@media (max-width: 860px) {
+  .world-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .world-story {
+    min-height: 60vh;
+  }
+}
+
+/* ---------- What you can change (ⓘ beside the decree box) ---------- */
+.god-hint {
+  position: relative;
+  display: flex;
+}
+.god-hint-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  line-height: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: #d9c58c;
+  cursor: help;
+}
+.god-hint-button:hover,
+.god-hint-button[aria-expanded="true"] {
+  background: #ffffff12;
+  color: #f8f2dc;
+}
+.god-powers {
+  position: absolute;
+  top: calc(100% + 14px);
+  right: -120px;
+  z-index: 30;
+  width: min(760px, calc(100vw - 32px));
+  padding: 16px 16px 12px;
+  border-radius: 14px;
+  background: #142019f7;
+  border: 1px solid #ffffff1c;
+  box-shadow: 0 20px 50px #0b120f80;
+  color: #e6e9dd;
+  text-align: left;
+  animation: bubble-in 0.2s ease both;
+}
+.god-powers::before {
+  /* Hover bridge, so moving the pointer down into the card keeps it open. */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -16px;
+  height: 16px;
+}
+.god-powers > strong {
+  display: block;
+  font:
+    600 18px/1.2 Georgia,
+    serif;
+  color: #f8f2dc;
+}
+.god-powers > p {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: #a9b4a6;
+}
+.god-powers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px 14px;
+}
+.god-powers h4 {
+  margin: 8px 0 4px;
+  font:
+    700 11px/1.2 system-ui,
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #d9c58c;
+}
+.god-powers section button {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #e6e9dd;
+  text-align: left;
+  cursor: pointer;
+}
+.god-powers section button:hover {
+  background: #ffffff0e;
+}
+.god-powers section button span {
+  font:
+    600 13px/1.2 system-ui,
+    sans-serif;
+}
+.god-powers section button em {
+  font:
+    italic 13px/1.3 Georgia,
+    serif;
+  color: #c9d1c5;
+}
+@media (max-width: 900px) {
+  .god-powers {
+    right: -48px;
+  }
+  .god-powers-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---------- Soundtrack (header) ---------- */
+.town-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.music-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* Same height as the World button beside it. */
+  height: 41px;
+  box-sizing: border-box;
+  padding: 0 5px 0 14px;
+  border: 1px solid #ffffff1c;
+  border-radius: 10px;
+  color: #c9d1c5;
+}
+.music-note {
+  flex: none;
+  color: #8f9a8c;
+}
+.music-control.on .music-note {
+  color: #d9c58c;
+  animation: music-bob 2.4s ease-in-out infinite;
+}
+@keyframes music-bob {
+  50% {
+    transform: translateY(-2px) rotate(-6deg);
+  }
+}
+.music-title {
+  max-width: 160px;
+  margin: 0 4px 0 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font:
+    italic 14px/1 Georgia,
+    serif;
+}
+/* Header buttons share padding; these are icon squares, so the icon sits dead centre. */
+.town-header .music-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  line-height: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: #d8e0d4;
+  cursor: pointer;
+}
+.town-header .music-button:hover:not(:disabled) {
+  background: #ffffff12;
+  color: #f8f2dc;
+}
+.town-header .music-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+@media (max-width: 700px) {
+  .music-title {
+    display: none;
+  }
+}
+
+/* A villager speaking aloud in a conversation (voice.ts). */
+.convo-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.convo-who svg.speaking {
+  color: #d9c58c;
+  animation: speak-pulse 0.9s ease-in-out infinite;
+}
+.convo-bubble.speaking {
+  box-shadow:
+    0 0 0 2px #d9c58c88,
+    0 0 18px #d9c58c33;
+}
+@keyframes speak-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+}
+
+/* ---------- World Health and score (header) ---------- */
+.world-health {
+  position: relative;
+}
+.health-pill svg {
+  flex: none;
+}
+.health-pill.good .health-caption:first-child svg {
+  color: #9fd38a;
+}
+.health-pill.fair .health-caption:first-child svg {
+  color: #e8c46a;
+}
+.health-pill.poor .health-caption:first-child svg {
+  color: #e8735f;
+  animation: speak-pulse 1.2s ease-in-out infinite;
+}
+.health-pill .health-caption:nth-child(2) svg {
+  color: #d9c58c;
+}
+.health-bar {
+  display: block;
+  width: 84px;
+  height: 6px;
+  border-radius: 3px;
+  background: #ffffff1a;
+  overflow: hidden;
+}
+.health-bar i {
+  display: block;
+  height: 100%;
+  background: currentColor;
+  transition: width 0.6s ease;
+}
+.health-pill.good .health-bar i,
+.health-parts .health-bar i {
+  background: #9fd38a;
+}
+.health-pill.fair .health-bar i,
+.health-parts .health-bar i.fair {
+  background: #e8c46a;
+}
+.health-pill.poor .health-bar i,
+.health-parts .health-bar i.poor {
+  background: #e8735f;
+}
+.health-label {
+  font:
+    600 12px/1 system-ui,
+    sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a9b4a6;
+}
+.health-pill strong {
+  font:
+    600 22px/1 Georgia,
+    serif;
+  color: #f8f2dc;
+  min-width: 2ch;
+}
+.health-divider {
+  width: 1px;
+  height: 18px;
+  background: #ffffff22;
+}
+.health-card {
+  /* The bottom bar keeps its text on one line; the card wraps normally. */
+  white-space: normal;
+  text-align: left;
+  position: absolute;
+  /* Opens upward from the bottom bar. */
+  bottom: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  width: 340px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #142019f7;
+  border: 1px solid #ffffff1c;
+  box-shadow: 0 20px 50px #0b120f80;
+  color: #e6e9dd;
+  animation: fade-in 0.2s ease both;
+}
+.health-card::before {
+  /* Hover bridge down to the pill. */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -16px;
+  height: 16px;
+}
+.health-card header strong {
+  display: block;
+  font:
+    600 18px/1.2 Georgia,
+    serif;
+  color: #f8f2dc;
+}
+.health-card header small {
+  color: #a9b4a6;
+  font-size: 12px;
+}
+.health-reasons {
+  margin: 10px 0 0;
+  padding: 0 0 0 16px;
+  color: #f0b7a8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.health-parts {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+.health-parts > div {
+  display: grid;
+  grid-template-columns: 90px 1fr 30px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.health-parts .health-bar {
+  width: 100%;
+}
+.health-parts em {
+  font-style: normal;
+  text-align: right;
+  color: #a9b4a6;
+}
+.health-card h4 {
+  display: flex;
+  justify-content: space-between;
+  margin: 14px 0 4px;
+  font:
+    700 12px/1 system-ui,
+    sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #d9c58c;
+}
+.health-rules {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #8f9a8c;
+}
+.health-ledger {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.health-ledger li {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.health-ledger em {
+  font-style: normal;
+  font-weight: 700;
+}
+.health-ledger em.up {
+  color: #9fd38a;
+}
+.health-ledger em.down {
+  color: #e8735f;
+}
+.health-ledger small {
+  color: #8f9a8c;
+}
+
+/* ---------- The point of no return ---------- */
+.game-over {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: radial-gradient(circle at center, #2a0f0bcc, #0b0605f2);
+  animation: fade-in 0.6s ease;
+}
+.game-over-card {
+  width: min(480px, 100%);
+  padding: 32px 28px 26px;
+  border-radius: 20px;
+  background: #1a1210;
+  border: 1px solid #e8735f44;
+  box-shadow: 0 40px 90px #000000aa;
+  color: #f1e3dc;
+  text-align: center;
+  animation: convo-in 0.5s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+.game-over-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  background: #e8735f22;
+  color: #e8735f;
+}
+.game-over-card small {
+  font:
+    700 12px/1 system-ui,
+    sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e8735f;
+}
+.game-over-card h2 {
+  margin: 8px 0 10px;
+  font:
+    600 34px/1.1 Georgia,
+    serif;
+  color: #fff4ec;
+}
+.game-over-card p {
+  margin: 0 auto 20px;
+  max-width: 380px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #d8c2b8;
+}
+.game-over-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 0 0 22px;
+}
+.game-over-card dl div {
+  padding: 12px 6px;
+  border-radius: 12px;
+  background: #ffffff08;
+}
+.game-over-card dt {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a8928a;
+}
+.game-over-card dd {
+  margin: 6px 0 0;
+  font:
+    600 24px/1 Georgia,
+    serif;
+  color: #fff4ec;
+}
+.game-over-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.game-over-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: #d9c58c;
+  color: #1a1210;
+  font:
+    700 15px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+.game-over-secondary {
+  padding: 12px 18px;
+  border: 1px solid #ffffff2a;
+  border-radius: 12px;
+  background: none;
+  color: #f1e3dc;
+  font:
+    600 15px/1 system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+
+/* In the bottom bar the labels sit above the numbers, like the day. */
+.health-pill {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 6px;
+  height: auto;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: #e6e9dd;
+  cursor: help;
+}
+.health-pill:hover {
+  background: #ffffff0a;
+}
+.health-pill > .health-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.health-pill > .health-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }

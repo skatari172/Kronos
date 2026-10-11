@@ -3,14 +3,18 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Group, MathUtils, Vector3 } from "three";
 import type { Building, Citizen } from "../api/types";
-import { usePresentation, useWorld } from "../stores/world";
+import { useChronicleView } from "../app/feed";
+import { usePlayback, usePresentation, useWorld } from "../stores/world";
 import { characterModel, hash, physique } from "./assets";
 import { BuildingLife } from "./BuildingLife";
 import { Ground } from "./Ground";
 import { crowdPositions, joinCrowd, keepApart } from "./crowd";
 import { DecreeEffect } from "./DecreeEffect";
-import { decreeBusy, decreeReaction } from "./decrees";
-import { directFights } from "./fights";
+import { decreeBusy, decreeReaction, useDecrees } from "./decrees";
+import { directFights, useFights } from "./fights";
+import { directMeetings, meetingBusy } from "./meetings";
+import { OverlayLayer, OverlayProjector } from "./Overlays";
+import { TieLines } from "./TieLines";
 import { CharacterModel, type Motion } from "./Models";
 import { preloadModels } from "./preload";
 import { useTown } from "./progress";
@@ -26,6 +30,8 @@ type Entity =
 type Visual = { entity: Entity; leaving: boolean; fresh: boolean };
 
 const CAMERA: [number, number, number] = [14, 14, 16];
+/** Matches --sidebar in styles.css. */
+const SIDEBAR_WIDTH = 360;
 const FACING_VIEWER = Math.atan2(CAMERA[0], CAMERA[2]);
 
 function EntityRenderer({
@@ -98,10 +104,16 @@ function EntityRenderer({
     };
     // A decree is falling or has just landed: stop and react to it.
     const reaction = leaving ? null : decreeReaction(seed);
-    if (reaction) {
+    if (!leaving && !reaction && usePlayback.getState().paused) {
+      // Paused: everyone holds still where they are.
+      motion.current.speed = 0;
+      motion.current.pose = "idle";
+    } else if (reaction) {
       motion.current.speed = 0;
       motion.current.pose = reaction;
-      face(Math.atan2(-p.x, -p.z), 8);
+      // Turn to where the decree strikes.
+      const { centre } = useDecrees.getState();
+      face(Math.atan2(centre.x - p.x, centre.z - p.z), 8);
     } else if (!leaving && routine.current) {
       const { speed, heading, gait } = stepRoutine(
         routine.current,
@@ -230,25 +242,109 @@ function Entities({ town }: { town: Town }) {
   ));
 }
 
-/** Starts the occasional scuffle (fights.ts); checks about once a second. */
-function FightDirector({ town }: { town: Town }) {
+/**
+ * Stages fights (fights.ts) and conversations (meetings.ts); checks about once
+ * a second. Nobody is pulled into a fight mid-conversation, or the other way.
+ */
+function Director({ town }: { town: Town }) {
   const clock = useRef(0);
   useFrame((_, dt) => {
     if ((clock.current += dt) < 1) return;
     clock.current = 0;
-    directFights(crowdPositions(), town, decreeBusy());
+    if (usePlayback.getState().paused) return; // nothing new starts while paused
+    const crowd = crowdPositions();
+    const talking = meetingBusy();
+    directFights(
+      crowd.filter((c) => !talking.has(c.id)),
+      town,
+      decreeBusy(),
+    );
+    const fight = useFights.getState().current;
+    const fighting = new Set(
+      fight && fight.endAt > performance.now() ? [fight.a, fight.b] : [],
+    );
+    const day = (useWorld.getState().update?.state.tick ?? 0) + 1;
+    directMeetings(crowd, town, fighting, day);
   });
   return null;
 }
 
-function ResponsiveCamera() {
+/**
+ * Fit the whole landmass into the space left of the chronicle sidebar and
+ * centre it there. Refits only when the land's extent or the screen changes,
+ * so a player's own zoom holds otherwise.
+ */
+function ResponsiveCamera({ town }: { town: Town }) {
   const camera = useThree((state) => state.camera);
+  const controls = useThree((state) => state.controls) as unknown as {
+    target: Vector3;
+    update: () => void;
+  } | null;
   const width = useThree((state) => state.size.width);
   const height = useThree((state) => state.size.height);
+  const sidebar = useChronicleView((s) => s.sidebar);
+  // The land's outline, as a stable key: refit only when it changes.
+  const extent = town.tiles
+    .map((t) => `${t.x.toFixed(1)}:${t.z.toFixed(1)}`)
+    .sort()
+    .join(";");
   useEffect(() => {
-    camera.zoom = MathUtils.clamp(Math.min(width / 37, height / 21), 10, 90);
+    const cells = extent
+      .split(";")
+      .map((c) => c.split(":").map(Number) as [number, number]);
+    const xs = cells.map(([x]) => x);
+    const zs = cells.map(([, z]) => z);
+    const centre = new Vector3(
+      (Math.min(...xs) + Math.max(...xs)) / 2,
+      0,
+      (Math.min(...zs) + Math.max(...zs)) / 2,
+    );
+    camera.position.set(centre.x + CAMERA[0], CAMERA[1], centre.z + CAMERA[2]);
+    camera.lookAt(centre);
+    if (controls) {
+      controls.target.copy(centre);
+      controls.update();
+    }
+    // Measure every tile's footprint on screen at zoom 1, then scale to fit.
+    camera.clearViewOffset();
+    camera.zoom = 1;
     camera.updateProjectionMatrix();
-  }, [camera, width, height]);
+    camera.updateMatrixWorld();
+    const r = 1.4; // a tile's radius
+    let [left, right, bottom, top] = [Infinity, -Infinity, Infinity, -Infinity];
+    const p = new Vector3();
+    for (const [x, z] of cells)
+      for (const [dx, dz] of [
+        [r, 0],
+        [-r, 0],
+        [0, r],
+        [0, -r],
+      ])
+        for (const y of [-0.8, 0.5]) {
+          p.set(x + dx, y, z + dz).project(camera);
+          [left, right] = [Math.min(left, p.x), Math.max(right, p.x)];
+          [bottom, top] = [Math.min(bottom, p.y), Math.max(top, p.y)];
+        }
+    const side = sidebar && width > 900 ? SIDEBAR_WIDTH : 0;
+    // Room for the header, decree box and HUD above and below.
+    const room = { w: width - side - 110, h: height - 300 };
+    const span = {
+      w: ((right - left) / 2) * width,
+      h: ((top - bottom) / 2) * height,
+    };
+    camera.zoom = MathUtils.clamp(
+      Math.min(room.w / span.w, room.h / span.h),
+      10,
+      90,
+    );
+    // Shift the view so the land's centre sits in the middle of the free space.
+    // Centre the land's on-screen footprint in the free space: left of the
+    // sidebar, and between the decree box (top) and the HUD (bottom).
+    const cx = ((left + right) / 4) * width * camera.zoom;
+    const cy = ((top + bottom) / 4) * height * camera.zoom;
+    camera.setViewOffset(width, height, side / 2 + cx, -28 - cy, width, height);
+    camera.updateProjectionMatrix();
+  }, [camera, controls, width, height, sidebar, extent]);
   return null;
 }
 
@@ -268,7 +364,7 @@ export function Village({ autoRotate = false }: { autoRotate?: boolean }) {
             usePresentation.getState().select(null);
         }}
       >
-        <ResponsiveCamera />
+        <ResponsiveCamera town={town} />
         <hemisphereLight args={["#ffffff", "#c9cbbd", 1.05]} />
         <directionalLight
           castShadow
@@ -287,7 +383,9 @@ export function Village({ autoRotate = false }: { autoRotate?: boolean }) {
           <Ground key={`ground:${epoch}`} town={town} />
           <Entities key={epoch} town={town} />
           <DecreeEffect />
-          <FightDirector town={town} />
+          <Director town={town} />
+          <OverlayProjector />
+          <TieLines />
         </Suspense>
         <OrbitControls
           makeDefault
@@ -298,9 +396,9 @@ export function Village({ autoRotate = false }: { autoRotate?: boolean }) {
           minPolarAngle={0.4}
           maxPolarAngle={1.2}
           enablePan={false}
-          target={[0, 0, 0]}
         />
       </Canvas>
+      <OverlayLayer />
     </div>
   );
 }

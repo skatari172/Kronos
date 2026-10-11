@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { initialMock } from "../api/mock";
 import { growthOf, prosperity } from "./progress";
 import { homeOf } from "./routine";
-import { MAX_TIER, route, townAt, withLots } from "./town";
+import {
+  MAX_TIER,
+  nearestRoad,
+  route,
+  tileKey,
+  townAt,
+  withLots,
+} from "./town";
 
 describe("town growth", () => {
   it("only ever adds ground, roads, and places as tiers rise", () => {
@@ -108,7 +115,9 @@ describe("town growth", () => {
       expect(town.tiles.length).toBeGreaterThanOrEqual(
         townAt(tier).tiles.length,
       );
-      expect(town.roads).toBe(townAt(tier).roads);
+      // ...and never a road (new lots may add roads to reach them).
+      for (const road of townAt(tier).roads.keys())
+        expect(town.roads.has(road)).toBe(true);
       // Same lots, same town object: no re-render churn.
       expect(withLots(townAt(tier), [...lots].reverse())).toBe(town);
     }
@@ -143,5 +152,88 @@ describe("town growth", () => {
       id: "newcomer",
     };
     expect(prosperity(grown).score).toBe(8);
+  });
+
+  it("keeps all land in one piece, even with lots far out at sea", () => {
+    const WIDTH = 2.8;
+    const ROW = WIDTH * (Math.sqrt(3) / 2);
+    const neighbours = [0, 1, 2, 3, 4, 5].map((k) => ({
+      x: Math.cos((k * Math.PI) / 3) * WIDTH,
+      z: Math.sin((k * Math.PI) / 3) * WIDTH,
+    }));
+    const id = (p: { x: number; z: number }) =>
+      `${Math.round(p.x * 10)}:${Math.round(p.z * 10)}`;
+    for (let tier = 0; tier <= MAX_TIER; tier++) {
+      const lots = [
+        { x: -4 * WIDTH, z: 7 * ROW },
+        { x: 9 * WIDTH, z: -6 * ROW },
+      ];
+      const { tiles } = withLots(townAt(tier), lots);
+      const land = new Set(tiles.map(id));
+      const seen = new Set([id(tiles[0])]);
+      const queue: { x: number; z: number }[] = [tiles[0]];
+      while (queue.length) {
+        const cell = queue.pop()!;
+        for (const d of neighbours) {
+          const n = { x: cell.x + d.x, z: cell.z + d.z };
+          if (land.has(id(n)) && !seen.has(id(n))) {
+            seen.add(id(n));
+            queue.push(n);
+          }
+        }
+      }
+      expect(seen.size).toBe(land.size);
+    }
+  });
+
+  it("never moves or drops an existing tile when a new lot opens", () => {
+    // A tile that changes identity remounts and replays its rise: the land
+    // flickers and buildings float while their tile grows back underneath.
+    const lots = [-4, 0, 4].flatMap((x) =>
+      [-3, 3, 9, 15, 21].map((z) => ({ x, z })),
+    );
+    for (let tier = 0; tier <= MAX_TIER; tier++)
+      for (let n = 6; n < lots.length; n++) {
+        const before = withLots(townAt(tier), lots.slice(0, n)).tiles;
+        const after = new Map(
+          withLots(townAt(tier), lots.slice(0, n + 1)).tiles.map((t) => [
+            tileKey(t),
+            t,
+          ]),
+        );
+        for (const tile of before) {
+          const same = after.get(tileKey(tile));
+          expect(same, `tier ${tier}, lot ${n}`).toBeDefined();
+          expect([same!.x, same!.z]).toEqual([tile.x, tile.z]);
+        }
+      }
+  });
+
+  it("gives new land roads to every lot, forest, and nothing on the lots", () => {
+    const lots = [-4, 0, 4].flatMap((x) =>
+      [-3, 3, 9, 15, 21].map((z) => ({ x, z })),
+    );
+    for (let tier = 0; tier <= MAX_TIER; tier++) {
+      const base = townAt(tier);
+      const town = withLots(base, lots);
+      const centre = nearestRoad(town, { x: 0, z: 0 });
+      for (const lot of lots) {
+        // A road beside the lot, and a way along the roads to the centre.
+        const road = nearestRoad(town, lot);
+        const at = town.roads.get(road)!.at;
+        expect(
+          Math.hypot(at.x - lot.x, at.z - lot.z),
+          `lot ${lot.x},${lot.z}`,
+        ).toBeLessThan(4.2); // next to the lot's cell (lots sit off the grid by up to half a cell)
+        expect(route(town, road, centre).at(-1)).toBe(centre);
+      }
+      // The new land is wooded, and nothing stands on a lot.
+      expect(town.scenery.length).toBeGreaterThan(base.scenery.length - 10);
+      for (const piece of town.scenery)
+        for (const lot of lots)
+          expect(Math.hypot(piece.x - lot.x, piece.z - lot.z)).toBeGreaterThan(
+            1.5,
+          );
+    }
   });
 });

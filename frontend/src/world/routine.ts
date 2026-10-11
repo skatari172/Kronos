@@ -12,8 +12,9 @@ import type { Building, Citizen, WorldState } from "../api/types";
 import { physique } from "./assets";
 import { PERSONAL_SPACE } from "./crowd";
 import { FIGHT_STEPS, fightFor, type Step } from "./fights";
+import { meetingFor, talkSteps } from "./meetings";
 import type { Gait, Pose, Run } from "./Models";
-import { siteFor } from "./sites";
+import { arriveAt, siteFor } from "./sites";
 import {
   nearestRoad,
   route,
@@ -42,7 +43,10 @@ export type Routine = {
   facing: number;
   siteId?: string;
   fightId?: number;
-  arrival?: { steps: Step[]; face?: Point };
+  /** In a conversation (meetings.ts), and the last one finished. */
+  meetId?: number;
+  metId?: number;
+  arrival?: { steps: Step[]; face?: Point; onArrive?: () => void };
 };
 
 type Goal = { road: string; at: Point };
@@ -201,6 +205,7 @@ function plan(
   let hurry = 1;
   routine.siteId = undefined;
   routine.fightId = undefined;
+  routine.meetId = undefined;
 
   const site = siteFor(citizen.id, citizen.occupation);
   const fight = fightFor(citizen.id);
@@ -214,11 +219,35 @@ function plan(
     routine.arrival = { steps, face: fight.opponent };
     return walkTo(routine, town, goal, hurry, false, true);
   }
+  const meeting = meetingFor(citizen.id);
+  if (meeting && meeting.meeting.id !== routine.metId) {
+    // Walk over to talk; wait for the other if early, then converse.
+    routine.meetId = meeting.meeting.id;
+    goal = { road: nearestRoad(town, meeting.spot), at: meeting.spot };
+    const until = Math.max(
+      0,
+      (meeting.meeting.startAt - performance.now()) / 1000,
+    );
+    steps = [
+      { pose: "idle", seconds: until },
+      ...talkSteps(meeting.meeting.talk.kind, meeting.role),
+    ];
+    routine.arrival = { steps, face: meeting.other };
+    return walkTo(routine, town, goal, 1.5, false, true);
+  }
   if (site) {
+    // Go to the plot, tell the site you're there, and work until it's done.
     goal = near(site.at);
     routine.siteId = site.buildingId;
     steps = [hold("hammer", (site.until - performance.now()) / 1000 + 0.5)];
     hurry = 2.6;
+    routine.arrival = {
+      steps,
+      face: site.at,
+      onArrive: () => arriveAt(site.buildingId, citizen.id),
+    };
+    // Stop beside the plot (not inside it), like any other errand.
+    return walkTo(routine, town, goal, hurry, false, false);
   } else if (citizen.hunger >= 95 && roll < 0.3) {
     // Starving: faint where they stand, then get back up.
     goal = null;
@@ -316,12 +345,21 @@ export function stepRoutine(
   // Drop everything for a fight or to help raise a new building.
   const fight = fightFor(citizen.id);
   const site = siteFor(citizen.id, citizen.occupation);
+  const found = fight ? undefined : meetingFor(citizen.id);
+  const meeting = found?.meeting.id === routine.metId ? undefined : found;
   if (
     (fight && routine.fightId !== fight.fight.id) ||
-    (!fight && site && routine.siteId !== site.buildingId)
+    (meeting && routine.meetId !== meeting.meeting.id) ||
+    (!fight && !meeting && site && routine.siteId !== site.buildingId)
   ) {
     routine.points = [];
     routine.steps = [];
+  }
+  // The building they were raising is finished: stop hammering.
+  if (routine.siteId && site?.buildingId !== routine.siteId) {
+    routine.steps = [];
+    routine.points = [];
+    routine.siteId = undefined;
   }
   // Playing a pose sequence.
   if (routine.steps.length) {
@@ -331,7 +369,10 @@ export function stepRoutine(
       if (routine.steps.length) {
         routine.left = routine.steps[0].seconds;
         routine.pose = routine.steps[0].pose;
-      } else routine.fightId = undefined;
+      } else {
+        if (routine.meetId) routine.metId = routine.meetId;
+        routine.fightId = routine.meetId = undefined;
+      }
     }
     if (routine.steps.length)
       return { speed: 0, heading: routine.facing, gait: routine.walk };
@@ -356,20 +397,22 @@ export function stepRoutine(
   // exact spot, and the crowd keeps a body-width between villagers. Fighters
   // need their exact spots to face off.
   const last = routine.points.length === 1;
-  const reach = last ? (routine.fightId ? 0.12 : PERSONAL_SPACE) : 0.15;
+  const exact = routine.fightId || routine.meetId;
+  const reach = last ? (exact ? 0.12 : PERSONAL_SPACE) : 0.15;
   if (distance - travel < reach) {
     routine.points.shift();
     if (!routine.points.length && routine.arrival) {
       // Begin the stop's poses, facing what they came for.
-      const { steps, face } = routine.arrival;
+      const { steps, face, onArrive } = routine.arrival;
       routine.arrival = undefined;
+      onArrive?.();
       beginSteps(
         routine,
         steps,
         face ? Math.atan2(face.x - position.x, face.z - position.z) : heading,
       );
       routine.hurry = 1;
-    } else if (!routine.siteId && !routine.fightId && Math.random() < 0.04) {
+    } else if (!routine.siteId && !exact && Math.random() < 0.04) {
       // Now and then, stop on the way to look around or greet someone.
       beginSteps(
         routine,

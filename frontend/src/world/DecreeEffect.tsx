@@ -9,6 +9,8 @@ import {
   type PointLight,
 } from "three";
 import { useDecrees } from "./decrees";
+import { useTown } from "./progress";
+import { landCentre } from "./town";
 
 /** Length of the strike animation, in seconds. */
 const STRIKE_S = 2.8;
@@ -22,6 +24,10 @@ const SPARKS = 48;
 export function DecreeEffect() {
   const strike = useDecrees((s) => s.strike);
   const group = useRef<Group>(null);
+  // Strike the middle of the land, wherever it has grown to.
+  const town = useTown();
+  const centre = useMemo(() => landCentre(town), [town]);
+  useEffect(() => useDecrees.setState({ centre }), [centre]);
   const beam = useRef<Mesh>(null);
   const halo = useRef<Mesh>(null);
   const rings = useRef<(Mesh | null)[]>([]);
@@ -96,7 +102,7 @@ export function DecreeEffect() {
     blending: AdditiveBlending,
   } as const;
   return (
-    <group ref={group} visible={false}>
+    <group ref={group} visible={false} position={[centre.x, 0, centre.z]}>
       <mesh ref={beam} position={[0, 15, 0]}>
         <cylinderGeometry args={[0.6, 0.9, 30, 24, 1, true]} />
         <meshBasicMaterial {...gold} side={2} />

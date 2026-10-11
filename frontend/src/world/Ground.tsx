@@ -1,4 +1,4 @@
-import { Suspense, useRef, useState, type ReactNode } from "react";
+import { Suspense, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { Group } from "three";
 import type { Plot } from "../api/types";
@@ -7,7 +7,7 @@ import { HEX_SCALE, hex } from "./assets";
 import { Dust, StaticModel } from "./Models";
 import { Selection } from "./Selection";
 import { stepSpring, type Spring } from "./spring";
-import type { Piece, Town } from "./town";
+import { tileKey, type Piece, type Town } from "./town";
 
 /**
  * Renders the town for the current growth tier (./town, ./progress) and the
@@ -18,13 +18,25 @@ export function Ground({ town }: { town: Town }) {
   const mountedAt = useRef(performance.now());
   // Anything mounting later than this belongs to a growth step and animates.
   const grows = () => performance.now() - mountedAt.current > 600;
+  // The land only grows within a session (Ground remounts on a new epoch): a
+  // tile once shown stays, so recomputing the land never removes and re-adds
+  // one (which would replay its rise and flicker under the ground).
+  const [shown] = useState(() => new Map<string, Piece>());
+  const tiles = useMemo(() => {
+    for (const piece of town.tiles) shown.set(tileKey(piece), piece);
+    return [...shown.values()];
+  }, [town, shown]);
   return (
     <group>
-      {town.tiles.map((piece) => (
+      {tiles.map((piece) => (
         <Grow
-          key={`tile:${piece.x}:${piece.z}`}
+          // By grid cell, so a tile that was already there never replays its rise.
+          key={`tile:${tileKey(piece)}`}
           piece={piece}
           animate={grows()}
+          // Ground grows in place, never from deep below its neighbours.
+          depth={0.25}
+          from={0.85}
         >
           <StaticModel
             url={hex(piece.model)}
@@ -34,7 +46,7 @@ export function Ground({ town }: { town: Town }) {
       ))}
       {town.scenery.map((piece) => (
         <Grow
-          key={`${piece.model}:${piece.x}:${piece.z}`}
+          key={`${piece.model}:${tileKey(piece)}`}
           piece={piece}
           animate={grows()}
         >
@@ -58,10 +70,15 @@ function Grow({
   piece,
   animate,
   children,
+  depth = 1.4,
+  from = 0.4,
 }: {
   piece: Pick<Piece, "x" | "z">;
   animate: boolean;
   children: ReactNode;
+  /** How far below the ground it starts, and the scale it starts at. */
+  depth?: number;
+  from?: number;
 }) {
   const group = useRef<Group>(null);
   const [initial] = useState(animate);
@@ -78,17 +95,17 @@ function Grow({
     const v = lift.current.value;
     if (Math.abs(1 - v) < 0.001 && Math.abs(lift.current.velocity) < 0.01)
       lift.current.value = 1;
-    group.current.position.y = (lift.current.value - 1) * 1.4;
+    group.current.position.y = (lift.current.value - 1) * depth;
     group.current.scale.setScalar(
-      Math.max(0.0001, 0.4 + lift.current.value * 0.6),
+      Math.max(0.0001, from + lift.current.value * (1 - from)),
     );
   });
   return (
     <group position={[piece.x, 0, piece.z]}>
       <group
         ref={group}
-        position={[0, initial ? -1.4 : 0, 0]}
-        scale={initial ? 0.4 : 1}
+        position={[0, initial ? -depth : 0, 0]}
+        scale={initial ? from : 1}
       >
         {/* A model still loading hides only this piece, never the town. */}
         <Suspense fallback={null}>{children}</Suspense>

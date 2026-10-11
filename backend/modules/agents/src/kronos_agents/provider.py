@@ -18,6 +18,8 @@ from kronos_sim.models import (
 from kronos_sim.queries import observe
 from pydantic import TypeAdapter, ValidationError
 
+from kronos_agents.tools import tool_call
+
 logger = logging.getLogger(__name__)
 
 
@@ -345,7 +347,14 @@ def mock_user_query(query: str, context: dict | None = None) -> dict:
     except ProviderError:
         pass
 
-    raise ProviderError(f"Cannot determine toolkit endpoint for: '{query}'")
+    # Nothing in the toolkit fits: answer instead of guessing, and change nothing.
+    return {
+        "message": (
+            "I can't do that with the town's tools. Try changing bread prices or wages, "
+            "giving or taking coins, a feast or famine, a harvest boom or drought, a town "
+            "policy, spawning a villager, or a business owner's price, wage or hiring."
+        )
+    }
 
 
 class MockProvider:
@@ -443,20 +452,59 @@ class MockProvider:
 
     @staticmethod
     def _answer(observation: dict) -> dict:
-        """Templated answer from the citizen's own latest events; never invents causes."""
-        recent = observation["events"][-3:]
-        if not recent:
+        """Plain first-person sentences from the citizen's own latest events; never
+        invents causes. Routine bookkeeping (walking, trust ticks) is left out."""
+        me = observation["citizen"]["id"]
+        names = dict(observation.get("neighbors") or {})
+
+        def name(cid):
+            return "myself" if cid == me else names.get(cid, "a neighbor")
+
+        def sentence(e):
+            p, mine = e.get("payload") or {}, e.get("actor_id") == me
+            kind = e["type"]
+            if kind == "agent_spoke":
+                if mine:
+                    return f'I told {name(p.get("recipient_id"))}: "{p.get("message", "")}"'
+                return f'{name(e.get("actor_id"))} told me: "{p.get("message", "")}"'
+            if kind == "citizen_interacted":
+                verb = p.get("kind", "met").replace("_", " ")
+                if mine:
+                    return f"I chose to {verb} {name(p.get('recipient_id'))}"
+                return f"{name(e.get('actor_id'))} chose to {verb} me"
+            if kind == "transaction_completed" and p.get("resource") and mine:
+                return f"I bought {p.get('quantity', 1)} {p['resource']}"
+            if kind == "resource_consumed" and p.get("entity_id") == me:
+                return "I ate a loaf"
+            if kind == "employment_changed" and p.get("citizen_id") == me:
+                return "I started a new job" if p.get("building_id") else "I lost my job"
+            if kind == "job_applied" and mine:
+                return "I applied for work"
+            if kind == "action_rejected" and mine:
+                what = p.get("action_type", "act").replace("_", " ")
+                return f"I tried to {what}, but: {p.get('message', 'it failed').lower()}"
+            if kind == "building_constructed" and mine:
+                return "I founded a business"
+            return None
+
+        told = []
+        for event in reversed(observation["events"]):
+            text = sentence(event)
+            if text:
+                told.append((event, text))
+            if len(told) == 3:
+                break
+        if not observation["events"]:
             return {"answer": "Nothing has happened to me yet.", "cited_event_ids": []}
-        parts = [
-            f"{e['type'].replace('_', ' ')} on day {e['tick']}"
-            + (f" ({e['rationale']})" if e.get("rationale") else "")
-            for e in reversed(recent)
-        ]
+        if not told:
+            return {"answer": "Nothing much has happened to me lately.", "cited_event_ids": []}
+        lines = "; ".join(f"on day {e['tick']}, {t}" for e, t in told)
+        answer = f"Lately, {lines}"
+        if not answer.endswith((".", "!", "?", '."', '!"', '?"')):
+            answer += "."
         return {
-            "answer": "I can only speak from my own records. Most recently: "
-            + "; ".join(parts)
-            + ".",
-            "cited_event_ids": [e["id"] for e in reversed(recent)],
+            "answer": answer,
+            "cited_event_ids": [e["id"] for e, _ in told],
         }
 
 
@@ -510,10 +558,33 @@ class AgentService:
 
     async def resolve_user_query(
         self, query: str, context: dict | None = None
-    ) -> DeterminedToolCall:
-        """Turn a player's natural language query into the best toolkit endpoint call."""
+    ) -> DeterminedToolCall | str:
+        """Turn a player's query into one toolkit call, or a reply when no tool fits.
+
+        Providers with native tool use (`choose_tool`) pick from `tools.TOOLS` or answer
+        in text. Others return JSON: a `DeterminedToolCall`, or `{"message": ...}` for
+        no tool. A returned string is the reply to show the player; nothing changes.
+        """
         observation = {"query": query, "context": context or {}}
-        return await self._validated("user_query", observation, TypeAdapter(DeterminedToolCall))
+        for attempt in range(self.retries + 1):
+            try:
+                if hasattr(self.provider, "choose_tool"):
+                    name, arguments, text = await asyncio.wait_for(
+                        self.provider.choose_tool(query, observation["context"]), self.timeout
+                    )
+                    return tool_call(name, arguments, text) if name else text
+                raw = await asyncio.wait_for(
+                    self.provider.complete("user_query", observation), self.timeout
+                )
+                data = json.loads(raw)
+                if isinstance(data, dict) and "endpoint" not in data and data.get("message"):
+                    return str(data["message"])[:1000]
+                return TypeAdapter(DeterminedToolCall).validate_python(data)
+            except ProviderError:
+                raise
+            except (TimeoutError, ValidationError, ValueError, TypeError) as exc:
+                if attempt == self.retries:
+                    raise ProviderError("Provider returned invalid output or timed out") from exc
 
     async def decide(self, observation: AgentObservation) -> AgentAction:
         """One proposal for the observed citizen. The engine still decides if it is valid."""

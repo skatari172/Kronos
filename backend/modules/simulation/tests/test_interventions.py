@@ -75,25 +75,59 @@ def test_set_wages_absolutely_or_by_percent_within_the_minimum_wage():
         WageIntervention(wage=100, percent=10)
 
 
-def test_grants_give_to_everyone_and_take_without_going_negative():
+def wealth(world):
+    return sum(c.money for c in world.citizens.values()) + sum(
+        b.cash for b in world.buildings.values()
+    )
+
+
+def test_grants_are_zero_sum_a_tax_on_those_who_can_spare_it():
     state = initial_world()
     given = intervene(GrantIntervention(amount=500), state)
     event = head(given, "grant_money")
     assert event.payload.affected_ids == sorted(state.citizens)
-    for cid, citizen in given.state.citizens.items():
-        assert citizen.money == state.citizens[cid].money + 500
-    transfers = [e.payload for e in given.events[1:]]
-    assert {(t.sender_id, t.amount) for t in transfers} == {("town", 500)}
+    # No money comes from nowhere: the town's total is unchanged.
+    assert wealth(given.state) == wealth(state)
+    before, after = state.citizens, given.state.citizens
+    poor = [cid for cid, c in before.items() if c.money < 1000]
+    richest = sorted(before, key=lambda cid: -before[cid].money)[:3]
+    assert all(after[cid].money > before[cid].money for cid in poor)
+    assert all(after[cid].money < before[cid].money for cid in richest)  # they fund it
+    senders = {t.payload.sender_id for t in given.events[1:] if t.payload.recipient_id == "town"}
+    assert senders and "town" not in senders
     assert given.state.citizens["citizen-6"].memories == ["The town gave me 500 cents"]
+
+    # Taking: never below zero, and the money goes to the businesses, not nowhere.
     taken = intervene(GrantIntervention(citizen_id="citizen-6", amount=-5000), state)
     assert taken.state.citizens["citizen-6"].money == 0
-    assert taken.events[1].payload.recipient_id == "town"
     assert taken.events[1].payload.amount == 550
-    broke = taken.state
-    assert code(GrantIntervention(citizen_id="citizen-6", amount=-1), broke) == (
+    assert wealth(taken.state) == wealth(state)
+    assert code(GrantIntervention(citizen_id="citizen-6", amount=-1), taken.state) == (
         "insufficient_funds"
     )
     assert code(GrantIntervention(citizen_id="nobody", amount=1)) == "unknown_entity"
+
+
+def test_a_gift_nobody_can_fund_fails():
+    state = initial_world()
+    for citizen in state.citizens.values():
+        citizen.money = 100
+    for building in state.buildings.values():
+        building.cash = 0
+    assert code(GrantIntervention(amount=500), state) == "insufficient_funds"
+
+
+def test_a_feast_eats_the_bakeries_bread():
+    state = initial_world()
+    for citizen in state.citizens.values():
+        citizen.hunger = 90
+    bread = state.buildings["bakery"].inventory.bread
+    feast = intervene(HungerIntervention(change=-30), state)
+    assert feast.state.buildings["bakery"].inventory.bread == bread - len(state.citizens)
+    assert {c.hunger for c in feast.state.citizens.values()} == {60}
+    # Empty bakeries: no feast.
+    state.buildings["bakery"].inventory.bread = 0
+    assert code(HungerIntervention(change=-30), state) == "out_of_stock"
 
 
 def test_harvest_boom_drought_and_regrowth():

@@ -1,35 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeftRight,
-  BookOpen,
-  Coins,
-  Crown,
-  Hammer,
-  Home,
-  Hourglass,
-  MessageCircle,
-  Search,
-  Swords,
-  TrendingDown,
-  UserPlus,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { Globe, Hourglass, Search, X } from "lucide-react";
 import { usePresentation } from "../stores/world";
-import { useChronicle, type FeedItem, type FeedKind } from "./feed";
-
-const ICONS: Record<FeedKind, LucideIcon> = {
-  build: Hammer,
-  trade: ArrowLeftRight,
-  people: UserPlus,
-  talk: MessageCircle,
-  price: Coins,
-  job: Coins,
-  home: Home,
-  loss: TrendingDown,
-  fight: Swords,
-  decree: Crown,
-};
+import {
+  useChronicle,
+  useChronicleView,
+  type FeedItem,
+  type FeedKind,
+} from "./feed";
+import { ICONS } from "./icons";
+import { MusicControl } from "./MusicControl";
+import { WorldPage } from "./WorldPage";
 
 /** Chronicle filters: label and the event kinds each one shows. */
 const FILTERS: { label: string; kinds: FeedKind[] | null }[] = [
@@ -48,11 +28,9 @@ const FILTERS: { label: string; kinds: FeedKind[] | null }[] = [
 /** Top bar: brand, the town's tier, and the button that opens the chronicle. */
 export function Header({ tier }: { tier: string }) {
   const events = useChronicle((s) => s.items);
-  const [open, setOpen] = useState(false);
-  // Events have increasing ids; count the ones newer than the last look.
-  const newest = events[0]?.id ?? 0;
-  const [seen, setSeen] = useState(newest);
-  const unseen = open ? 0 : Math.max(0, newest - seen);
+  const open = useChronicleView((s) => s.full);
+  const setOpen = useChronicleView((s) => s.setFull);
+  const [world, setWorld] = useState(false);
 
   return (
     <>
@@ -64,30 +42,21 @@ export function Header({ tier }: { tier: string }) {
           <span className="town-name">KRONOS</span>
           <span className="town-tier">Oakhaven · {tier}</span>
         </div>
-        <button
-          className="chronicle-button"
-          aria-expanded={open}
-          onClick={() => {
-            setSeen(newest);
-            setOpen(!open);
-          }}
-        >
-          <BookOpen size={17} />
-          Chronicle
-          {unseen > 0 && (
-            <span className="badge">{unseen > 99 ? "99+" : unseen}</span>
-          )}
-        </button>
+        <div className="town-actions">
+          <MusicControl />
+          {/* The chronicle lives in the sidebar (with its own full-screen view). */}
+          <button
+            className="chronicle-button"
+            aria-expanded={world}
+            onClick={() => setWorld(!world)}
+          >
+            <Globe size={17} />
+            World
+          </button>
+        </div>
       </header>
-      {open && (
-        <Chronicle
-          events={events}
-          onClose={() => {
-            setSeen(newest);
-            setOpen(false);
-          }}
-        />
-      )}
+      {open && <Chronicle events={events} onClose={() => setOpen(false)} />}
+      {world && <WorldPage onClose={() => setWorld(false)} />}
     </>
   );
 }
@@ -242,7 +211,7 @@ function Chronicle({
 }
 
 /** Why one event happened: each person involved, what they wanted, and why. */
-function WhyBox({
+export function WhyBox({
   event,
   onClose,
   onPerson,

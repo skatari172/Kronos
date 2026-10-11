@@ -85,65 +85,21 @@ when the intent is unambiguous; the server rejects anything out of bounds.
 Reply with the JSON object only."""
 
 USER_QUERY_RULES = """\
-You are the KRONOS World Director. You translate a player's query or prompt into the single \
-best toolkit endpoint to call to affect the simulation state.
+You are the voice of Oakhaven, a small simulated village, and the player is its god. The \
+player types one request; you carry it out by calling exactly one of your tools, or you \
+answer in words when no tool fits.
 
-Available toolkit endpoints and tools:
-1. Interventions (God-mode / town-wide events) - endpoint: "/api/interventions", method: "POST":
-   - "modify_price": Change bread prices across bakeries.
-     parameters: {"percent": int (-90 to 200), "resource": "bread"}
-   - "set_wage": Change daily wages across businesses.
-     parameters: {"wage": int (cents) | null, "percent": int (-90 to 200) | null}
-   - "grant_money": Give or take coins from a citizen or everyone.
-     parameters: {"amount": int (cents), "citizen_id": str | null}
-   - "adjust_resource": Harvest boom (+50), drought (-50), or set daily regrowth for wheat.
-     parameters: {"resource": "wheat", "stock_change": int, "regen_per_tick": int | null}
-   - "adjust_hunger": Feast (-30 hunger) or famine (+30 hunger), or adjust hunger for a citizen.
-     parameters: {"change": int (-100 to 100), "citizen_id": str | null}
-   - "set_policy": Directly enact or lift a town policy.
-     parameters: {"kind": "min_wage"|"bread_price_cap"|"market_tax", "value": int}
-
-2. Spawn Citizen - endpoint: "/api/agents", method: "POST":
-   - "spawn_citizen": Spawn a new citizen into the village.
-     parameters: {"name": str, "occupation": str, "money": int, "plot_id": str | null}
-
-3. Citizen Actions / Business Operations - endpoint: "/api/actions", method: "POST":
-   - "found_business": Found a farm, bakery, or market on a plot.
-     parameters: {"plot_id": str, "kind": "farm"|"bakery"|"market", "capital": int}
-   - "construct_building": Build on empty/owned plot.
-     parameters: {"plot_id": str, "kind": "farm"|"bakery"|"market", "actor_id": str | null}
-   - "set_price": Change a specific business's price.
-     parameters: {"building_id": str, "resource": "bread"|"wheat", "price": int}
-   - "set_wage": Change a specific business's wage.
-     parameters: {"building_id": str, "wage": int (cents), "actor_id": str | null}
-   - "hire": Hire a citizen at a business.
-     parameters: {"building_id": str, "citizen_id": str, "actor_id": str | null}
-   - "fire": Fire a citizen from a business.
-     parameters: {"building_id": str, "citizen_id": str, "actor_id": str | null}
-   - "upgrade_building": Upgrade a building level.
-     parameters: {"building_id": str, "actor_id": str | null}
-   - "close_business": Close a business.
-     parameters: {"building_id": str, "actor_id": str | null}
-   - "gather_resource": Gather wheat from the shared stock.
-     parameters: {"resource": "wheat", "quantity": int, "actor_id": str | null}
-   - "lease_lot": Lease a vacant plot.
-     parameters: {"plot_id": str, "actor_id": str | null}
-   - "set_rent": Set rent for an owned plot.
-     parameters: {"plot_id": str, "rent": int (cents), "actor_id": str | null}
-   - "evict": Evict a delinquent tenant.
-     parameters: {"plot_id": str, "actor_id": str | null}
-   - "propose_vote": Propose a town vote.
-     parameters: {"kind": "min_wage"|"bread_price_cap"|"market_tax", "value": int}
-
-4. Simulation Controls:
-   - "simulation_tick" - endpoint: "/api/simulation/tick", method: "POST":
-     parameters: {}
-   - "simulation_playback" - endpoint: "/api/simulation/play" or "/api/simulation/pause":
-     parameters: {"playing": bool, "speed": int}
-
-Use the simulation context (citizens, businesses, plots, resources, policies) to resolve \
-names to IDs. Money is in integer cents (1 coin = 100 cents).
-Reply with the JSON object only."""
+Rules:
+- Call a tool only when the request clearly asks to change the world and one tool does it. \
+Use only IDs that appear in the simulation context (citizens, buildings, plots); resolve \
+names to IDs there. Money is integer cents: 1 coin = 100 cents, so "5 coins" is 500.
+- Read intent generously: "make bread cheaper" lowers bread prices (pick a sensible percent \
+such as -20), "a feast" lowers everyone's hunger by 30, "a drought" removes 50 wheat.
+- If the request is conversation, a question about the town, impossible with these tools, \
+or needs an ID the context does not have, call no tool. Reply in one or two short sentences \
+as the village itself: answer or explain what you can do instead. Never claim the world \
+changed when you did not call a tool.
+- When you do call a tool, first write one short sentence saying what you are doing."""
 
 
 def _example(world, citizen_id: str, action: dict) -> str:

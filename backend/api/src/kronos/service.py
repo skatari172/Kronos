@@ -107,8 +107,25 @@ def build_provider(config: Settings) -> tuple[LLMProvider, float]:
             return _wrap(provider, config, tag=f"{model}:{prompt_version()}"), timeout
         except ProviderError as exc:
             raise ValueError(str(exc)) from exc
+    if config.llm_provider == "gemini":
+        from kronos_agents.gemini_provider import DEFAULT_MODEL, DEFAULT_TIMEOUT, GeminiProvider
+
+        timeout = (
+            config.llm_timeout if "llm_timeout" in config.model_fields_set else DEFAULT_TIMEOUT
+        )
+        model = DEFAULT_MODEL if config.llm_model == "deterministic-v1" else config.llm_model
+        try:
+            key = config.gemini_api_key
+            provider = GeminiProvider(
+                model, timeout=timeout, api_key=key.get_secret_value() if key else None
+            )
+            tag = f"{model}+{provider.player_model}:{prompt_version()}"
+            return _wrap(provider, config, tag=tag), timeout
+        except ProviderError as exc:
+            raise ValueError(str(exc)) from exc
     raise ValueError(
-        f"Unknown KRONOS_LLM_PROVIDER={config.llm_provider!r}; expected 'mock' or 'anthropic'"
+        f"Unknown KRONOS_LLM_PROVIDER={config.llm_provider!r}; "
+        "expected 'mock', 'anthropic' or 'gemini'"
     )
 
 
@@ -374,10 +391,8 @@ class Service:
                 and self.state.plots[params.plot_id].owner_id
             ):
                 actor_id = self.state.plots[params.plot_id].owner_id
-            elif self.state.citizens:
-                actor_id = next(iter(sorted(self.state.citizens.keys())))
             else:
-                actor_id = "citizen-1"
+                raise ValueError("Say which villager should do that.")
 
         if tool == "found_business":
             return FoundBusiness(
@@ -482,22 +497,20 @@ class Service:
         ):
             cmd = None
             if tool == "modify_price":
-                cmd = PriceIntervention(
-                    percent=params.percent if params.percent is not None else 10,
-                )
+                if params.percent is None:
+                    raise ValueError("Say how much prices should change, e.g. 20% cheaper.")
+                cmd = PriceIntervention(percent=params.percent)
             elif tool in ("set_wage", "set_wage_intervention"):
                 if params.wage is not None:
                     cmd = WageIntervention(wage=params.wage)
+                elif params.percent is not None:
+                    cmd = WageIntervention(percent=params.percent)
                 else:
-                    cmd = WageIntervention(
-                        percent=params.percent if params.percent is not None else 10
-                    )
+                    raise ValueError("Say what wages should be, e.g. 2 coins a day.")
             elif tool == "grant_money":
-                amt = params.amount if params.amount not in (None, 0) else 100
-                cmd = GrantIntervention(
-                    amount=amt,
-                    citizen_id=params.citizen_id,
-                )
+                if params.amount in (None, 0):
+                    raise ValueError("Say how many coins to give or take.")
+                cmd = GrantIntervention(amount=params.amount, citizen_id=params.citizen_id)
             elif tool == "adjust_resource":
                 sc = params.stock_change or 0
                 if sc == 0 and params.regen_per_tick is None:
@@ -508,11 +521,9 @@ class Service:
                     regen_per_tick=params.regen_per_tick,
                 )
             elif tool == "adjust_hunger":
-                ch = params.change if params.change not in (None, 0) else -30
-                cmd = HungerIntervention(
-                    change=ch,
-                    citizen_id=params.citizen_id,
-                )
+                if params.change in (None, 0):
+                    raise ValueError("Say how much hungrier or fuller everyone should be.")
+                cmd = HungerIntervention(change=params.change, citizen_id=params.citizen_id)
             elif tool == "set_policy":
                 cmd = PolicyIntervention(
                     kind=params.kind or "min_wage",  # type: ignore[arg-type]
@@ -520,7 +531,6 @@ class Service:
                 )
             if cmd is not None:
                 async with self.lock:
-                    self._check_query_concurrency(body)
                     action_res = self.enqueue(cmd, "player", query)
                 return UserQueryResult(
                     query=query,
@@ -580,7 +590,6 @@ class Service:
                 else (endpoint == "/api/simulation/play")
             )
             async with self.lock:
-                self._check_query_concurrency(body)
                 self.playing = is_playing
                 if is_playing and params.speed:
                     self.speed = params.speed
@@ -613,10 +622,21 @@ class Service:
         raise ValueError(f"Unsupported tool or endpoint: {endpoint} {tool}")
 
     async def handle_user_query(self, body: UserQueryRequest) -> UserQueryResult:
-        self._check_query_concurrency(body)
+        """Check the request against the current world, let the model pick a tool outside
+        the lock (it can take longer than a day), then run it unless the branch changed.
+        When no tool fits, the model's reply goes back and nothing changes."""
         async with self.lock:
+            self._check_query_concurrency(body)
             context = self._build_user_query_context()
+            branch, epoch = self.state.branch_id, self.branch_epoch
         tool_call = await self.agents.resolve_user_query(body.query, context)
+        if isinstance(tool_call, str):
+            return UserQueryResult(query=body.query, status="answered", message=tool_call)
+        if self.branch_epoch != epoch or self.state.branch_id != branch:
+            raise HTTPException(409, "Active branch changed while reading the request")
+        # The world may have moved on a day while the model thought; the tool is
+        # validated against the current world (queued tools run on the next tick).
+        body = body.model_copy(update={"expected_sequence": None})
         try:
             return await self._execute_determined_tool(body.query, tool_call, body)
         except HTTPException:

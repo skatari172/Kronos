@@ -17,7 +17,7 @@ import type {
   SimulationEvent,
   WorldState,
 } from "../api/types";
-import { splitRationale, toEntry } from "./chronicle";
+import { splitRationale, tidy, toEntry } from "./chronicle";
 import { citizenThought } from "./profiles";
 
 const TABS = ["Overview", "Activity", "Mind", "Ties", "Ask"] as const;
@@ -127,11 +127,14 @@ export function VillagerPanel({
     const { source } = splitRationale(e.rationale);
     sources.set(source, (sources.get(source) ?? 0) + 1);
   }
-  const latest = activity.find((a) => a.mine && a.reason);
+  // Their own agent's latest reasoning beats a town rule applied to them.
+  const latest =
+    activity.find((a) => a.mine && a.reason && a.source !== "Town rule") ??
+    activity.find((a) => a.mine && a.reason);
   const mind = latest
     ? { thought: latest.reason, source: latest.source }
     : citizen.memories.length
-      ? { thought: citizen.memories.at(-1)!, source: "Memory" }
+      ? { thought: tidy(citizen.memories.at(-1)!), source: "Memory" }
       : { thought: citizenThought(citizen.id), source: "" };
 
   return (
@@ -219,7 +222,7 @@ export function VillagerPanel({
             {citizen.memories.length ? (
               <ol className="panel-memories">
                 {[...citizen.memories].reverse().map((m, i) => (
-                  <li key={i}>{m}</li>
+                  <li key={i}>{tidy(m)}</li>
                 ))}
               </ol>
             ) : (

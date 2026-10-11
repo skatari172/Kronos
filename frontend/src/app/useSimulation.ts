@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { connect, context, request } from "../api/client";
-import type { InterventionResult, Status, WorldUpdate } from "../api/types";
+import { connect, context, request, sendUserQuery } from "../api/client";
+import type { Branch, Status, WorldUpdate } from "../api/types";
 import { useWorld } from "../stores/world";
 
 export type Mode = "loading" | "live" | "offline";
@@ -9,6 +9,9 @@ export type Mode = "loading" | "live" | "offline";
  * Loads the world, keeps it synchronized, and exposes the playback controls.
  * In development without an API it falls back to the labeled fixture preview.
  */
+/** One scripted story step every this many ms at 1× (offline preview). */
+const OFFLINE_STEP_MS = 12_000;
+
 export function useSimulation() {
   const [mode, setMode] = useState<Mode>("loading");
   const [connected, setConnected] = useState(false);
@@ -57,8 +60,8 @@ export function useSimulation() {
       try {
         const status = await request<Status>("/api/simulation/status");
         if (cancelled) return;
-        // The village lives on its own: start the clock once per visit.
-        // A later pause by anyone is respected.
+        // The village lives on its own: every visit starts with the clock
+        // running. A pause during the visit is respected until the next load.
         if (!status.playing && !autoplayed.current && !status.error) {
           // Retried on the next poll if the world changed underneath (409).
           const started = await request<Status>("/api/simulation/play", {
@@ -124,40 +127,59 @@ export function useSimulation() {
       useWorld.getState().ingest(next);
     });
 
+  // Offline preview: the scripted story plays on its own, one step every
+  // OFFLINE_STEP_MS at 1× (faster at 2× and 4×), like the live clock.
+  useEffect(() => {
+    if (mode === "offline") setPlaying(true);
+  }, [mode]);
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  useEffect(() => {
+    if (mode !== "offline" || !playing) return;
+    const timer = setInterval(() => stepRef.current(), OFFLINE_STEP_MS / speed);
+    return () => clearInterval(timer);
+  }, [mode, playing, speed]);
+
   const togglePlay = () =>
-    run(async () => {
-      const status = await request<Status>(
-        playing ? "/api/simulation/pause" : "/api/simulation/play",
-        { ...context(), speed },
-      );
-      setPlaying(status.playing);
-    });
+    mode === "offline"
+      ? setPlaying((p) => !p)
+      : run(async () => {
+          // Show the new state at once (a speed change right after Play must
+          // see "playing"), then settle on what the backend reports.
+          setPlaying(!playing);
+          const status = await request<Status>(
+            playing ? "/api/simulation/pause" : "/api/simulation/play",
+            { ...context(), speed },
+          );
+          setPlaying(status.playing);
+        });
 
   /**
-   * Change the world in plain language. Any text is sent as-is: the backend's
-   * provider (an AI model when configured) turns it into a validated command
-   * and queues it for the next simulated day; the changed world then arrives
-   * over the live connection like any other update. Throws with the
-   * backend's reason when the text is rejected.
+   * Speak to the town in plain language (`POST /api/user/query`). The backend's
+   * model picks one tool (an intervention, a citizen action, a new citizen,
+   * the clock) and runs or queues it; the changed world then arrives over the
+   * live connection like any other update. When no tool fits, the result is
+   * `answered` with the town's reply and nothing changes. Throws with the
+   * backend's reason when a chosen tool is rejected.
    */
   const intervene = async (text: string) => {
-    // The backend may hand the text to an AI model (up to ~20 s); wait longer.
-    const outcome = await request<InterventionResult>(
-      "/api/interventions",
-      { ...context(), text },
-      45_000,
-    );
-    if (outcome.result.status === "rejected")
+    // The model may take a few seconds; wait longer than usual.
+    const outcome = await sendUserQuery(text);
+    if (outcome.status === "rejected" || outcome.status === "error")
       throw new Error(
-        outcome.result.message ??
-          "The town couldn't act on that. Try rewording it.",
+        outcome.error ?? "The town couldn't act on that. Try rewording it.",
       );
     return outcome;
   };
 
   /** Start the clock at a speed (used by time-lapse). */
-  const setPlayback = (play: boolean, value: number) =>
-    run(async () => {
+  const setPlayback = (play: boolean, value: number) => {
+    if (mode === "offline") {
+      setSpeed(value);
+      setPlaying(play);
+      return Promise.resolve();
+    }
+    return run(async () => {
       setSpeed(value);
       const status = await request<Status>(
         play ? "/api/simulation/play" : "/api/simulation/pause",
@@ -165,18 +187,52 @@ export function useSimulation() {
       );
       setPlaying(status.playing);
     });
+  };
 
+  /** Change speed at once; never locks the slider, and the latest choice wins. */
   const changeSpeed = (value: number) => {
     setSpeed(value);
-    if (playing)
-      void run(async () => {
-        await request("/api/simulation/play", { ...context(), speed: value });
+    if (playing && mode === "live")
+      void request<Status>("/api/simulation/play", {
+        ...context(),
+        speed: value,
+      }).catch(() => {
+        /* A stale world (409) is retried by the next change; the poll resyncs. */
       });
   };
+
+  /**
+   * Begin again with a fresh seed village. Live: the backend creates and
+   * activates a new village (the old one stays in history), and the clock
+   * starts. Offline: the preview story restarts from the seed.
+   */
+  const newVillage = () =>
+    run(async () => {
+      if (mode === "offline") {
+        const { initialMock } = await import("../api/mock");
+        useWorld.getState().replace(initialMock());
+        demoIndex.current = 0;
+        setPreview("A new village begins");
+        setPlaying(true);
+        return;
+      }
+      const village = await request<Branch>("/api/simulations", {});
+      const world = await request<WorldUpdate>(
+        `/api/branches/${village.id}/activate`,
+        {},
+      );
+      useWorld.getState().replace(world);
+      const status = await request<Status>("/api/simulation/play", {
+        ...context(),
+        speed,
+      });
+      setPlaying(status.playing);
+    });
 
   return {
     mode,
     connected,
+    newVillage,
     error,
     busy,
     playing,

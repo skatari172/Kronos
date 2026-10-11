@@ -43,7 +43,7 @@ Current verification: **361 Python tests passed, 4 skipped; 23 frontend tests pa
 
 ## 4. Toolchain and repository map
 
-Backend: Python **3.12+**, FastAPI, Pydantic 2 / pydantic-settings, SQLAlchemy 2 and SQLite; uv manages one root environment. Optional Anthropic SDK support is an extra, not required by the mock. Frontend: **Node 22.12+**, pnpm 10, React 19, TypeScript 5.9, Vite 7, Three.js, React Three Fiber, Drei, Zustand, Lucide and Tailwind 4. Treat these as declared toolchain/dependency families; use the committed lockfiles for exact versions.
+Backend: Python **3.12+**, FastAPI, Pydantic 2 / pydantic-settings, SQLAlchemy 2 and SQLite; uv manages one root environment. Optional Anthropic (`anthropic`) and Google Gemini (`google-genai`) SDKs are extras, not required by the mock. Frontend: **Node 22.12+**, pnpm 10, React 19, TypeScript 5.9, Vite 7, Three.js, React Three Fiber, Drei, Zustand, Lucide and Tailwind 4. Treat these as declared toolchain/dependency families; use the committed lockfiles for exact versions.
 
 ```text
 AGENTS.md                         Mandatory entry point for coding agents
@@ -138,7 +138,7 @@ The daily path present in `_automatic_rules` resolves due job applications befor
 
 The single `_growth_rules` path called by `tick` opens two town plots when all existing plots have a building or tenant; adds one newcomer every third day when average hunger is below 50 and a job slot is open; lets a saver holding more than 8,000 cents fund a least-common-kind business with 5,000 cents on vacant town land; upgrades full businesses with cash above 10,000 cents for 2,500 business cents and two extra slots; and leases affordable owned homes for employed citizens with more than 2,000 cents. It reuses engine commands/helpers. Manual upgrades preserve the owner's personal 2,500-cent cost and gain two slots, within model capacity.
 
-After housing, that same growth path checks three-day destitution for citizens who own no building/plot, emits departure/reference-cleanup outcomes, then applies the **20,000-cent business cash cap**, distributing surplus to staff with the remainder to the owner. Expansion extends the seed's three-column plot grid; newcomer IDs/names and all authoritative coordinates come from the engine. These helpers now share one path; do not recreate a second growth implementation.
+After housing, that same growth path checks three-day destitution for citizens who own no building/plot, emits departure/reference-cleanup outcomes, then applies the **20,000-cent business cash cap**, distributing surplus to staff with the remainder to the owner. Expansion opens land in rings around the centre on the seed's lot grid (`engine._LAND_RINGS`: nearest first, round the circle, keeping the main-street row and the chapel square clear); newcomer IDs/names and all authoritative coordinates come from the engine. These helpers now share one path; do not recreate a second growth implementation.
 
 The action vocabulary includes 36 existing types: `buy`, `sell`, `transfer_money`, `set_price`, `produce`, `consume`, `communicate`, `construct_building`, `upgrade_building`, `move_to`, `adjust_goals`, `found_business`, `close_business`, `set_wage`, `hire`, `fire`, `gather_resource`, `apply_job`, `quit_job`, `reject_application`, `lend`, `respond_loan`, `repay`, `trade`, `respond_trade`, `research`, `license_invention`, `respond_license`, `adopt_invention`, `propose_vote`, `vote`, `lease_lot`, `set_rent`, `pay_rent`, `evict`, `interact`. Reuse those names instead of adding duplicate build/close/talk aliases.
 
@@ -164,12 +164,15 @@ Six plots use x −4/0/4 and z −3/+3. Business plots belong to their owners; p
 
 ## 9. Agent layer and configuration
 
-| File under `backend/modules/agents/src/kronos_agents/` | Purpose                                                                                                                 |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `provider.py`                                          | `LLMProvider.complete`, MockProvider/parser, typed validation, proposal source, timeout/retry, cadence and grounded Ask |
-| `anthropic_provider.py`                                | Optional Anthropic adapter, strict output schema, injected-client test seam, task responses                             |
-| `prompts.py`                                           | Task prompts and schema-valid seed examples; static prompt caching                                                      |
-| `fallback.py`                                          | Deterministic `UtilityPolicy`, weighted by goals with hunger/food priority and stable tie-breaking                      |
+| File under `backend/modules/agents/src/kronos_agents/` | Purpose                                                                                                                  |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `provider.py`                                          | `LLMProvider.complete`, MockProvider/parser, typed validation, proposal source, timeout/retry, cadence and grounded Ask  |
+| `anthropic_provider.py`                                | Optional Anthropic adapter, strict output schema, injected-client test seam, task responses                              |
+| `gemini_provider.py`                                   | Optional Gemini adapter (JSON mode on the shared `output_schema`, function calling for player queries, fake-client seam) |
+| `prompts.py`                                           | Task prompts and schema-valid seed examples; static prompt caching                                                       |
+| `fallback.py`                                          | Deterministic `UtilityPolicy`, weighted by goals with hunger/food priority and stable tie-breaking                       |
+
+The fallback's befriend candidate skips neighbors the citizen interacted with in its `recent_events` (befriending raises the target's trust, not the actor's, so its own ties never record it) and rotates among the least-close remaining neighbors by a CRC32 of citizen, neighbor and tick. A starving citizen (hunger ≥ 50, no bread, short of the cheapest loaf) gets a `communicate` plea asking its most trusted neighbor to lend the shortfall, scored as safety, and befriend's value is quartered.
 
 `middleware.py` supplies optional filesystem response caching and local JSONL provider logging. `Service._wrap` applies these only to the real provider; cache tags include model and prompt hash. Replay-only misses use the utility fallback. This is provider tooling, not an event database. Logs contain observations/replies and must remain local.
 
@@ -177,11 +180,11 @@ Six plots use x −4/0/4 and z −3/+3. Business plots belong to their owners; p
 
 Provider tasks are `decision`, `ask`, `intervention`. AgentService validates JSON against the task schema, checks acting-citizen identity and grounds Ask citations in the supplied Events. Timeout/retries are bounded. `proposal()` labels source `llm|mock|fallback` and prefixes the rationale; `decide()` returns the action. Service configures `UtilityPolicy` as fallback. Do not confuse proposal-source labels with ActionResult caller sources `agent|player|backend`.
 
-One post-tick `propose(world, events)` batch considers urgent citizens (no bread or an incoming trade offer) plus stable CRC32-derived round slots, at most eight citizens. The default round is three days. Strategy results queue for the next tick; a branch switch discards a stale batch. Configured strategic citizens may call the provider within the per-tick budget/concurrency limit; others use the utility fallback. By default owners rank first, then citizen ID, up to 12 strategic citizens. Independent failures skip only the affected citizen.
+One post-tick `propose(world, events)` batch considers urgent citizens (no bread or an incoming trade offer) plus stable CRC32-derived round slots, at most 24 citizens. The default round is three days. Strategy results queue for the next tick; a branch switch discards a stale batch. Configured strategic citizens may call the provider within the per-tick budget/concurrency limit; others use the utility fallback. By default owners rank first, then citizen ID, up to 12 strategic citizens. Independent failures skip only the affected citizen.
 
 Mock decisions consume owned food, buy affordable stocked bread, or communicate. The mock parser covers price percentages, wages, giving/taking money, wheat stock/regrowth, hunger/feast/famine and policies. Service now supplies citizen names to resolve targeted text; the same queue/engine path handles the existing intervention union. Provider output remains a proposal validated against current world rules.
 
-The optional Anthropic adapter is selected explicitly by `build_provider`. Its default model string and schema adaptation live in `anthropic_provider.py`; model-name presence in code does not verify current remote availability. Optional calls can cost money. Default/offline tests must not require network access or credentials. Never record API keys in source, fixtures, this file, or logs.
+The optional Gemini adapter (`KRONOS_LLM_PROVIDER=gemini`, `GEMINI_API_KEY`, `uv sync --extra gemini`, added automatically by `make start`) splits models by cost: villager decisions use `KRONOS_LLM_MODEL` (placeholder → `gemini-3.5-flash-lite`), while player queries and Ask use `gemini-3.5-flash` (`PLAYER_MODEL`). Decision menus above `GRAMMAR_LIMIT` send the schema in the prompt; thinking is set low. Errors map to `ProviderError` without the key. The optional Anthropic adapter is selected explicitly by `build_provider`. Its default model string and schema adaptation live in `anthropic_provider.py`; model-name presence in code does not verify current remote availability. Optional calls can cost money. Default/offline tests must not require network access or credentials. Never record API keys in source, fixtures, this file, or logs.
 
 ## 10. API, action lifetime and transport
 
@@ -289,24 +292,24 @@ The development preview works without an API by intention: VITE_OFFLINE or conne
 
 Settings live in `backend/api/src/kronos/config.py`; Pydantic reads root `.env` with prefix `KRONOS_`. Vite reads root env files via `envDir: ".."`. Do not inspect or copy private `.env` values just to update documentation.
 
-| Variable                                            | Current default / meaning                                                                  |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `KRONOS_DATABASE_URL`                               | `sqlite:///./backend/database/kronos.db`                                                   |
-| `KRONOS_SEED`                                       | 42; affects newly seeded worlds, not a rewrite of existing worlds                          |
-| `KRONOS_TICK_SECONDS`                               | 2; divided by playback speed, clock sleep floored at 0.1 seconds                           |
-| `KRONOS_LLM_PROVIDER`                               | `mock`; optional `anthropic` selection                                                     |
-| `KRONOS_LLM_MODEL`                                  | `deterministic-v1`; real adapter substitutes its code-defined default for this placeholder |
-| `KRONOS_LLM_TIMEOUT`                                | 3 seconds for mock; Anthropic selection uses 20 seconds unless explicitly configured       |
-| `KRONOS_LLM_RETRIES`                                | 1; AgentService clamps to at most 2 retries                                                |
-| `KRONOS_AGENT_ROUND_TICKS`                          | 3; stable scheduled decision round length, with urgent decisions between slots             |
-| `KRONOS_LLM_CALLS_PER_TICK`                         | Unset: no provider-call cap within the bounded decision batch                              |
-| `KRONOS_LLM_CONCURRENCY`                            | 4 concurrent provider decisions                                                            |
-| `KRONOS_STRATEGIC_AGENTS`, `KRONOS_STRATEGIC_LIMIT` | Explicit comma-separated IDs, otherwise owners first up to 12; others use fallback         |
-| `KRONOS_LLM_CACHE`, `KRONOS_LLM_CACHE_ONLY`         | `.cache/llm`, false; optional real-provider replay cache                                   |
-| `KRONOS_LLM_LOG`                                    | Empty; opt-in local real-provider JSONL debug log                                          |
-| `ANTHROPIC_API_KEY`                                 | Required only when explicitly opting into the optional paid provider; secret               |
-| `VITE_API_URL`                                      | `http://localhost:8000`                                                                    |
-| `VITE_OFFLINE`                                      | `true` forces the labeled development preview                                              |
+| Variable                                            | Current default / meaning                                                                      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `KRONOS_DATABASE_URL`                               | `sqlite:///./backend/database/kronos.db`                                                       |
+| `KRONOS_SEED`                                       | 42; affects newly seeded worlds, not a rewrite of existing worlds                              |
+| `KRONOS_TICK_SECONDS`                               | 30; divided by playback speed (1x 30 s, 2x 15 s, 4x 7.5 s a day), clock sleep floored at 0.1 s |
+| `KRONOS_LLM_PROVIDER`                               | `mock`; optional `anthropic` or `gemini` selection                                             |
+| `KRONOS_LLM_MODEL`                                  | `deterministic-v1`; real adapter substitutes its code-defined default for this placeholder     |
+| `KRONOS_LLM_TIMEOUT`                                | 3 seconds for mock; Anthropic and Gemini use 20 seconds unless explicitly configured           |
+| `KRONOS_LLM_RETRIES`                                | 1; AgentService clamps to at most 2 retries                                                    |
+| `KRONOS_AGENT_ROUND_TICKS`                          | 3; stable scheduled decision round length, with urgent decisions between slots                 |
+| `KRONOS_LLM_CALLS_PER_TICK`                         | Unset: no provider-call cap within the bounded decision batch                                  |
+| `KRONOS_LLM_CONCURRENCY`                            | 4 concurrent provider decisions                                                                |
+| `KRONOS_STRATEGIC_AGENTS`, `KRONOS_STRATEGIC_LIMIT` | Explicit comma-separated IDs; otherwise unset = every citizen is an agent (a number caps it)   |
+| `KRONOS_LLM_CACHE`, `KRONOS_LLM_CACHE_ONLY`         | `.cache/llm`, false; optional real-provider replay cache                                       |
+| `KRONOS_LLM_LOG`                                    | Empty; opt-in local real-provider JSONL debug log                                              |
+| `ANTHROPIC_API_KEY`                                 | Required only when explicitly opting into the optional paid provider; secret                   |
+| `VITE_API_URL`                                      | `http://localhost:8000`                                                                        |
+| `VITE_OFFLINE`                                      | `true` forces the labeled development preview                                                  |
 
 Commands run from the repository root. Python needs 3.12+, Node needs 22.12+, and Make/npm must be available. Bootstrap uses local `.tools/` installations of missing uv/pnpm; no global administrator installation is needed. `uv sync --frozen` and `pnpm install --frozen-lockfile` use committed locks.
 
@@ -327,7 +330,7 @@ Commands run from the repository root. Python needs 3.12+, Node needs 22.12+, an
 
 Current Makefile frees its configured port before starting either app, so a start command can terminate an existing listener. Do not use it as a read-only health probe. Use `.tools/node/node_modules/.bin/pnpm` and `.tools/python/bin/uv` explicitly if global tools use incompatible runtimes. Example: `make check PNPM="$PWD/.tools/node/node_modules/.bin/pnpm"`.
 
-Opting into the real provider additionally needs `uv sync --extra anthropic` and explicit environment selection/key. Do not enable it just to verify unrelated code. Swagger is `/docs`, health is `/health`; the inspected health handler hard-codes `provider: mock`, so it is not reliable evidence of configured provider selection.
+Opting into a real provider additionally needs `uv sync --extra anthropic` or `--extra gemini` and explicit environment selection/key (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY`). Do not enable it just to verify unrelated code. Swagger is `/docs`, health is `/health` and reports the configured `llm_provider`.
 
 ## 14. Tests, generated artifacts and extension workflow
 
@@ -381,6 +384,10 @@ Common diagnoses: 409 means reload branch/version and reconsider the command; qu
 For current failures, use section 3 and rerun the relevant checks; historical syntax failures are not current diagnoses. Offline mode does not mean the real backend is healthy. A database changed after “just starting” the app may be startup table initialization or frontend auto-play; inspect without migrations or resetting someone else's state.
 
 ## 16. Latest maintenance record
+
+- **2026-10-11 — Gemini provider and fallback befriend loop:** Added `kronos_agents/gemini_provider.py` (selected by `KRONOS_LLM_PROVIDER=gemini`; Flash-Lite for villager decisions, Flash for god mode and Ask), the `gemini` extra in `pyproject.toml`, `Settings.gemini_api_key`, `build_provider` selection, `make start` syncing the extra, `.env.example` notes and `tests/test_gemini_provider.py`. Fixed `UtilityPolicy` making every villager befriend the same neighbor daily (see section 9) and added a starving villager's loan plea.
+- **Validation performed:** `make check` passed (399 Python tests, frontend tests, lint, build). Live check on a scratch database and port 8100: seven god-mode queries mapped to the right tools or a plain reply in about 1–3 s, Ask answered in character, and all seven seed villagers decided via the `llm` source.
+- **Outstanding:** Model names are verified only against this account's model list on 2026-10-11. No recorded Gemini fixtures; tests use a fake client.
 
 - **2026-10-10 — origin/main merge and branch conflict resolution:** Merged latest `origin/main` (commits up to `8772db7` including branching, event tracing, and durable persistence) into `simulation-engine-nick`. Resolved conflicts in `service.py`, `history.py` (fixed syntax error from duplicated handler signature in upstream merge), binary conflict in `backend/database/kronos.db` (preserved authoritative database via `--theirs`), and regenerated contracts.
 - **Validation performed:** 386 Python tests passed (`uv run pytest -q`), 30 frontend tests passed (`vitest`), `make lint` passed, and `pnpm build` (`tsc -b && vite build`) passed with exit code 0 (`make check` completely clean).

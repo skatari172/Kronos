@@ -12,6 +12,7 @@ target ID. When no candidate applies, `choose` raises `ProviderError` rather tha
 a no-op: the caller then skips this citizen's strategy, exactly like a failed provider call.
 """
 
+import zlib
 from dataclasses import dataclass, field
 
 from kronos_sim.models import AgentAction, AgentObservation, ResourceInventory
@@ -242,27 +243,67 @@ class UtilityPolicy:
 
         # Influence and reputation: befriend someone, or share news with a neighbor.
         neighbors = sorted(o.neighbors)
+        ties = {t.citizen_id: t for t in o.ties}
+        starving = me.hunger >= HUNGER_URGENT and me.money < bread_price and not me.inventory.bread
+        # Who I reached out to lately: befriending raises *their* trust, not mine, so my
+        # own ties never show it; without this, everyone befriends the same person daily.
+        lately = {
+            e.payload.recipient_id
+            for e in o.recent_events
+            if e.type == "citizen_interacted" and e.actor_id == me.id
+        }
         if neighbors and "interact" in allowed:
-            ties = {t.citizen_id: t for t in o.ties}
             fresh = [
                 n
                 for n in neighbors
-                if n not in ties
-                or (ties[n].last_interaction_tick != o.tick and ties[n].grudge < 50)
+                if n not in lately
+                and (
+                    n not in ties
+                    or (ties[n].last_interaction_tick != o.tick and ties[n].grudge < 50)
+                )
             ]
             if fresh:
-                # Influence counts everyone's trust, so spread warmth: reach out to the
-                # least-close neighbor first (unknown ones count as trust 0), then lowest ID.
-                target = min(fresh, key=lambda n: (ties[n].trust if n in ties else 0, n))
+                # Spread warmth: the least-close neighbors first, rotating day by day.
+                target = min(
+                    fresh,
+                    key=lambda n: (
+                        ties[n].trust if n in ties else 0,
+                        (zlib.crc32(f"{me.id}:{n}".encode()) + o.tick) % 97,
+                    ),
+                )
                 close = ties[target].trust if target in ties else 0
+                # Making friends matters far less to someone starving.
+                weight = 4 if starving else 1
                 out.append(
                     Candidate(
                         {**actor, "type": "interact", "recipient_id": target, "kind": "befriend"},
-                        {"influence": max(10, 40 - max(0, close) // 3), "reputation": 15},
+                        {
+                            "influence": max(10, 40 - max(0, close) // 3) // weight,
+                            "reputation": 15 // weight,
+                        },
                         f"Friends make my word count; I will befriend {o.neighbors[target]}.",
                         target=target,
                     )
                 )
+        # Starving and broke: ask a neighbor (a friend if I have one) for a loan.
+        if starving and neighbors and "communicate" in allowed:
+            helper = max(
+                neighbors,
+                key=lambda n: (ties[n].trust if n in ties else 0, -neighbors.index(n)),
+            )
+            short = bread_price - me.money
+            message = (
+                f"I'm starving with {me.money} cents and bread costs {bread_price}. "
+                f"Could you lend me {short} cents? I'll repay you from my wages."
+            )
+            out.append(
+                Candidate(
+                    {**actor, "type": "communicate", "recipient_id": helper, "message": message},
+                    {"safety": 60 + me.hunger // 2},
+                    f"I can't afford bread; {o.neighbors[helper]} might lend me enough to eat.",
+                    target=helper,
+                )
+            )
         if neighbors and "communicate" in allowed:
             target = neighbors[0]
             message = (

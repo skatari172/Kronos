@@ -89,3 +89,23 @@ def test_rejects_stale_and_unsupported_requests(tmp_path):
             ).status_code
             == 409
         )
+
+
+def test_voice_needs_a_key_and_never_calls_out_without_one(tmp_path, monkeypatch):
+    """No ELEVENLABS_API_KEY: 503, so the frontend uses the browser's own speech."""
+    from fastapi.testclient import TestClient
+    from kronos.config import Settings
+    from kronos.main import create_app
+
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    settings = Settings(database_url=f"sqlite:///{tmp_path / 'v.db'}", _env_file=None)
+    with TestClient(create_app(settings)) as client:
+        res = client.post("/api/voice", json={"citizen_id": "citizen-0", "text": "Hello"})
+        assert res.status_code == 503
+
+
+def test_voice_is_stable_per_villager():
+    from kronos.routes.voice import FOUNDER_VOICES, voice_for
+
+    assert voice_for("citizen-0") == FOUNDER_VOICES["citizen-0"]
+    assert voice_for("citizen-main-97") == voice_for("citizen-main-97")

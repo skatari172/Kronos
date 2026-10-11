@@ -18,14 +18,19 @@ import { MathUtils, type Group } from "three";
 import type { Building } from "../api/types";
 import { CONSTRUCTION_STAGES, HEX_SCALE, hex } from "./assets";
 import { BuildingModel, Dust, StaticModel } from "./Models";
-import { openSite } from "./sites";
+import { founderArrived, openSite } from "./sites";
 import { stepSpring, type Spring } from "./spring";
 
 const BUILD_SECONDS = 7;
 const UPGRADE_SECONDS = 2.8;
 const RUIN_SECONDS = 2.6;
 
-type Phase = "build" | "stand" | "upgrade" | "ruin";
+/**
+ * "await": a new business waits, as a marked lot, for its founder to walk over
+ * (at most AWAIT_SECONDS), then "build" stages it while they work.
+ */
+type Phase = "await" | "build" | "stand" | "upgrade" | "ruin";
+const AWAIT_SECONDS = 15;
 
 export function BuildingLife({
   building,
@@ -38,7 +43,7 @@ export function BuildingLife({
   leaving: boolean;
   onGone: () => void;
 }) {
-  const [phase, setPhase] = useState<Phase>(fresh ? "build" : "stand");
+  const [phase, setPhase] = useState<Phase>(fresh ? "await" : "stand");
   const [stage, setStage] = useState(0);
   const [burst, setBurst] = useState(fresh ? 1 : 0);
   const [level, setLevel] = useState(building.level);
@@ -62,10 +67,16 @@ export function BuildingLife({
     timer.current = 0;
   }
 
-  // Builders (and the owner) come over while the scaffolding is up.
+  // The founder (and builders) come over; building starts when the founder
+  // arrives, and they keep working while the scaffolding is up.
   useEffect(() => {
-    if (phase !== "build" && phase !== "upgrade") return;
-    const seconds = phase === "build" ? BUILD_SECONDS : UPGRADE_SECONDS;
+    if (phase !== "await" && phase !== "build" && phase !== "upgrade") return;
+    const seconds =
+      phase === "await"
+        ? AWAIT_SECONDS + BUILD_SECONDS
+        : phase === "build"
+          ? BUILD_SECONDS
+          : UPGRADE_SECONDS;
     return openSite({
       buildingId: building.id,
       ownerId: building.owner_id,
@@ -77,7 +88,13 @@ export function BuildingLife({
   useFrame((_, dt) => {
     timer.current += dt;
     const t = timer.current;
-    if (phase === "build") {
+    if (phase === "await") {
+      if (founderArrived(building.id) || t >= AWAIT_SECONDS) {
+        setPhase("build");
+        setBurst((b) => b + 1);
+        timer.current = 0;
+      }
+    } else if (phase === "build") {
       const next = Math.min(3, Math.floor((t / BUILD_SECONDS) * 4));
       if (next !== stage) {
         setStage(next);
@@ -87,7 +104,10 @@ export function BuildingLife({
     } else if (phase === "upgrade" && t >= UPGRADE_SECONDS) setPhase("stand");
     else if (phase === "ruin" && t >= RUIN_SECONDS) onGone();
 
-    const standing = phase !== "ruin" && (phase !== "build" || stage === 3);
+    const standing =
+      phase !== "ruin" &&
+      phase !== "await" &&
+      (phase !== "build" || stage === 3);
     stepSpring(rise.current, standing ? 1 : 0, dt);
     body.current?.scale.setScalar(Math.max(0.0001, rise.current.value));
     if (ruins.current) {
@@ -110,6 +130,17 @@ export function BuildingLife({
             flip={building.position.z > 0}
           />
         </group>
+      )}
+      {phase === "await" && (
+        // A marked, empty lot until the founder arrives.
+        <>
+          <StaticModel url={hex("building_dirt")} scale={HEX_SCALE * 0.72} />
+          <StaticModel
+            url={hex("flag_red")}
+            scale={HEX_SCALE * 1.8}
+            position={[0.55, 0, 0.45]}
+          />
+        </>
       )}
       {phase === "build" && stage < 3 && (
         <StaticModel

@@ -183,6 +183,9 @@ const CLIPS = {
   jump: "Jump_Full_Short",
   raise: "Ranged_Magic_Raise",
   crouch: "Crouching",
+  // Conversation: gesture while talking, hold out a gift or a deal.
+  talk: "Interact",
+  give: "Holding_A",
   // Work
   work: "Interact",
   hammer: "Hammering",
