@@ -385,6 +385,7 @@ For current failures, use section 3 and rerun the relevant checks; historical sy
 
 ## 16. Latest maintenance record
 
+- **2026-10-11 — Voice pace:** Conversation voices slowed from about 1.4× (ElevenLabs 1.2 plus 1.15 playback) to ElevenLabs speed 1.08 played as generated (`routes/voice.py` `SPEED`, `app/voice.ts`); the browser-speech fallback rate is now 1.0–1.12. The cache key includes the settings, so old fast clips are not replayed. Validated with `make check`.
 - **2026-10-11 — Gemini provider and fallback befriend loop:** Added `kronos_agents/gemini_provider.py` (selected by `KRONOS_LLM_PROVIDER=gemini`; Flash-Lite for villager decisions, Flash for god mode and Ask), the `gemini` extra in `pyproject.toml`, `Settings.gemini_api_key`, `build_provider` selection, `make start` syncing the extra, `.env.example` notes and `tests/test_gemini_provider.py`. Fixed `UtilityPolicy` making every villager befriend the same neighbor daily (see section 9) and added a starving villager's loan plea.
 - **Validation performed:** `make check` passed (399 Python tests, frontend tests, lint, build). Live check on a scratch database and port 8100: seven god-mode queries mapped to the right tools or a plain reply in about 1–3 s, Ask answered in character, and all seven seed villagers decided via the `llm` source.
 - **Outstanding:** Model names are verified only against this account's model list on 2026-10-11. No recorded Gemini fixtures; tests use a fake client.
