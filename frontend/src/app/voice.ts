@@ -40,8 +40,8 @@ async function fromServer(citizenId: string, text: string) {
     if (!response.ok) return false;
     const url = URL.createObjectURL(await response.blob());
     const audio = new Audio(url);
-    // Brisker than ElevenLabs' top speed, with the pitch kept natural.
-    audio.playbackRate = 1.15;
+    // Played as generated: the pace is set server-side (routes/voice.py SPEED).
+    audio.playbackRate = 1;
     audio.preservesPitch = true;
     playing = audio;
     await new Promise<void>((done) => {
@@ -76,7 +76,7 @@ async function fromBrowser(citizenId: string, text: string) {
   // Each villager keeps their own pitch and pace.
   // Younger: pitch sits a little high, never low and gravelly.
   utterance.pitch = 1.0 + ((seed >>> 4) % 11) * 0.04;
-  utterance.rate = 1.2 + ((seed >>> 9) % 7) * 0.025;
+  utterance.rate = 1.0 + ((seed >>> 9) % 7) * 0.02;
   await new Promise<void>((done) => {
     utterance.onend = utterance.onerror = () => done();
     window.speechSynthesis.speak(utterance);

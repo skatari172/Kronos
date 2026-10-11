@@ -34,8 +34,8 @@ FOUNDER_VOICES = {
 }
 # Newcomers draw one from this pool (young voices, plus River), fixed by their ID.
 VOICE_POOL = [*FOUNDER_VOICES.values(), "SAz9YHcvj6GT2YYXdXww"]
-# ElevenLabs' fastest speaking speed (0.7-1.2); the browser plays it a little faster still.
-SPEED = 1.2
+# ElevenLabs speaking speed (0.7-1.2): a natural pace, just a touch brisk.
+SPEED = 1.08
 SETTINGS = {"stability": 0.4, "similarity_boost": 0.8, "style": 0.3, "speed": SPEED}
 
 
